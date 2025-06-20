@@ -1,25 +1,50 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String
-from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, Text, JSON
+import json
 
 Base = declarative_base()
 
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'
     id = Column(Integer, primary_key=True)
-    username = Column(String, nullable=False)
-    email = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    location = Column(String, nullable=False)
+    nickname = Column(String)
+    greeting = Column(String, nullable=False)
+    handwave_emoji_url = Column(String)
+    profile_photo_url = Column(String)
+    wave_gif_url = Column(String)
+    pronunciation_recording_url = Column(String)
+    selected_prompts = Column(JSON, nullable=False)  # list of strings
+    answers = Column(JSON, nullable=False)  # dict
+    team_settings = Column(JSON)
+    created_at = Column(String)
+    updated_at = Column(String)
 
-    def __init__(self, username, email):
-        self.username = username
-        self.email = email
+    def __init__(self, **kwargs):
+        for field in kwargs:
+            setattr(self, field, kwargs[field])
 
     @classmethod
     def from_dict(cls, data):
-        return cls(
-            username=data.get('username'),
-            email=data.get('email')
-        )
+        return cls(**data)
 
     def to_dict(self):
-        return {'id': self.id, 'username': self.username, 'email': self.email}
+        return {
+            'id': self.id,
+            'name': self.name,
+            'role': self.role,
+            'location': self.location,
+            'nickname': self.nickname,
+            'greeting': self.greeting,
+            'handwaveEmojiUrl': self.handwave_emoji_url,
+            'profilePhotoUrl': self.profile_photo_url,
+            'waveGifUrl': self.wave_gif_url,
+            'pronunciationRecordingUrl': self.pronunciation_recording_url,
+            'selectedPrompts': self.selected_prompts,
+            'answers': self.answers,
+            'teamSettings': self.team_settings,
+            'createdAt': self.created_at,
+            'updatedAt': self.updated_at,
+        }

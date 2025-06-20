@@ -3,3 +3,5 @@ uvicorn
 sqlalchemy
 pydantic
 python-jose[cryptography]
+pytest
+httpx
