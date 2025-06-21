@@ -8,7 +8,6 @@ from utils.logger_factory import new_logger
 import logging
 
 logging.basicConfig(level=logging.INFO)
-log = new_logger("create_user")
 
 router = APIRouter(prefix="/api/user", tags=["user"])
 
@@ -18,8 +17,9 @@ def create_user(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("USER", "ADMIN"))
 ):
-    log.info("create_user: endpoint invoked")
-    log.info(f"create_user: Received user object: {user.json()}")
+    log = new_logger("create_user")
+    log.info("endpoint invoked")
+    log.info(f"Received user object: {user.json()}")
     db_user = WelcomepageUser(username=user.username, email=user.email)
     db.add(db_user)
     db.commit()
