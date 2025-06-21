@@ -5,9 +5,8 @@ class LabelLoggerAdapter(logging.LoggerAdapter):
         super().__init__(logger, {'label': label})
 
     def process(self, msg, kwargs):
-        # Prepend with module name and label, e.g. INFO:api.users:create_user: message
-        module = self.logger.name
-        return f"{module}:{self.extra['label']}: {msg}", kwargs
+        # Only prepend the label (not the module), since the formatter already includes module
+        return f"{self.extra['label']}: {msg}", kwargs
 
 def new_logger(label, module_name=None):
     # If module_name is not given, use the caller's module
