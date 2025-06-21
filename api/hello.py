@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from utils.logger_factory import new_logger
 
 app = FastAPI()
 
