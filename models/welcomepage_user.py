@@ -1,8 +1,8 @@
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, Text, JSON
 import json
+from database import Base
 
-Base = declarative_base()
+from sqlalchemy.orm import relationship
 
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'
@@ -21,6 +21,8 @@ class WelcomepageUser(Base):
     team_settings = Column(JSON)
     created_at = Column(String)
     updated_at = Column(String)
+
+    team = relationship("Team", back_populates="user", uselist=False)
 
     def __init__(self, **kwargs):
         for field in kwargs:

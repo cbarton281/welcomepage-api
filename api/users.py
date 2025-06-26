@@ -8,6 +8,7 @@ from utils.jwt_auth import require_roles
 from app import get_db
 from utils.logger_factory import new_logger
 import logging
+import json
 
 logging.basicConfig(level=logging.INFO)
 
@@ -41,7 +42,7 @@ async def create_user(
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("USER", "ADMIN"))
 ):
-    import json
+    
     log = new_logger("create_user")
     log.info("endpoint invoked")
     vercel_token = os.getenv("VERCEL_BLOB_TOKEN")
@@ -49,13 +50,7 @@ async def create_user(
     wave_gif_url = None
     pronunciation_recording_url = None
 
-    # Upload files if present
-    if profile_photo:
-        profile_photo_url = await upload_to_vercel_blob(profile_photo, vercel_token)
-    if wave_gif:
-        wave_gif_url = await upload_to_vercel_blob(wave_gif, vercel_token)
-    if pronunciation_recording:
-        pronunciation_recording_url = await upload_to_vercel_blob(pronunciation_recording, vercel_token)
+        # Helper to upload with custom name
 
     # Parse JSON fields
     selected_prompts_list = json.loads(selected_prompts)
@@ -65,6 +60,16 @@ async def create_user(
     if id is not None:
         db_user = db.query(WelcomepageUser).filter_by(id=id).first()
         if db_user:
+            if profile_photo:
+                ext = os.path.splitext(profile_photo.filename)[-1]
+                profile_name = f"{id}_profile{ext}"
+                db_user.profile_photo_url = await upload_with_name(profile_photo, vercel_token, profile_name)
+            if wave_gif:
+                wave_gif_name = f"{id}_wave.gif"
+                db_user.wave_gif_url = await upload_to_vercel_blob(wave_gif, vercel_token, wave_gif_name)
+            if pronunciation_recording:
+                pronunciation_name = f"{id}_pronunciation.mp3"
+                db_user.pronunciation_recording_url = await upload_to_vercel_blob(pronunciation_recording, vercel_token, pronunciation_name)
             db_user.name = name
             db_user.role = role
             db_user.location = location
@@ -72,18 +77,37 @@ async def create_user(
             db_user.nickname = nickname
             db_user.handwave_emoji = handwave_emoji
             db_user.handwave_emoji_url = handwave_emoji_url
-            if profile_photo_url:
-                db_user.profile_photo_url = profile_photo_url
-            if wave_gif_url:
-                db_user.wave_gif_url = wave_gif_url
-            if pronunciation_recording_url:
-                db_user.pronunciation_recording_url = pronunciation_recording_url
             db_user.selected_prompts = selected_prompts_list
             db_user.answers = answers_dict
             db.commit()
             db.refresh(db_user)
             return WelcomepageUserDTO.from_model(db_user)
-
+    else:
+        db_user = WelcomepageUser(
+            name=name,
+            role=role,
+            location=location,
+            greeting=greeting,
+            nickname=nickname,
+            handwave_emoji=handwave_emoji,
+            handwave_emoji_url=handwave_emoji_url,
+            selected_prompts=selected_prompts_list,
+            answers=answers_dict,
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        if profile_photo:
+            ext = os.path.splitext(profile_photo.filename)[-1]
+            profile_name = f"{db_user.id}_profile{ext}"
+            db_user.profile_photo_url = await upload_with_name(profile_photo, vercel_token, profile_name)
+        if wave_gif:
+            db_user.wave_gif_url = await upload_to_vercel_blob(wave_gif, vercel_token)
+        if pronunciation_recording:
+            db_user.pronunciation_recording_url = await upload_to_vercel_blob(pronunciation_recording, vercel_token)
+        db.commit()
+        db.refresh(db_user)
+        return WelcomepageUserDTO.from_model(db_user)
     # Create new user if not found
     db_user = WelcomepageUser(
         name=name,
@@ -93,13 +117,21 @@ async def create_user(
         nickname=nickname,
         handwave_emoji=handwave_emoji,
         handwave_emoji_url=handwave_emoji_url,
-        profile_photo_url=profile_photo_url,
-        wave_gif_url=wave_gif_url,
-        pronunciation_recording_url=pronunciation_recording_url,
         selected_prompts=selected_prompts_list,
         answers=answers_dict,
     )
     db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    # Now upload profile_photo if present and update user
+    if profile_photo:
+        ext = os.path.splitext(profile_photo.filename)[-1]
+        profile_name = f"{db_user.id}_profile{ext}"
+        db_user.profile_photo_url = await upload_with_name(profile_photo, vercel_token, profile_name)
+    if wave_gif:
+        db_user.wave_gif_url = await upload_to_vercel_blob(wave_gif, vercel_token)
+    if pronunciation_recording:
+        db_user.pronunciation_recording_url = await upload_to_vercel_blob(pronunciation_recording, vercel_token)
     db.commit()
     db.refresh(db_user)
     return WelcomepageUserDTO.from_model(db_user)
