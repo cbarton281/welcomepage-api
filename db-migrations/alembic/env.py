@@ -1,29 +1,32 @@
-import json
 from logging.config import fileConfig
-from sqlalchemy import create_engine
-from sqlalchemy import pool
 from alembic import context
 import logging
 from dotenv import load_dotenv
 import os
-import urllib
-from util.UtilityFunctions import UtilityFunctions
 import sys
+from sqlalchemy import create_engine
+from sqlalchemy import pool
 
-default_dotenv_path = '../routes/.env'
+default_dotenv_path = '../.env'
 dotenv_path = default_dotenv_path
 
-default_db_owner_secret : str = "db_owner"
-db_owner_secret : str = default_db_owner_secret
+default_db_owner : str = "postgres"
+default_db_owner_password : str = ""
+
+db_owner = default_db_owner
+db_owner_password = default_db_owner_password
 
 # Use Alembic's x-arguments
 for x_arg in context.get_x_argument(as_dictionary=False):
-    if x_arg.lower().strip().startswith('db-owner-secret-name='):
-        db_owner_secret = x_arg.split('=', 1)[1].strip()
+    print(f"x_arg = [{x_arg}]")
+    if x_arg.lower().strip().startswith('db-owner='):
+        db_owner = x_arg.split('=', 1)[1].strip()
+    elif x_arg.lower().strip().startswith('db-owner-password='):
+        db_owner_password = x_arg.split('=', 1)[1].strip()
     elif x_arg.lower().strip().startswith('dotenv-path='):
         dotenv_path = x_arg.split('=', 1)[1].strip()
     else:
-        print(f"ERROR: Unrecognized Alembic -x argument: '{x_arg}' Valid arguments are: db-owner-secret-name, dotenv-path", file=sys.stderr)
+        print(f"ERROR: Unrecognized Alembic -x argument: '{x_arg}' Valid arguments are: db-owner, db-owner-password, dotenv-path", file=sys.stderr)
         sys.exit(1)
 
 load_dotenv(dotenv_path=dotenv_path)
@@ -50,22 +53,6 @@ target_metadata = None
 
 log = logging.getLogger('alembic.env')
 
-
-def create_db_url():
-    db_creds_secret = UtilityFunctions.get_secret(db_owner_secret)
-    db_creds_dict = json.loads(db_creds_secret)
-    user_name:str = db_creds_dict['username']
-    password:str = db_creds_dict['password']
-    encoded_password = urllib.parse.quote(password, safe='')
-    host:str = os.getenv('WP_DB_HOST')
-    port :str= os.getenv('WP_DB_PORT')
-    db_instance_identifier:str = os.getenv('WP_DB_DBINSTANCEIDENTIFIER')
-
-    dialect = 'postgresql'
-    driver = 'psycopg2'  
-    url_str = f"{dialect}+{driver}://{user_name}:{encoded_password}@{host}:{port}/{db_instance_identifier}"
-    return url_str
-
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -79,8 +66,7 @@ def run_migrations_offline() -> None:
 
     """
     
-    db_url = create_db_url()
-    url = config.get_main_option("sqlalchemy.url")
+    db_url = os.getenv("DATABASE_URL")
     context.configure(
         url=db_url,
         target_metadata=target_metadata,
@@ -99,13 +85,19 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    db_url = create_db_url()
+    db_url = os.getenv("DATABASE_URL")
     print(f"db_url = [{db_url}]")
-    connectable = create_engine(
-        db_url,
-        connect_args={"sslmode": "require"},
-        poolclass=pool.NullPool
-    )
+    if db_url.startswith("sqlite"):
+        connectable = create_engine(
+            db_url,
+            poolclass=pool.NullPool
+        )
+    else:
+        connectable = create_engine(
+            db_url,
+            connect_args={"sslmode": "require"},
+            poolclass=pool.NullPool
+        )
 
     # connectable = create_engine(db_url, poolclass=pool.NullPool)
     # connectable = engine_from_config(
