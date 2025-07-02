@@ -10,8 +10,7 @@ class TeamCreate(BaseModel):
 
 class TeamRead(TeamCreate):
     id: int
-    company_logo: Optional[str]
-    company_name_blob_url: Optional[str]
+    company_logo_url: Optional[str]
     color_scheme_data: Optional[Dict[str, Any]] = None
 
     class Config:

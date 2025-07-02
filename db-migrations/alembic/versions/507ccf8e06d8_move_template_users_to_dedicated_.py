@@ -22,10 +22,10 @@ def upgrade() -> None:
     op.create_table(
         'teams',
         sa.Column('id', sa.Integer, primary_key=True, index=True),
+        sa.Column('public_id', sa.String(36), unique=True, index=True, nullable=False),
         sa.Column('organization_name', sa.String, nullable=False),
-        sa.Column('company_logo', sa.String, nullable=True),
+        sa.Column('company_logo_url', sa.String, nullable=True),
         sa.Column('color_scheme', sa.String, nullable=False),
-        sa.Column('company_name_blob_url', sa.String, nullable=True),
         sa.Column('color_scheme_data', sa.JSON, nullable=True)
     )
 
@@ -50,6 +50,7 @@ def upgrade() -> None:
     )
 
 def downgrade() -> None:
-    op.drop_table('teams')
     op.drop_table('welcomepage_users')
+    op.drop_table('teams')
+    
 
