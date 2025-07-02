@@ -1,4 +1,4 @@
-CREATE ROLE welcomepagerole WITH PASSWORD 'wpdev';
+CREATE ROLE welcomepagerole WITH PASSWORD 'your password';
 ALTER ROLE "welcomepagerole" WITH LOGIN;
 
 GRANT ALL ON DATABASE welcomepage TO welcomepagerole;

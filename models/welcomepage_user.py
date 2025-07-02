@@ -1,8 +1,7 @@
-from sqlalchemy import Column, Integer, String, Text, JSON, DateTime
-import json
+from sqlalchemy import Column, Integer, String, JSON, DateTime
 from database import Base
-
 from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey
 
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'

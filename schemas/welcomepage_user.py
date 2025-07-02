@@ -7,16 +7,16 @@ class FileMeta(BaseModel):
     size: int
 
     class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
+        validate_by_name = True
+        from_attributes = True
 
 class HandwaveEmoji(BaseModel):
     emoji: str
     label: str
 
     class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
+        validate_by_name = True
+        from_attributes = True
 
 class AnswerImage(BaseModel):
     filename: str
@@ -24,8 +24,8 @@ class AnswerImage(BaseModel):
     size: int
 
     class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
+        validate_by_name = True
+        from_attributes = True
 
 class Answer(BaseModel):
     text: str
@@ -33,8 +33,8 @@ class Answer(BaseModel):
     special_data: Optional[Any] = Field(None, alias="specialData")
 
     class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
+        validate_by_name = True
+        from_attributes = True
 
 class TeamSettings(BaseModel):
     organization_name: Optional[str] = Field(None, alias="organizationName")
@@ -43,8 +43,8 @@ class TeamSettings(BaseModel):
     logo_data: Optional[str] = Field(None, alias="logoData")
 
     class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
+        validate_by_name = True
+        from_attributes = True
 
 class WelcomepageUserDTO(BaseModel):
     id: Optional[int] = None
@@ -72,5 +72,5 @@ class WelcomepageUserDTO(BaseModel):
         return cls(**user.to_dict())
 
     class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
+        validate_by_name = True
+        from_attributes = True

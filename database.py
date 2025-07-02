@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Fetch DATABASE_URL from environment, fallback to SQLite if not set
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # For SQLite, need connect_args
 if DATABASE_URL.startswith("sqlite"):
