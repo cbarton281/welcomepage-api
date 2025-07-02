@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, JSON
+from sqlalchemy import Column, Integer, String, Text, JSON, DateTime
 import json
 from database import Base
 
@@ -19,8 +19,8 @@ class WelcomepageUser(Base):
     selected_prompts = Column(JSON, nullable=False)  # list of strings
     answers = Column(JSON, nullable=False)  # dict
     team_settings = Column(JSON)
-    created_at = Column(String)
-    updated_at = Column(String)
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
     team_id = Column(Integer, ForeignKey('teams.id'))
 
     team = relationship("Team", back_populates="users")
