@@ -21,8 +21,9 @@ class WelcomepageUser(Base):
     team_settings = Column(JSON)
     created_at = Column(String)
     updated_at = Column(String)
+    team_id = Column(Integer, ForeignKey('teams.id'))
 
-    team = relationship("Team", back_populates="user", uselist=False)
+    team = relationship("Team", back_populates="users")
 
     def __init__(self, **kwargs):
         for field in kwargs:
