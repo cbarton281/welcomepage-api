@@ -1,5 +1,11 @@
 import logging
 
+class SafeLabelFormatter(logging.Formatter):
+    def format(self, record):
+        if not hasattr(record, 'label'):
+            record.label = '-'
+        return super().format(record)
+
 class LabelLoggerAdapter(logging.LoggerAdapter):
     def __init__(self, logger, label):
         super().__init__(logger, {'label': label})
@@ -18,4 +24,16 @@ def new_logger(label, module_name=None):
         finally:
             del frame
     logger = logging.getLogger(module_name)
+    logger.propagate = False  # Prevent duplicate log messages
+
+    # Set handler and formatter for timestamps if not already set
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = SafeLabelFormatter(
+            fmt='%(asctime)s %(levelname)s %(module)s %(label)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
     return LabelLoggerAdapter(logger, label)

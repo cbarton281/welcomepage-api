@@ -10,6 +10,7 @@ class TeamCreate(BaseModel):
 
 class TeamRead(TeamCreate):
     id: int
+    public_id: str  # Public-facing unique identifier
     company_logo_url: Optional[str]
     color_scheme_data: Optional[Dict[str, Any]] = None
 

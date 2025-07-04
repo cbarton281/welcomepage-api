@@ -14,3 +14,15 @@ class Team(Base):
     color_scheme_data = Column(JSON, nullable=True)  # Store the full color scheme object
 
     users = relationship("WelcomepageUser", back_populates="team")
+
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "public_id": self.public_id,
+            "organization_name": self.organization_name,
+            "company_logo_url": self.company_logo_url,
+            "color_scheme": self.color_scheme,
+            "color_scheme_data": self.color_scheme_data,
+        }
+
