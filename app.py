@@ -10,6 +10,19 @@ Base.metadata.create_all(bind=SessionLocal.kw['bind'])
 
 app = FastAPI()
 
+import logging
+from fastapi import Request
+
+@app.middleware("http")
+async def log_request_body(request: Request, call_next):
+    if request.method != "OPTIONS":  # Skip CORS preflight
+        body = await request.body()
+        logging.info(f"Request body ({request.method} {request.url.path}): {body[:3000]!r}")
+        # Recreate request with the consumed body
+        request = Request(request.scope, receive=lambda: {"type": "http.request", "body": body})
+    response = await call_next(request)
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

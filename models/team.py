@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
+from sqlalchemy import Boolean
 import uuid
 
 class Team(Base):
@@ -12,6 +13,7 @@ class Team(Base):
     company_logo_url = Column(String, nullable=True)  # Path or URL to the uploaded logo
     color_scheme = Column(String, nullable=False)
     color_scheme_data = Column(JSON, nullable=True)  # Store the full color scheme object
+    is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
 
     users = relationship("WelcomepageUser", back_populates="team")
 

@@ -2,10 +2,14 @@ from sqlalchemy import Column, Integer, String, JSON, DateTime
 from database import Base
 from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
+from sqlalchemy import Boolean
+import uuid
+
 
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'
     id = Column(Integer, primary_key=True)
+    public_id = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()), nullable=False)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     location = Column(String, nullable=False)
@@ -21,12 +25,15 @@ class WelcomepageUser(Base):
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
     team_id = Column(Integer, ForeignKey('teams.id'))
+    is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
 
     team = relationship("Team", back_populates="users")
 
     def __init__(self, **kwargs):
         for field in kwargs:
             setattr(self, field, kwargs[field])
+        if 'public_id' not in kwargs or not getattr(self, 'public_id', None):
+            self.public_id = str(uuid.uuid4())
 
     @classmethod
     def from_dict(cls, data):
@@ -35,6 +42,7 @@ class WelcomepageUser(Base):
     def to_dict(self):
         return {
             'id': self.id,
+            'public_id': self.public_id,
             'name': self.name,
             'role': self.role,
             'location': self.location,

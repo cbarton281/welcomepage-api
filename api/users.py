@@ -61,8 +61,14 @@ async def upsert_user(
     # UPSERT logic: update if id exists, else create
     db_user = None
     user_identifier = None
+    user_lookup_id = None
     if id is not None:
         db_user = db.query(WelcomepageUser).filter_by(id=id).first()
+    # Support client-supplied public_id for new users
+    if db_user is None and 'public_id' in locals() and public_id:
+        db_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+        if not db_user:
+            user_lookup_id = public_id
     if db_user:
         user_identifier = str(db_user.id)
         # Update user fields
@@ -78,8 +84,9 @@ async def upsert_user(
         db_user.team_id = team_id
     else:
         # Create new user
-        temp_uuid = str(uuid.uuid4())
+        effective_public_id = user_lookup_id if user_lookup_id else str(uuid.uuid4())
         db_user = WelcomepageUser(
+            public_id=effective_public_id,
             name=name,
             role=role,
             location=location,

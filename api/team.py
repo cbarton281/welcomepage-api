@@ -54,44 +54,46 @@ async def upsert_team(
     company_logo: Optional[UploadFile] = File(None),
     public_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("ADMIN"))
+    current_user=Depends(require_roles("ADMIN", "PRE_SIGNUP"))
 ):
     logo_blob_url = None
 
     log = new_logger("upsert_team")
     log.info(f"endpoint invoked [{organization_name}] [{public_id}] ")    
-    # Handle logo upload
     # Upsert team record (update if exists, else create)
-    # Use public_id for lookup if provided, else create new team
+    team = None
+    team_lookup_id = None
     if public_id:
         team = fetch_team_by_public_id(db, public_id)
-    else:
-        team = None
-
-    generated_uuid = None
+        if not team:
+            team_lookup_id = public_id
     if not team:
         generated_uuid = str(uuid.uuid4())
+
+    effective_public_id = team.public_id if team else (team_lookup_id if team_lookup_id else generated_uuid)
+
+    # --- PRE_SIGNUP logic enforcement ---
+    user_role = current_user.get('role')
+    if user_role == 'PRE_SIGNUP':
+        if team and not team.is_draft:
+            log.warning(f"PRE_SIGNUP user attempted to update finalized team [{effective_public_id}]")
+            raise HTTPException(status_code=403, detail="Drafts can only be updated until finalized.")
+        # Otherwise, allow create or update (if is_draft)
 
     if company_logo and company_logo.filename:
         try:
             log.info("logo uploaded")
-            # Read the file content
             logo_content = await company_logo.read()
-            # Use the correct public_id for filename, omit file extension
-            logo_public_id = team.public_id if team else generated_uuid
-            logo_filename = f"{logo_public_id}-company-logo"
+            logo_filename = f"{effective_public_id}-company-logo"
             log.info(f"logo filename: {logo_filename}")
-            # Upload to Supabase Storage
             logo_blob_url = await upload_to_supabase_storage(
                 file_content=logo_content,
                 filename=logo_filename,
                 content_type=company_logo.content_type or "image/jpeg"
             )
             log.info(f"Logo uploaded successfully: {logo_blob_url}")
-            
         except Exception as e:
             log.error(f"Error uploading logo: {str(e)}")
-            # Don't fail the entire request if logo upload fails
             log.info("Continuing without logo upload...")
     
     # Parse color scheme data
@@ -110,19 +112,20 @@ async def upsert_team(
             team.company_logo_url = logo_blob_url
             team.color_scheme_data = color_scheme_obj
         else:
-            log.info("Team does not exist, creating new team...")
+            log.info("Creating new team...")
             team = Team(
-                public_id=generated_uuid,
+                public_id=effective_public_id,
                 organization_name=organization_name,
                 color_scheme=color_scheme,
+                color_scheme_data=color_scheme_obj,
                 company_logo_url=logo_blob_url,
-                color_scheme_data=color_scheme_obj
             )
             db.add(team)
         db.commit()
         db.refresh(team)
+        log.info(f"Upserted team: {team.to_dict()}")
+        return team
     except Exception as e:
         db.rollback()
-        log.exception(f"Database commit/refresh failed.")
-        raise HTTPException(status_code=500, detail="Database error. Please try again later.")
-    return team
+        log.error(f"DB error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upsert team")

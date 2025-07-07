@@ -26,12 +26,14 @@ def upgrade() -> None:
         sa.Column('organization_name', sa.String, nullable=False),
         sa.Column('company_logo_url', sa.String, nullable=True),
         sa.Column('color_scheme', sa.String, nullable=False),
-        sa.Column('color_scheme_data', sa.JSON, nullable=True)
+        sa.Column('color_scheme_data', sa.JSON, nullable=True),
+        sa.Column('is_draft', sa.Boolean, nullable=False, server_default='1'),
     )
 
     op.create_table(
         'welcomepage_users',
         sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('public_id', sa.String(36), unique=True, index=True, nullable=False),
         sa.Column('name', sa.String, nullable=False),
         sa.Column('role', sa.String, nullable=False),
         sa.Column('location', sa.String, nullable=False),
@@ -46,7 +48,8 @@ def upgrade() -> None:
         sa.Column('team_settings', sa.JSON),
         sa.Column('team_id', sa.Integer, sa.ForeignKey('teams.id'), nullable=True),
         sa.Column('created_at', sa.DateTime, server_default=sa.func.now()),
-        sa.Column('updated_at', sa.DateTime, server_default=sa.func.now(), onupdate=sa.func.now())
+        sa.Column('updated_at', sa.DateTime, server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column('is_draft', sa.Boolean, nullable=False, server_default='1'),
     )
 
 def downgrade() -> None:
