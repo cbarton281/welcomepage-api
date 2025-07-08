@@ -38,11 +38,11 @@ def get_db():
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to the WelcomePage API!"}
+    return {"message": "Welcomepage API deployed.  Note: the DB connection has not been verified yet."}
 
 @app.get("/api/hello")
 def hello():
-    return {"message": "Hello from FastAPI!"}
+    return {"message": "Hello from Welcomepage API!"}
 
 from api.users import router as users_router
 from api.team import router as team_router
