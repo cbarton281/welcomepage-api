@@ -45,6 +45,6 @@ def hello():
 from api.users import router as users_router
 from api.team import router as team_router
 
-app.include_router(users_router)
+app.include_router(users_router, prefix="/api")
 app.include_router(team_router, prefix="/api")
 
