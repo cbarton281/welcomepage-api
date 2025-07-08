@@ -38,6 +38,10 @@ def get_db():
     finally:
         db.close()
 
+@app.get("/")
+def root():
+    return {"message": "Welcome to the WelcomePage API!"}
+
 @app.get("/api/hello")
 def hello():
     return {"message": "Hello from FastAPI!"}
