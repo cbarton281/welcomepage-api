@@ -5,8 +5,6 @@ from database import Base, get_db, SessionLocal
 from models.welcomepage_user import WelcomepageUser
 from schemas.welcomepage_user import WelcomepageUserDTO
 
-# Ensure tables are created
-Base.metadata.create_all(bind=SessionLocal.kw['bind'])
 
 app = FastAPI()
 
