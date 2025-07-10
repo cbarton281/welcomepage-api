@@ -35,7 +35,7 @@ def fetch_team_by_public_id(db: Session, public_id: str):
         raise
 
 @router.get("/teams/{public_id}", response_model=TeamRead)
-async def get_team(public_id: str, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN"))):
+async def get_team(public_id: str, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
     log = new_logger("get_team")
     log.info(f"Fetching team with public_id: {public_id}")
     team = fetch_team_by_public_id(db, public_id)
