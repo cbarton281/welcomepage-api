@@ -49,10 +49,10 @@ class TeamSettings(BaseModel):
 class WelcomepageUserDTO(BaseModel):
     id: Optional[int] = None
     name: str
-    role: str
-    location: str
+    role: Optional[str] = None
+    location: Optional[str] = None
     nickname: Optional[str] = None
-    greeting: str
+    greeting: Optional[str] = None
     handwave_emoji: Optional[HandwaveEmoji] = Field(None, alias="handwaveEmoji")
     handwave_emoji_url: Optional[str] = Field(None, alias="handwaveEmojiUrl")
     profile_photo: Optional[FileMeta] = Field(None, alias="profilePhoto")
@@ -61,8 +61,8 @@ class WelcomepageUserDTO(BaseModel):
     wave_gif_url: Optional[str] = Field(None, alias="waveGifUrl")
     pronunciation_recording: Optional[FileMeta] = Field(None, alias="pronunciationRecording")
     pronunciation_recording_url: Optional[str] = Field(None, alias="pronunciationRecordingUrl")
-    selected_prompts: List[str] = Field(..., alias="selectedPrompts")
-    answers: Dict[str, Answer]
+    selected_prompts: Optional[List[str]] = Field(None, alias="selectedPrompts")
+    answers: Optional[Dict[str, Answer]] = None
     team_settings: Optional[TeamSettings] = Field(None, alias="teamSettings")
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")

@@ -14,7 +14,7 @@ from utils.jwt_auth import require_roles
 from fastapi import HTTPException
 from utils.supabase_storage import upload_to_supabase_storage
 
-router = APIRouter(prefix="/api/user", tags=["user"])
+router = APIRouter()
 
 user_retry_logger = new_logger("fetch_user_by_id_retry")
 
@@ -31,24 +31,25 @@ def fetch_user_by_id(db: Session, user_id: int):
         db.rollback()
         raise
 
-@router.post("/", response_model=WelcomepageUserDTO)
+@router.post("/users/", response_model=WelcomepageUserDTO)
 async def upsert_user(
     id: int = Form(None),
+    public_id: str = Form(None),  # <-- Added public_id as a Form parameter
     name: str = Form(...),
-    role: str = Form(...),
-    location: str = Form(...),
-    greeting: str = Form(...),
-    selected_prompts: str = Form(...),  # JSON stringified list
-    answers: str = Form(...),           # JSON stringified dict
+    role: str = Form(None),
+    location: str = Form(None),
+    greeting: str = Form(None),
+    selected_prompts: str = Form(None),  # JSON stringified list
+    answers: str = Form(None),           # JSON stringified dict
     nickname: str = Form(None),
     handwave_emoji: str = Form(None),
     handwave_emoji_url: str = Form(None),
-    team_id: int = Form(None),
+    team_id: int = Form(...),  # REQUIRED
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("USER", "ADMIN"))
+    current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))
 ):
     
     log = new_logger("upsert_user")
@@ -58,14 +59,18 @@ async def upsert_user(
     selected_prompts_list = json.loads(selected_prompts)
     answers_dict = json.loads(answers)
 
+    # Enforce that team_id is present
+    if team_id is None:
+        raise HTTPException(status_code=422, detail="team_id is required and must be an integer")
+
     # UPSERT logic: update if id exists, else create
     db_user = None
     user_identifier = None
     user_lookup_id = None
     if id is not None:
         db_user = db.query(WelcomepageUser).filter_by(id=id).first()
-    # Support client-supplied public_id for new users
-    if db_user is None and 'public_id' in locals() and public_id:
+    # Support client-supplied public_id for upsert
+    if db_user is None and public_id:
         db_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
         if not db_user:
             user_lookup_id = public_id
@@ -82,6 +87,14 @@ async def upsert_user(
         db_user.selected_prompts = selected_prompts_list
         db_user.answers = answers_dict
         db_user.team_id = team_id
+        # Always commit and refresh after update
+        try:
+            db.commit()
+            db.refresh(db_user)
+        except Exception as e:
+            db.rollback()
+            log.exception("Database commit/refresh failed.")
+            raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     else:
         # Create new user
         effective_public_id = user_lookup_id if user_lookup_id else str(uuid.uuid4())
@@ -148,9 +161,15 @@ async def upsert_user(
 
 
 
-@router.get("/{user_id}", response_model=WelcomepageUserDTO)
-def get_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN"))):
+
+@router.get("/users/{user_id}", response_model=WelcomepageUserDTO)
+def get_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
+    log = new_logger("get_user")
+    log.info(f"Fetching user with id: {user_id}")
     user = db.query(WelcomepageUser).filter_by(id=user_id).first()
     if not user:
+        log.info(f"User not found: {user_id}")
         raise HTTPException(status_code=404, detail="User not found")
+    else:
+        log.info(f"User found [{user.to_dict()}]")
     return WelcomepageUserDTO.from_model(user)

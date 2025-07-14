@@ -53,5 +53,6 @@ def require_roles(*roles):
                 f"Authorization failed: user_id={user.get('user_id')}, role={user.get('role')}, required_roles={roles}"
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        log.info(f"Authorization successful: user_id={user.get('user_id')}, role={user.get('role')}")
         return user
     return role_checker

@@ -4,18 +4,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import Base, get_db, SessionLocal
 from models.welcomepage_user import WelcomepageUser
 from schemas.welcomepage_user import WelcomepageUserDTO
-
+from utils.logger_factory import new_logger
 
 app = FastAPI()
 
-import logging
 from fastapi import Request
 
 @app.middleware("http")
 async def log_request_body(request: Request, call_next):
+    log = new_logger("log_request_body")
+    log.info(f"INCOMING REQUEST: {request.method} {request.url}")
     if request.method != "OPTIONS":  # Skip CORS preflight
         body = await request.body()
-        logging.info(f"Request body ({request.method} {request.url.path}): {body[:3000]!r}")
+        log.info(f"Request body ({request.method} {request.url.path}): {body[:3000]!r}")
         # Recreate request with the consumed body
         request = Request(request.scope, receive=lambda: {"type": "http.request", "body": body})
     response = await call_next(request)
