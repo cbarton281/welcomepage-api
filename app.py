@@ -45,7 +45,7 @@ def root():
 def hello():
     return {"message": "Hello from Welcomepage API!"}
 
-from api.users import router as users_router
+from api.user import router as users_router
 from api.team import router as team_router
 
 app.include_router(users_router, prefix="/api")
