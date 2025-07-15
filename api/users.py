@@ -1,8 +1,8 @@
-import os
+
 import json
 import uuid
 import logging
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
@@ -58,6 +58,8 @@ async def upsert_user(
     # Parse JSON fields
     selected_prompts_list = json.loads(selected_prompts)
     answers_dict = json.loads(answers)
+
+    
 
     # Enforce that team_id is present
     if team_id is None:
@@ -123,16 +125,16 @@ async def upsert_user(
     # Handle uploads for both update and create
     updated = False
     if profile_photo:
-        logo_filename = f"{user_identifier}-profile-photo"
+        photo_filename = f"{db_user.public_id}-profile-photo"
         content = await profile_photo.read()
         db_user.profile_photo_url = await upload_to_supabase_storage(
             file_content=content,
-            filename=logo_filename,
+            filename=photo_filename,
             content_type=profile_photo.content_type or "image/jpeg"
         )
         updated = True
     if wave_gif:
-        gif_filename = f"{user_identifier}-wave-gif"
+        gif_filename = f"{db_user.public_id}-wave-gif"
         content = await wave_gif.read()
         db_user.wave_gif_url = await upload_to_supabase_storage(
             file_content=content,
@@ -141,7 +143,7 @@ async def upsert_user(
         )
         updated = True
     if pronunciation_recording:
-        audio_filename = f"{user_identifier}-pronunciation-audio"
+        audio_filename = f"{db_user.public_id}-pronunciation-audio"
         content = await pronunciation_recording.read()
         db_user.pronunciation_recording_url = await upload_to_supabase_storage(
             file_content=content,
@@ -162,13 +164,13 @@ async def upsert_user(
 
 
 
-@router.get("/users/{user_id}", response_model=WelcomepageUserDTO)
-def get_user(user_id: int, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
+@router.get("/users/{public_id}", response_model=WelcomepageUserDTO)
+def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
     log = new_logger("get_user")
-    log.info(f"Fetching user with id: {user_id}")
-    user = db.query(WelcomepageUser).filter_by(id=user_id).first()
+    log.info(f"Fetching user with public_id: {public_id}")
+    user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
     if not user:
-        log.info(f"User not found: {user_id}")
+        log.info(f"User not found: {public_id}")
         raise HTTPException(status_code=404, detail="User not found")
     else:
         log.info(f"User found [{user.to_dict()}]")
