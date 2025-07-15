@@ -6,6 +6,7 @@ from models.welcomepage_user import WelcomepageUser
 from schemas.welcomepage_user import WelcomepageUserDTO
 from utils.logger_factory import new_logger
 
+
 app = FastAPI()
 
 from fastapi import Request
@@ -47,7 +48,9 @@ def hello():
 
 from api.user import router as users_router
 from api.team import router as team_router
+from api.verification_code import router as verification_code_router
 
 app.include_router(users_router, prefix="/api")
 app.include_router(team_router, prefix="/api")
+app.include_router(verification_code_router, prefix="/api")
 
