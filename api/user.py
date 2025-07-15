@@ -57,9 +57,17 @@ async def upsert_user(
     try:
         log.info("endpoint invoked")
    
-        # Parse JSON fields
-        selected_prompts_list = json.loads(selected_prompts)
-        answers_dict = json.loads(answers)
+        # Parse JSON fields with guards
+        try:
+            selected_prompts_list = json.loads(selected_prompts or "[]")
+        except Exception as e:
+            log.warning(f"Invalid selected_prompts: {selected_prompts!r}. Using empty list. Error: {e}")
+            selected_prompts_list = []
+        try:
+            answers_dict = json.loads(answers or "{}")
+        except Exception as e:
+            log.warning(f"Invalid answers: {answers!r}. Using empty dict. Error: {e}")
+            answers_dict = {}
 
         # Enforce that team_id is present
         if team_id is None:
