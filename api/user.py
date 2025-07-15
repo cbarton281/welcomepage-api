@@ -53,13 +53,13 @@ async def upsert_user(
 ):
     
     log = new_logger("upsert_user")
-    log.info("endpoint invoked")
-   
-    # Parse JSON fields
-    selected_prompts_list = json.loads(selected_prompts)
-    answers_dict = json.loads(answers)
 
     try:
+        log.info("endpoint invoked")
+   
+        # Parse JSON fields
+        selected_prompts_list = json.loads(selected_prompts)
+        answers_dict = json.loads(answers)
 
         # Enforce that team_id is present
         if team_id is None:
