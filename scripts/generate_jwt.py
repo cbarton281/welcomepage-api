@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a test JWT.")
     parser.add_argument("--secret", required=True, help="JWT secret key")
     parser.add_argument("--user-id", required=True, help="User ID (sub claim)")
-    parser.add_argument("--role", required=True, choices=["USER", "ADMIN"], help="User role")
+    parser.add_argument("--role", required=True, choices=["USER", "ADMIN", "PRE_SIGNUP"], help="User role")
     parser.add_argument("--seconds", type=int, default=3600, help="Token expiry in seconds (default: 3600, i.e. 1 hour)")
     args = parser.parse_args()
 

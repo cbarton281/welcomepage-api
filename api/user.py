@@ -59,107 +59,112 @@ async def upsert_user(
     selected_prompts_list = json.loads(selected_prompts)
     answers_dict = json.loads(answers)
 
-    
+    try:
 
-    # Enforce that team_id is present
-    if team_id is None:
-        raise HTTPException(status_code=422, detail="team_id is required and must be an integer")
+        # Enforce that team_id is present
+        if team_id is None:
+            raise HTTPException(status_code=422, detail="team_id is required and must be an integer")
 
-    # UPSERT logic: update if id exists, else create
-    db_user = None
-    user_identifier = None
-    user_lookup_id = None
-    if id is not None:
-        db_user = db.query(WelcomepageUser).filter_by(id=id).first()
-    # Support client-supplied public_id for upsert
-    if db_user is None and public_id:
-        db_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
-        if not db_user:
-            user_lookup_id = public_id
-    if db_user:
-        user_identifier = str(db_user.id)
-        # Update user fields
-        db_user.name = name
-        db_user.role = role
-        db_user.location = location
-        db_user.greeting = greeting
-        db_user.nickname = nickname
-        db_user.handwave_emoji = handwave_emoji
-        db_user.handwave_emoji_url = handwave_emoji_url
-        db_user.selected_prompts = selected_prompts_list
-        db_user.answers = answers_dict
-        db_user.team_id = team_id
-        # Always commit and refresh after update
-        try:
-            db.commit()
-            db.refresh(db_user)
-        except Exception as e:
-            db.rollback()
-            log.exception("Database commit/refresh failed.")
-            raise HTTPException(status_code=500, detail="Database error. Please try again later.")
-    else:
-        # Create new user
-        effective_public_id = user_lookup_id if user_lookup_id else str(uuid.uuid4())
-        db_user = WelcomepageUser(
-            public_id=effective_public_id,
-            name=name,
-            role=role,
-            location=location,
-            greeting=greeting,
-            nickname=nickname,
-            handwave_emoji=handwave_emoji,
-            handwave_emoji_url=handwave_emoji_url,
-            selected_prompts=selected_prompts_list,
-            answers=answers_dict,
-            team_id=team_id,
-        )
-        db.add(db_user)
-        try:
-            db.commit()
-            db.refresh(db_user)
-        except Exception as e:
-            db.rollback()
-            log.exception("Database commit/refresh failed.")
-            raise HTTPException(status_code=500, detail="Database error. Please try again later.")
-        user_identifier = str(db_user.id) if db_user.id else temp_uuid
-    # Handle uploads for both update and create
-    updated = False
-    if profile_photo:
-        photo_filename = f"{db_user.public_id}-profile-photo"
-        content = await profile_photo.read()
-        db_user.profile_photo_url = await upload_to_supabase_storage(
-            file_content=content,
-            filename=photo_filename,
-            content_type=profile_photo.content_type or "image/jpeg"
-        )
-        updated = True
-    if wave_gif:
-        gif_filename = f"{db_user.public_id}-wave-gif"
-        content = await wave_gif.read()
-        db_user.wave_gif_url = await upload_to_supabase_storage(
-            file_content=content,
-            filename=gif_filename,
-            content_type=wave_gif.content_type or "image/gif"
-        )
-        updated = True
-    if pronunciation_recording:
-        audio_filename = f"{db_user.public_id}-pronunciation-audio"
-        content = await pronunciation_recording.read()
-        db_user.pronunciation_recording_url = await upload_to_supabase_storage(
-            file_content=content,
-            filename=audio_filename,
-            content_type=pronunciation_recording.content_type or "audio/mpeg"
-        )
-        updated = True
-    if updated:
-        try:
-            db.commit()
-            db.refresh(db_user)
-        except Exception as e:
-            db.rollback()
-            log.exception("Database commit/refresh failed.")
-            raise HTTPException(status_code=500, detail="Database error. Please try again later.")
-    return WelcomepageUserDTO.from_model(db_user)
+        # UPSERT logic: update if id exists, else create
+        db_user = None
+        user_identifier = None
+        user_lookup_id = None
+        if id is not None:
+            db_user = db.query(WelcomepageUser).filter_by(id=id).first()
+        # Support client-supplied public_id for upsert
+        if db_user is None and public_id:
+            db_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+            if not db_user:
+                user_lookup_id = public_id
+        if db_user:
+            user_identifier = str(db_user.id)
+            # Update user fields
+            db_user.name = name
+            db_user.role = role
+            db_user.location = location
+            db_user.greeting = greeting
+            db_user.nickname = nickname
+            db_user.handwave_emoji = handwave_emoji
+            db_user.handwave_emoji_url = handwave_emoji_url
+            db_user.selected_prompts = selected_prompts_list
+            db_user.answers = answers_dict
+            db_user.team_id = team_id
+            # Always commit and refresh after update
+            try:
+                db.commit()
+                db.refresh(db_user)
+            except Exception as e:
+                db.rollback()
+                log.exception("Database commit/refresh failed.")
+                raise HTTPException(status_code=500, detail="Database error. Please try again later.")
+        else:
+            # Create new user
+            effective_public_id = user_lookup_id if user_lookup_id else str(uuid.uuid4())
+            db_user = WelcomepageUser(
+                public_id=effective_public_id,
+                name=name,
+                role=role,
+                location=location,
+                greeting=greeting,
+                nickname=nickname,
+                handwave_emoji=handwave_emoji,
+                handwave_emoji_url=handwave_emoji_url,
+                selected_prompts=selected_prompts_list,
+                answers=answers_dict,
+                team_id=team_id,
+            )
+            db.add(db_user)
+            try:
+                db.commit()
+                db.refresh(db_user)
+            except Exception as e:
+                db.rollback()
+                log.exception("Database commit/refresh failed.")
+                raise HTTPException(status_code=500, detail="Database error. Please try again later.")
+            user_identifier = str(db_user.id) if db_user.id else temp_uuid
+        # Handle uploads for both update and create
+        updated = False
+        if profile_photo:
+            photo_filename = f"{db_user.public_id}-profile-photo"
+            content = await profile_photo.read()
+            db_user.profile_photo_url = await upload_to_supabase_storage(
+                file_content=content,
+                filename=photo_filename,
+                content_type=profile_photo.content_type or "image/jpeg"
+            )
+            updated = True
+        if wave_gif:
+            gif_filename = f"{db_user.public_id}-wave-gif"
+            content = await wave_gif.read()
+            db_user.wave_gif_url = await upload_to_supabase_storage(
+                file_content=content,
+                filename=gif_filename,
+                content_type=wave_gif.content_type or "image/gif"
+            )
+            updated = True
+        if pronunciation_recording:
+            audio_filename = f"{db_user.public_id}-pronunciation-audio"
+            content = await pronunciation_recording.read()
+            db_user.pronunciation_recording_url = await upload_to_supabase_storage(
+                file_content=content,
+                filename=audio_filename,
+                content_type=pronunciation_recording.content_type or "audio/mpeg"
+            )
+            updated = True
+        if updated:
+            try:
+                db.commit()
+                db.refresh(db_user)
+            except Exception as e:
+                db.rollback()
+                log.exception("Database commit/refresh failed.")
+                raise HTTPException(status_code=500, detail="Database error. Please try again later.")
+        return WelcomepageUserDTO.from_model(db_user)
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        log.exception("Unhandled exception in upsert_user")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
