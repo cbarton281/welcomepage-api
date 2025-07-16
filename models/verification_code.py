@@ -11,3 +11,13 @@ class VerificationCode(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "email": self.email,
+            "code": self.code,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
+            "used": self.used,
+        }
