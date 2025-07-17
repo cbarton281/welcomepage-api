@@ -12,10 +12,20 @@ router = APIRouter()
 
 CODE_EXPIRY_MINUTES = 10
 
-@router.post("/generate_verification_code/")
-def generate_verification_code(email: str, db: Session = Depends(get_db)):
+from pydantic import BaseModel
+from utils.jwt_auth import require_roles
 
-    log = new_logger("generate_verification_code")
+class GenerateCodeRequest(BaseModel):
+    email: str
+
+@router.post("/generate_verification_email/")
+def generate_verification_email(
+    payload: GenerateCodeRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))
+):
+    email = payload.email
+    log = new_logger("generate_verification_email")
     log.info(f"Generating verification code for {email}")
 
     code = str(random.randint(100000, 999999))
@@ -36,10 +46,29 @@ def generate_verification_code(email: str, db: Session = Depends(get_db)):
     db.add(verification_code)
     db.commit()
     db.refresh(verification_code)
-    return {"email": email, "code": code, "expires_at": expires_at.isoformat()}
+
+    # Send the verification email
+    from api.send_email import send_verification_email
+    try:
+        send_verification_email(email, code)
+        log.info(f"Verification email sent to {email}")
+    except Exception as e:
+        log.error(f"Failed to send verification email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send verification email.")
+
+    return {"email": email, "expires_at": expires_at.isoformat(), "message": "Verification email sent."}
+
+
+from pydantic import BaseModel
+
+class VerificationRequest(BaseModel):
+    email: str
+    code: str
 
 @router.post("/verify_code/")
-def verify_code(email: str, code: str, db: Session = Depends(get_db)):
+def verify_code(payload: VerificationRequest, db: Session = Depends(get_db)):
+    email = payload.email
+    code = payload.code
     log = new_logger("verify_code")
     log.info(f"Verifying code for {email} [{code}]")
     now = datetime.now(timezone.utc)
@@ -52,3 +81,4 @@ def verify_code(email: str, code: str, db: Session = Depends(get_db)):
     db.commit()
     log.info(f"Verification code verified [{verification_code.to_dict()}]")
     return {"success": True}
+
