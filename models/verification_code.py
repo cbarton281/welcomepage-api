@@ -11,6 +11,7 @@ class VerificationCode(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False, nullable=False)
+    public_id = Column(String, index=True, nullable=True)
 
     def to_dict(self):
         return {
@@ -20,4 +21,5 @@ class VerificationCode(Base):
             "created_at": self.created_at,
             "expires_at": self.expires_at,
             "used": self.used,
+            "public_id": self.public_id,
         }

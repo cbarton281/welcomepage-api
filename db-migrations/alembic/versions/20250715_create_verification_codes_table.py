@@ -7,7 +7,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '20250715'
-down_revision = '507ccf8e06d8'
+down_revision = '507ccf8e06d8'  # update if needed to the correct previous migration after removing fa81ca49584f
 branch_labels = None
 depends_on = None
 
@@ -20,11 +20,13 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('used', sa.Boolean, nullable=False, server_default=sa.text('false')),
+        sa.Column('public_id', sa.String, nullable=True, index=True),
     )
     # Add indexes for efficient search
     op.create_index('idx_verification_codes_email', 'verification_codes', ['email'])
     op.create_index('idx_verification_codes_code', 'verification_codes', ['code'])
     op.create_index('idx_verification_codes_email_code', 'verification_codes', ['email', 'code'])
+    op.create_index('idx_verification_codes_public_id', 'verification_codes', ['public_id'])
 
 def downgrade():
     op.drop_index('idx_verification_codes_email_code', table_name='verification_codes')
