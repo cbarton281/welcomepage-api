@@ -51,9 +51,18 @@ def generate_code_with_retry(payload: GenerateCodeRequest, db: Session, log):
         used=False,
     )
     log.info(f"Verification code generated [{verification_code.to_dict()}]")
-    db.add(verification_code)
-    db.commit()
-    db.refresh(verification_code)
+    try:
+        db.add(verification_code)
+        db.commit()
+        db.refresh(verification_code)
+    except OperationalError as e:
+        db.rollback()
+        log.exception("OperationalError in verify_code_with_retry, will retry.")
+        raise  # trigger the retry
+    except Exception as e:
+        db.rollback()
+        log.exception("Database commit/refresh failed in update_auth_fields.")
+        raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     return verification_code, expires_at, code
 
 @router.post("/generate_verification_email/")
@@ -102,8 +111,17 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
         log.info(f"Verification code expired for {email} [{code}]")
         raise HTTPException(status_code=400, detail="Code expired.")
     verification_code.used = True
-    db.commit()
-    db.refresh(verification_code)
+    try:
+        db.commit()
+        db.refresh(verification_code)
+    except OperationalError as e:
+        db.rollback()
+        log.exception("OperationalError in verify_code_with_retry, will retry.")
+        raise  # trigger the retry
+    except Exception as e:
+        db.rollback()
+        log.exception("Database commit/refresh failed in verify_code_with_retry.")
+        raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     log.info(f"Verification code verified [{verification_code.to_dict()}]")
 
     public_id = verification_code.public_id

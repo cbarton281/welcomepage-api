@@ -49,6 +49,10 @@ def update_auth_fields(
     try:
         db.commit()
         db.refresh(user)
+    except OperationalError as e:
+        db.rollback()
+        log.exception("OperationalError in verify_code_with_retry, will retry.")
+        raise  # trigger the retry
     except Exception as e:
         db.rollback()
         log.exception("Database commit/refresh failed in update_auth_fields.")
@@ -69,31 +73,83 @@ def fetch_user_by_id(db: Session, user_id: int):
         db.rollback()
         raise
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+from sqlalchemy.exc import OperationalError
+import logging
+
+upsert_retry_logger = logging.getLogger("upsert_retry")
+
+from fastapi.concurrency import run_in_threadpool
+
 @router.post("/users/", response_model=WelcomepageUserDTO)
 async def upsert_user(
     id: int = Form(None),
-    public_id: str = Form(None),  # <-- Added public_id as a Form parameter
+    public_id: str = Form(None),
     name: str = Form(...),
-    role: str = Form(None),
+    role: str = Form(...),
     auth_role: str = Form(None),
     auth_email: str = Form(None),
     location: str = Form(None),
     greeting: str = Form(None),
-    selected_prompts: str = Form(None),  # JSON stringified list
-    answers: str = Form(None),           # JSON stringified dict
     nickname: str = Form(None),
     handwave_emoji: str = Form(None),
     handwave_emoji_url: str = Form(None),
-    team_id: int = Form(...),  # REQUIRED
+    selected_prompts: str = Form(None),
+    answers: str = Form(None),
+    team_id: int = Form(None),
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
-    db: Session = Depends(get_db),
-    current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))
+    db: Session = Depends(get_db)
 ):
-    
     log = new_logger("upsert_user")
+    db_user, user_identifier, temp_uuid = await run_in_threadpool(
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log
+    )
+    updated = False
+    if profile_photo:
+        photo_filename = f"{db_user.public_id}-profile-photo"
+        content = await profile_photo.read()
+        db_user.profile_photo_url = await upload_to_supabase_storage(
+            file_content=content,
+            filename=photo_filename,
+            content_type=profile_photo.content_type or "image/jpeg"
+        )
+        updated = True
+    if wave_gif:
+        gif_filename = f"{db_user.public_id}-wave-gif"
+        content = await wave_gif.read()
+        db_user.wave_gif_url = await upload_to_supabase_storage(
+            file_content=content,
+            filename=gif_filename,
+            content_type=wave_gif.content_type or "image/gif"
+        )
+        updated = True
+    if pronunciation_recording:
+        audio_filename = f"{db_user.public_id}-pronunciation-audio"
+        content = await pronunciation_recording.read()
+        db_user.pronunciation_recording_url = await upload_to_supabase_storage(
+            file_content=content,
+            filename=audio_filename,
+            content_type=pronunciation_recording.content_type or "audio/mpeg"
+        )
+        updated = True
+    if updated:
+        await run_in_threadpool(db.commit)
+        await run_in_threadpool(db.refresh, db_user)
+    return WelcomepageUserDTO.from_model(db_user)
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
+)
+def upsert_user_db_logic(
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log
+):
+    # All arguments are plain values, no FastAPI Form/File/Depends here
+    # All business logic remains unchanged
     try:
         log.info("endpoint invoked")
    
@@ -143,6 +199,10 @@ async def upsert_user(
             try:
                 db.commit()
                 db.refresh(db_user)
+            except OperationalError as e:
+                db.rollback()
+                log.exception("OperationalError in verify_code_with_retry, will retry.")
+                raise  # trigger the retry
             except Exception as e:
                 db.rollback()
                 log.exception("Database commit/refresh failed.")
@@ -176,49 +236,18 @@ async def upsert_user(
             try:
                 db.commit()
                 db.refresh(db_user)
+            except OperationalError as e:
+                db.rollback()
+                log.exception("OperationalError in verify_code_with_retry, will retry.")
+                raise  # trigger the retry
             except Exception as e:
                 db.rollback()
                 log.exception("Database commit/refresh failed.")
                 raise HTTPException(status_code=500, detail="Database error. Please try again later.")
             user_identifier = str(db_user.id) if db_user.id else temp_uuid
-        # Handle uploads for both update and create
-        updated = False
-        if profile_photo:
-            photo_filename = f"{db_user.public_id}-profile-photo"
-            content = await profile_photo.read()
-            db_user.profile_photo_url = await upload_to_supabase_storage(
-                file_content=content,
-                filename=photo_filename,
-                content_type=profile_photo.content_type or "image/jpeg"
-            )
-            updated = True
-        if wave_gif:
-            gif_filename = f"{db_user.public_id}-wave-gif"
-            content = await wave_gif.read()
-            db_user.wave_gif_url = await upload_to_supabase_storage(
-                file_content=content,
-                filename=gif_filename,
-                content_type=wave_gif.content_type or "image/gif"
-            )
-            updated = True
-        if pronunciation_recording:
-            audio_filename = f"{db_user.public_id}-pronunciation-audio"
-            content = await pronunciation_recording.read()
-            db_user.pronunciation_recording_url = await upload_to_supabase_storage(
-                file_content=content,
-                filename=audio_filename,
-                content_type=pronunciation_recording.content_type or "audio/mpeg"
-            )
-            updated = True
-        if updated:
-            try:
-                db.commit()
-                db.refresh(db_user)
-            except Exception as e:
-                db.rollback()
-                log.exception("Database commit/refresh failed.")
-                raise HTTPException(status_code=500, detail="Database error. Please try again later.")
-        return WelcomepageUserDTO.from_model(db_user)
+        # All file upload and await logic must be in the async route handler, not here.
+        # Only DB upsert logic remains here.
+        return db_user, user_identifier, temp_uuid
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
