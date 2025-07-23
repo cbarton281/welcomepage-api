@@ -48,6 +48,25 @@ class TeamSettings(BaseModel):
 
 class WelcomepageUserDTO(BaseModel):
     id: Optional[int] = None
+    public_id: Optional[str] = None
+    name: Optional[str] = None
+    role: Optional[str] = None
+    auth_role: Optional[str] = None
+    auth_email: Optional[str] = None
+    location: Optional[str] = None
+    nickname: Optional[str] = None
+    greeting: Optional[str] = None
+    handwaveEmojiUrl: Optional[str] = None
+    profilePhotoUrl: Optional[str] = None
+    waveGifUrl: Optional[str] = None
+    pronunciationRecordingUrl: Optional[str] = None
+    selectedPrompts: Optional[list] = None
+    answers: Optional[dict] = None
+    teamSettings: Optional[dict] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+    id: Optional[int] = None
     name: str
     role: Optional[str] = None
     location: Optional[str] = None

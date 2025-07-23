@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import random
 from database import get_db
 from utils.logger_factory import new_logger
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from models.verification_code import VerificationCode
 
@@ -104,7 +105,25 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
     db.commit()
     db.refresh(verification_code)
     log.info(f"Verification code verified [{verification_code.to_dict()}]")
-    return {"success": True}
+
+    public_id = verification_code.public_id
+    from models.welcomepage_user import WelcomepageUser
+    user = None
+    # Prefer email lookup if present, else use public_id
+    log.info(f"Verifying user using email [{verification_code.email}] if present, else using public_id [{public_id}]")
+    if verification_code.email:
+        user = db.query(WelcomepageUser).filter_by(auth_email=verification_code.email).first()
+        if not user and public_id:
+            log.info(f"No user found for email [{verification_code.email}], trying public_id [{public_id}]")
+            user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+    if not user:
+        log.info(f"User not found for this verification code [{verification_code.to_dict()}]")
+        raise HTTPException(status_code=404, detail="User not found for this verification code.")
+    log.info(f"User found [{user.public_id}, {user.role}, {user.name}, {user.auth_email}, {user.auth_role}]")
+    
+    auth_role = user.auth_role if user.auth_role else "PRE_SIGNUP"
+    user_public_id = user.public_id if user.public_id else public_id
+    return {"success": True, "public_id": user_public_id, "auth_role": auth_role}
 
 @router.post("/verify_code/")
 def verify_code(payload: 'VerificationRequest', db: Session = Depends(get_db)):

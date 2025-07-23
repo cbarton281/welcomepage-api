@@ -26,6 +26,8 @@ class WelcomepageUser(Base):
     updated_at = Column(DateTime)
     team_id = Column(Integer, ForeignKey('teams.id'))
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
+    auth_role = Column(String(32), nullable=True)  # Authorization role (admin, user, pre-signup, etc)
+    auth_email = Column(String(256), nullable=True)  # Authorization email, distinct from profile email
 
     team = relationship("Team", back_populates="users")
 
@@ -45,6 +47,8 @@ class WelcomepageUser(Base):
             'public_id': self.public_id,
             'name': self.name,
             'role': self.role,
+            'auth_role': self.auth_role,
+            'auth_email': self.auth_email,
             'location': self.location,
             'nickname': self.nickname,
             'greeting': self.greeting,

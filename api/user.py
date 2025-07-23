@@ -16,7 +16,45 @@ from utils.supabase_storage import upload_to_supabase_storage
 
 router = APIRouter()
 
+from pydantic import BaseModel
+from fastapi import Body
+
+class UserAuthUpdateRequest(BaseModel):
+    public_id: str
+    auth_email: str
+    auth_role: str
+
 user_retry_logger = new_logger("fetch_user_by_id_retry")
+
+@router.post("/users/update_auth_fields", response_model=WelcomepageUserDTO)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(user_retry_logger, logging.WARNING)
+)
+def update_auth_fields(
+    payload: UserAuthUpdateRequest = Body(...),
+    db: Session = Depends(get_db),
+):
+    log = new_logger("update_auth_fields")
+    log.info(f"Updating auth fields for user [{payload.public_id}]")
+    user = db.query(WelcomepageUser).filter_by(public_id=payload.public_id).first()
+    if not user:
+        log.info(f"User not found for public_id [{payload.public_id}]")
+        raise HTTPException(status_code=404, detail="User not found")
+    log.info(f"User found [{user.public_id}, {user.role}, {user.name}, {user.auth_email}, {user.auth_role}]")
+    user.auth_email = payload.auth_email
+    user.auth_role = payload.auth_role
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        log.exception("Database commit/refresh failed in update_auth_fields.")
+        raise HTTPException(status_code=500, detail="Database error. Please try again later.")
+    log.info(f"Updated user [{user.public_id}] with auth_email [{user.auth_email}] and auth_role [{user.auth_role}]")
+    return user
 
 @retry(
     stop=stop_after_attempt(3),
@@ -37,6 +75,8 @@ async def upsert_user(
     public_id: str = Form(None),  # <-- Added public_id as a Form parameter
     name: str = Form(...),
     role: str = Form(None),
+    auth_role: str = Form(None),
+    auth_email: str = Form(None),
     location: str = Form(None),
     greeting: str = Form(None),
     selected_prompts: str = Form(None),  # JSON stringified list
@@ -89,6 +129,8 @@ async def upsert_user(
             # Update user fields
             db_user.name = name
             db_user.role = role
+            db_user.auth_role = auth_role if auth_role is not None else db_user.auth_role
+            db_user.auth_email = auth_email if auth_email is not None else db_user.auth_email
             db_user.location = location
             db_user.greeting = greeting
             db_user.nickname = nickname
@@ -112,6 +154,8 @@ async def upsert_user(
                 public_id=effective_public_id,
                 name=name,
                 role=role,
+                auth_role=auth_role,
+                auth_email=auth_email,
                 location=location,
                 greeting=greeting,
                 nickname=nickname,
@@ -120,6 +164,13 @@ async def upsert_user(
                 selected_prompts=selected_prompts_list,
                 answers=answers_dict,
                 team_id=team_id,
+                is_draft=True,
+                profile_photo_url=None,
+                wave_gif_url=None,
+                pronunciation_recording_url=None,
+                team_settings=None,
+                created_at=datetime.datetime.utcnow(),
+                updated_at=datetime.datetime.utcnow(),
             )
             db.add(db_user)
             try:
