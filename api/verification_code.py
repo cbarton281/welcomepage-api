@@ -7,6 +7,7 @@ from utils.logger_factory import new_logger
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from models.verification_code import VerificationCode
+from models.team import Team
 
 
 router = APIRouter()
@@ -139,9 +140,14 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
         raise HTTPException(status_code=404, detail="User not found for this verification code.")
     log.info(f"User found [{user.public_id}, {user.role}, {user.name}, {user.auth_email}, {user.auth_role}]")
     
+    team_public_id = None
+    if user.team_id:
+        team = db.query(Team).filter_by(id=user.team_id).first()
+        team_public_id = team.public_id
+    
     auth_role = user.auth_role if user.auth_role else "PRE_SIGNUP"
     user_public_id = user.public_id if user.public_id else public_id
-    return {"success": True, "public_id": user_public_id, "auth_role": auth_role}
+    return {"success": True, "public_id": user_public_id, "auth_role": auth_role, "team_public_id": team_public_id}
 
 @router.post("/verify_code/")
 def verify_code(payload: 'VerificationRequest', db: Session = Depends(get_db)):
