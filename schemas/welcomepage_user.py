@@ -48,31 +48,15 @@ class TeamSettings(BaseModel):
 
 class WelcomepageUserDTO(BaseModel):
     id: Optional[int] = None
-    public_id: Optional[str] = None
-    name: Optional[str] = None
-    role: Optional[str] = None
-    auth_role: Optional[str] = None
-    auth_email: Optional[str] = None
-    location: Optional[str] = None
-    nickname: Optional[str] = None
-    greeting: Optional[str] = None
-    hi_yall_text: Optional[str] = None
-    handwaveEmojiUrl: Optional[str] = None
-    profilePhotoUrl: Optional[str] = None
-    waveGifUrl: Optional[str] = None
-    pronunciationRecordingUrl: Optional[str] = None
-    selectedPrompts: Optional[list] = None
-    answers: Optional[dict] = None
-    teamSettings: Optional[dict] = None
-    createdAt: Optional[str] = None
-    updatedAt: Optional[str] = None
-
-    id: Optional[int] = None
+    public_id: Optional[str] = Field(None, alias="publicId")
     name: str
     role: Optional[str] = None
+    auth_role: Optional[str] = Field(None, alias="authRole")
+    auth_email: Optional[str] = Field(None, alias="authEmail")
     location: Optional[str] = None
     nickname: Optional[str] = None
     greeting: Optional[str] = None
+    hi_yall_text: Optional[str] = Field(None, alias="hiYallText")
     handwave_emoji: Optional[HandwaveEmoji] = Field(None, alias="handwaveEmoji")
     handwave_emoji_url: Optional[str] = Field(None, alias="handwaveEmojiUrl")
     profile_photo: Optional[FileMeta] = Field(None, alias="profilePhoto")
