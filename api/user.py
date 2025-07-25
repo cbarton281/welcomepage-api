@@ -13,6 +13,7 @@ from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
 from fastapi import HTTPException
 from utils.supabase_storage import upload_to_supabase_storage
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -152,6 +153,8 @@ def upsert_user_db_logic(
     # All business logic remains unchanged
     try:
         log.info("endpoint invoked")
+        
+
    
         # Parse JSON fields with guards
         try:
@@ -229,8 +232,8 @@ def upsert_user_db_logic(
                 wave_gif_url=None,
                 pronunciation_recording_url=None,
                 team_settings=None,
-                created_at=datetime.datetime.utcnow(),
-                updated_at=datetime.datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             )
             db.add(db_user)
             try:
@@ -244,10 +247,10 @@ def upsert_user_db_logic(
                 db.rollback()
                 log.exception("Database commit/refresh failed.")
                 raise HTTPException(status_code=500, detail="Database error. Please try again later.")
-            user_identifier = str(db_user.id) if db_user.id else temp_uuid
+            user_identifier = str(db_user.id) if db_user.id else db_user.public_id
         # All file upload and await logic must be in the async route handler, not here.
         # Only DB upsert logic remains here.
-        return db_user, user_identifier, temp_uuid
+        return db_user, user_identifier, db_user.public_id
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
