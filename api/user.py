@@ -93,6 +93,7 @@ async def upsert_user(
     location: str = Form(None),
     greeting: str = Form(None),
     nickname: str = Form(None),
+    hi_yall_text: str = Form(None),
     handwave_emoji: str = Form(None),
     handwave_emoji_url: str = Form(None),
     selected_prompts: str = Form(None),
@@ -105,7 +106,7 @@ async def upsert_user(
 ):
     log = new_logger("upsert_user")
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log
     )
     updated = False
     if profile_photo:
@@ -147,7 +148,7 @@ async def upsert_user(
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
-    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log
 ):
     # All arguments are plain values, no FastAPI Form/File/Depends here
     # All business logic remains unchanged
@@ -193,6 +194,7 @@ def upsert_user_db_logic(
             db_user.location = location
             db_user.greeting = greeting
             db_user.nickname = nickname
+            db_user.hi_yall_text = hi_yall_text
             db_user.handwave_emoji = handwave_emoji
             db_user.handwave_emoji_url = handwave_emoji_url
             db_user.selected_prompts = selected_prompts_list
@@ -222,6 +224,7 @@ def upsert_user_db_logic(
                 location=location,
                 greeting=greeting,
                 nickname=nickname,
+                hi_yall_text=hi_yall_text,
                 handwave_emoji=handwave_emoji,
                 handwave_emoji_url=handwave_emoji_url,
                 selected_prompts=selected_prompts_list,

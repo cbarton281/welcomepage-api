@@ -56,6 +56,7 @@ class WelcomepageUserDTO(BaseModel):
     location: Optional[str] = None
     nickname: Optional[str] = None
     greeting: Optional[str] = None
+    hi_yall_text: Optional[str] = None
     handwaveEmojiUrl: Optional[str] = None
     profilePhotoUrl: Optional[str] = None
     waveGifUrl: Optional[str] = None
