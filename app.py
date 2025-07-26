@@ -17,7 +17,16 @@ async def log_request_body(request: Request, call_next):
     log.info(f"INCOMING REQUEST: {request.method} {request.url}")
     if request.method != "OPTIONS":  # Skip CORS preflight
         body = await request.body()
-        log.info(f"Request body ({request.method} {request.url.path}): {body[:3000]!r}")
+        
+        # Check content type to avoid logging binary data
+        content_type = request.headers.get("content-type", "")
+        if "multipart/form-data" in content_type:
+            # For multipart data, only log that it contains form data, not the binary content
+            log.info(f"Request body ({request.method} {request.url.path}): multipart/form-data (binary content excluded from logs)")
+        elif len(body) > 0:
+            # For other content types, log first 1000 chars (reduced from 3000)
+            log.info(f"Request body ({request.method} {request.url.path}): {body[:1000]!r}")
+        
         # Recreate request with the consumed body
         request = Request(request.scope, receive=lambda: {"type": "http.request", "body": body})
     response = await call_next(request)

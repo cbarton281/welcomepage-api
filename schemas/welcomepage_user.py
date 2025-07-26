@@ -22,6 +22,7 @@ class AnswerImage(BaseModel):
     filename: str
     content_type: str = Field(..., alias="contentType")
     size: int
+    url: str
 
     class Config:
         validate_by_name = True
