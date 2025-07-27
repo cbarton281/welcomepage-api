@@ -9,6 +9,7 @@ from sqlalchemy import text
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from models.welcomepage_user import WelcomepageUser
 from schemas.welcomepage_user import WelcomepageUserDTO
+from schemas.peer_data import PeerDataResponse, PeerAnswer
 from database import get_db
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
@@ -375,3 +376,120 @@ def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends
                     answer['image'] = None
     
     return WelcomepageUserDTO(**user_dict)
+
+
+@router.get("/users/peer-data/{team_public_id}", response_model=PeerDataResponse)
+def get_peer_data(team_public_id: str, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
+    """
+    Get peer data showing team member answers for each prompt.
+    Currently returns sample data - will query database using team_public_id when ready.
+    """
+    log = new_logger("get_peer_data")
+    log.info(f"Fetching peer data for team_public_id: {team_public_id}")
+    
+    # TODO: Implement actual database queries
+    # When ready, this will:
+    # 1. Find team by team_public_id
+    # 2. Get all users in that team
+    # 3. Get their answers to prompts
+    # 4. Group answers by prompt question
+    # 
+    # Example future implementation:
+    # team = db.query(Team).filter_by(public_id=team_public_id).first()
+    # if not team:
+    #     raise HTTPException(status_code=404, detail="Team not found")
+    # 
+    # team_members = db.query(WelcomepageUser).filter_by(team_id=team.id).all()
+    # peer_data = {}
+    # for member in team_members:
+    #     if member.answers:  # assuming answers is JSON field
+    #         answers_data = json.loads(member.answers)
+    #         for prompt, answer in answers_data.items():
+    #             if prompt not in peer_data:
+    #                 peer_data[prompt] = []
+    #             peer_data[prompt].append(PeerAnswer(
+    #                 name=member.name,
+    #                 avatar=member.profile_photo_url or "/placeholder.svg?height=100&width=100",
+    #                 answer=answer
+    #             ))
+    
+    # For now, return hardcoded sample data (will be replaced with real data)
+    
+    sample_peer_data = {
+        "What's your superpower at work?": [
+            PeerAnswer(
+                name="Alex Chen",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="I can turn complex problems into simple, actionable steps. It helps the team move forward when we're stuck on challenging projects."
+            ),
+            PeerAnswer(
+                name="Jamie Taylor",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="I'm the team's documentation wizard! I make sure our knowledge is captured and accessible to everyone."
+            ),
+            PeerAnswer(
+                name="Morgan Lee",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="Definitely my ability to bring different perspectives together. I can usually find common ground when opinions differ."
+            )
+        ],
+        "What's something unexpected about you?": [
+            PeerAnswer(
+                name="Sam Rivera",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="I used to be a professional chess player before getting into tech. The strategic thinking definitely helps in my current role!"
+            ),
+            PeerAnswer(
+                name="Taylor Kim",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="I can speak five languages! I grew up in an international community and picked them up along the way."
+            )
+        ],
+        "What's your favorite way to spend a weekend?": [
+            PeerAnswer(
+                name="Jordan Patel",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="Hiking with my dog and then trying a new restaurant in the evening. Perfect balance of activity and relaxation!"
+            ),
+            PeerAnswer(
+                name="Casey Wong",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="I'm part of a community garden and spend most weekends there. It's my meditation and social time rolled into one."
+            ),
+            PeerAnswer(
+                name="Riley Johnson",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="Board game marathons with friends! We're currently obsessed with strategy games that take hours to play."
+            ),
+            PeerAnswer(
+                name="Avery Smith",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="Exploring local museums and art galleries. There's always something new to discover even in familiar places."
+            )
+        ],
+        "What's your go-to productivity hack?": [
+            PeerAnswer(
+                name="Quinn Martinez",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="Time blocking my calendar with specific tasks rather than general 'work time'. It helps me stay focused and track progress."
+            ),
+            PeerAnswer(
+                name="Blake Thompson",
+                avatar="/placeholder.svg?height=100&width=100",
+                answer="The Pomodoro Technique! 25 minutes of focused work followed by a 5-minute break. It's amazing how much I can accomplish."
+            )
+        ]
+    }
+    
+    log.info(f"Returning peer data with {len(sample_peer_data)} prompts for team {team_public_id}")
+    
+    # Calculate metadata for the response
+    total_members = sum(len(answers) for answers in sample_peer_data.values())
+    unique_members = len(set(answer.name for answers in sample_peer_data.values() for answer in answers))
+    
+    return PeerDataResponse(
+        peer_data=sample_peer_data,
+        team_id=team_public_id,
+        total_prompts=len(sample_peer_data),
+        total_members=unique_members
+    )
