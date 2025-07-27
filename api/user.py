@@ -1,4 +1,3 @@
-
 import json
 import uuid
 import logging
@@ -9,13 +8,13 @@ from sqlalchemy import text
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from models.welcomepage_user import WelcomepageUser
 from schemas.welcomepage_user import WelcomepageUserDTO
-from schemas.peer_data import PeerDataResponse, PeerAnswer
 from database import get_db
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
 from fastapi import HTTPException
 from utils.supabase_storage import upload_to_supabase_storage
 from datetime import datetime, timezone
+from schemas.peer_data import PeerDataResponse, PeerAnswer
 
 router = APIRouter()
 
@@ -376,7 +375,6 @@ def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends
                     answer['image'] = None
     
     return WelcomepageUserDTO(**user_dict)
-
 
 @router.get("/users/peer-data/{team_public_id}", response_model=PeerDataResponse)
 def get_peer_data(team_public_id: str, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
