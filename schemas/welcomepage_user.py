@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer, field_validator
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 
 class FileMeta(BaseModel):
     filename: str
@@ -72,9 +73,53 @@ class WelcomepageUserDTO(BaseModel):
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")
 
+    @field_validator('handwave_emoji', mode='before')
     @classmethod
-    def from_model(cls, user):
-        return cls(**user.to_dict())
+    def validate_handwave_emoji(cls, v):
+        # Convert empty string to None for handwave_emoji
+        if v == '' or v == {}:
+            return None
+        return v
+
+    @field_validator('answers', mode='before')
+    @classmethod
+    def validate_answers(cls, v):
+        # Handle answers field and sanitize image data
+        if isinstance(v, dict):
+            for prompt, answer in v.items():
+                if isinstance(answer, dict) and 'image' in answer:
+                    # Convert empty dict {} to None for image field
+                    if answer['image'] == {}:
+                        answer['image'] = None
+        return v
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def validate_created_at(cls, v):
+        # Convert datetime objects to ISO strings
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+    @field_validator('updated_at', mode='before')
+    @classmethod
+    def validate_updated_at(cls, v):
+        # Convert datetime objects to ISO strings
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
+    @field_serializer('updated_at')
+    def serialize_updated_at(self, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
     class Config:
         validate_by_name = True

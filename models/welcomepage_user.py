@@ -3,6 +3,7 @@ from database import Base
 from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
 from sqlalchemy import Boolean
+from sqlalchemy.sql import func
 import uuid
 
 
@@ -23,8 +24,8 @@ class WelcomepageUser(Base):
     selected_prompts = Column(JSON, nullable=False)  # list of strings
     answers = Column(JSON, nullable=False)  # dict
     team_settings = Column(JSON)
-    created_at = Column(DateTime)
-    updated_at = Column(DateTime)
+    created_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now(), onupdate=func.now())
     team_id = Column(Integer, ForeignKey('teams.id'))
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
     auth_role = Column(String(32), nullable=True)  # Authorization role (admin, user, pre-signup, etc)
@@ -61,6 +62,6 @@ class WelcomepageUser(Base):
             'selectedPrompts': self.selected_prompts,
             'answers': self.answers,
             'teamSettings': self.team_settings,
-            'createdAt': self.created_at,
-            'updatedAt': self.updated_at,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
         }

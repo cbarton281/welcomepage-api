@@ -44,7 +44,7 @@ async def get_team(public_id: str, db: Session = Depends(get_db), current_user=D
         raise HTTPException(status_code=404, detail="Team not found")
     else:
         log.info(f"Team found [{team.to_dict()}]")
-    return team
+    return TeamRead.model_validate(team)
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -74,7 +74,7 @@ async def upsert_team(
         upsert_team_db_logic,
         organization_name, color_scheme, color_scheme_data, logo_blob_url, public_id, db, log, user_role
     )
-    return team
+    return TeamRead.model_validate(team)
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from sqlalchemy.exc import OperationalError

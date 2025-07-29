@@ -61,7 +61,7 @@ def update_auth_fields(
         log.exception("Database commit/refresh failed in update_auth_fields.")
         raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     log.info(f"Updated user [{user.public_id}] with auth_email [{user.auth_email}] and auth_role [{user.auth_role}]")
-    return user
+    return WelcomepageUserDTO.model_validate(user)
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from sqlalchemy.exc import OperationalError
@@ -183,7 +183,7 @@ async def upsert_user(
         upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_recording_url
     )
 
-    return WelcomepageUserDTO.from_model(db_user)
+    return WelcomepageUserDTO.model_validate(db_user)
 
 @retry(
     stop=stop_after_attempt(5),  # Increased attempts for connection issues
@@ -279,6 +279,14 @@ def upsert_user_db_logic(
                 db_user.wave_gif_url = wave_gif_url
             if pronunciation_recording_url:
                 db_user.pronunciation_recording_url = pronunciation_recording_url
+            
+            # Set created_at if it's null (for existing records that were created before timestamps were implemented)
+            if db_user.created_at is None:
+                db_user.created_at = datetime.now(timezone.utc)
+            
+            # Update the timestamp for when this record was last modified
+            db_user.updated_at = datetime.now(timezone.utc)
+            
             # Always commit and refresh after update
             try:
                 db.commit()
@@ -359,16 +367,8 @@ def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends
         else:
             log.info(f"User found [{user.to_dict()}]")
         
-        # Sanitize user data before Pydantic validation
-        user_dict = user.to_dict()
-        if user_dict.get('answers'):
-            for prompt, answer in user_dict['answers'].items():
-                if isinstance(answer, dict) and 'image' in answer:
-                    # Convert empty dict {} to None for image field
-                    if answer['image'] == {}:
-                        answer['image'] = None
-        
-        return WelcomepageUserDTO(**user_dict)
+        # Use model_validate with field validators handling data sanitization
+        return WelcomepageUserDTO.model_validate(user)
         
     except OperationalError:
         db.rollback()
