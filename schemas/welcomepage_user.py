@@ -38,15 +38,7 @@ class Answer(BaseModel):
         validate_by_name = True
         from_attributes = True
 
-class TeamSettings(BaseModel):
-    organization_name: Optional[str] = Field(None, alias="organizationName")
-    has_logo: Optional[bool] = Field(None, alias="hasLogo")
-    color_scheme: Optional[str] = Field(None, alias="colorScheme")
-    logo_data: Optional[str] = Field(None, alias="logoData")
 
-    class Config:
-        validate_by_name = True
-        from_attributes = True
 
 class WelcomepageUserDTO(BaseModel):
     id: Optional[int] = None
@@ -69,7 +61,7 @@ class WelcomepageUserDTO(BaseModel):
     pronunciation_recording_url: Optional[str] = Field(None, alias="pronunciationRecordingUrl")
     selected_prompts: Optional[List[str]] = Field(None, alias="selectedPrompts")
     answers: Optional[Dict[str, Answer]] = None
-    team_settings: Optional[TeamSettings] = Field(None, alias="teamSettings")
+
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")
 

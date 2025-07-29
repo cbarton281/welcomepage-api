@@ -321,7 +321,7 @@ def upsert_user_db_logic(
                 profile_photo_url=profile_photo_url,
                 wave_gif_url=wave_gif_url,
                 pronunciation_recording_url=pronunciation_recording_url,
-                team_settings=None,
+
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
             )

@@ -23,7 +23,7 @@ class WelcomepageUser(Base):
     pronunciation_recording_url = Column(String)
     selected_prompts = Column(JSON, nullable=False)  # list of strings
     answers = Column(JSON, nullable=False)  # dict
-    team_settings = Column(JSON)
+
     created_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now(), onupdate=func.now())
     team_id = Column(Integer, ForeignKey('teams.id'))
@@ -61,7 +61,7 @@ class WelcomepageUser(Base):
             'pronunciationRecordingUrl': self.pronunciation_recording_url,
             'selectedPrompts': self.selected_prompts,
             'answers': self.answers,
-            'teamSettings': self.team_settings,
+
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
         }
