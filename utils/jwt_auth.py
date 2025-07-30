@@ -32,11 +32,12 @@ def get_current_user(api_key: str = Depends(api_key_header)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         role = payload.get("role")
-        log.info(f"User ID: {user_id}, Role: {role}")
+        team_id = payload.get("team_id")
+        log.info(f"User ID: {user_id}, Role: {role}, Team ID: {team_id}")
         if user_id is None or role is None:
             log.error(f"Invalid JWT: missing user ID or role. Payload: {payload}")
             raise credentials_exception
-        return {"user_id": user_id, "role": role}
+        return {"user_id": user_id, "role": role, "team_id": team_id}
     except JWTError as e:
         log.error(f"JWT decoding failed: {str(e)}. Token: {token}")
         raise credentials_exception

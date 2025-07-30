@@ -1,14 +1,14 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 from sqlalchemy import Boolean
-import uuid
+from utils.short_id import generate_short_id
 
 class Team(Base):
     __tablename__ = "teams"
 
     id = Column(Integer, primary_key=True, index=True)
-    public_id = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()), nullable=False)
+    public_id = Column(String(10), unique=True, index=True, default=lambda: generate_short_id(), nullable=False)
     organization_name = Column(String, nullable=False)
     company_logo_url = Column(String, nullable=True)  # Path or URL to the uploaded logo
     color_scheme = Column(String, nullable=False)

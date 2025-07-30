@@ -4,13 +4,13 @@ from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
 from sqlalchemy import Boolean
 from sqlalchemy.sql import func
-import uuid
+from utils.short_id import generate_short_id
 
 
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'
     id = Column(Integer, primary_key=True)
-    public_id = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()), nullable=False)
+    public_id = Column(String(10), unique=True, index=True, default=lambda: generate_short_id(), nullable=False)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     location = Column(String, nullable=False)
@@ -37,7 +37,7 @@ class WelcomepageUser(Base):
         for field in kwargs:
             setattr(self, field, kwargs[field])
         if 'public_id' not in kwargs or not getattr(self, 'public_id', None):
-            self.public_id = str(uuid.uuid4())
+            self.public_id = generate_short_id()
 
     @classmethod
     def from_dict(cls, data):

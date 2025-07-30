@@ -1,5 +1,4 @@
 import json
-import uuid
 import logging
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
@@ -111,7 +110,8 @@ async def upsert_user(
     # Handle profile photo upload
     profile_photo_url = None
     if profile_photo:
-        photo_filename = f"{public_id or str(uuid.uuid4())}-profile-photo"
+        from utils.short_id import generate_file_id
+        photo_filename = f"{generate_file_id(public_id)}-profile-photo"
         content = await profile_photo.read()
         profile_photo_url = await upload_to_supabase_storage(
             file_content=content,
@@ -123,7 +123,7 @@ async def upsert_user(
     # Handle wave gif upload
     wave_gif_url = None
     if wave_gif:
-        gif_filename = f"{public_id or str(uuid.uuid4())}-wave-gif"
+        gif_filename = f"{generate_file_id(public_id)}-wave-gif"
         content = await wave_gif.read()
         wave_gif_url = await upload_to_supabase_storage(
             file_content=content,
@@ -135,7 +135,7 @@ async def upsert_user(
     # Handle pronunciation recording upload
     pronunciation_recording_url = None
     if pronunciation_recording:
-        audio_filename = f"{public_id or str(uuid.uuid4())}-pronunciation-audio"
+        audio_filename = f"{generate_file_id(public_id)}-pronunciation-audio"
         content = await pronunciation_recording.read()
         pronunciation_recording_url = await upload_to_supabase_storage(
             file_content=content,
@@ -161,7 +161,7 @@ async def upsert_user(
             
             # Create safe filename
             safe_prompt_label = prompt_text.replace("?", "").replace("'", "").replace(" ", "_").replace(".", "").replace(",", "").replace("/", "_").replace("\\", "_").replace(":", "_").lower()
-            image_filename = f"{public_id or str(uuid.uuid4())}-prompt-{safe_prompt_label}"
+            image_filename = f"{generate_file_id(public_id)}-prompt-{safe_prompt_label}"
             
             # Upload image to Supabase
             content = await file_data.read()
@@ -310,7 +310,8 @@ def upsert_user_db_logic(
                 raise HTTPException(status_code=500, detail="Database error. Please try again later.")
         else:
             # Create new user
-            effective_public_id = user_lookup_id if user_lookup_id else str(uuid.uuid4())
+            from utils.short_id import generate_short_id_with_collision_check
+            effective_public_id = user_lookup_id if user_lookup_id else generate_short_id_with_collision_check(db, WelcomepageUser, "user")
             db_user = WelcomepageUser(
                 public_id=effective_public_id,
                 name=name,
@@ -366,18 +367,57 @@ def upsert_user_db_logic(
 )
 def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))):
     log = new_logger("get_user")
-    log.info(f"Fetching user with public_id: {public_id}")
+    log.info(f"Fetching user with public_id: {public_id}. Requesting user: {current_user.get('user_id')}, team: {current_user.get('team_id')}")
     
     try:
-        user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
-        if not user:
-            log.info(f"User not found: {public_id}")
+        # First, get the target user
+        target_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+        if not target_user:
+            log.info(f"Target user not found: {public_id}")
             raise HTTPException(status_code=404, detail="User not found")
-        else:
-            log.info(f"User found [{user.to_dict()}]")
+        
+        # Get the requesting user's team information
+        requesting_user_id = current_user.get('user_id')
+        requesting_team_id = current_user.get('team_id')
+        
+        # Enforce team-based access control - team_id is required in JWT
+        if not requesting_team_id:
+            log.error(f"SECURITY: JWT missing required team_id field. Requesting user: {requesting_user_id}. This indicates an invalid or malformed JWT.")
+            # Return 404 to avoid revealing information about the authentication system
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get requesting user's actual team from database for verification
+        requesting_user = db.query(WelcomepageUser).filter_by(public_id=requesting_user_id).first()
+        
+        if not requesting_user:
+            log.warning(f"Requesting user not found in database: {requesting_user_id}")
+            raise HTTPException(status_code=401, detail="Invalid authentication")
+        
+        # Get team public IDs for comparison (JWT contains public IDs, not internal IDs)
+        requesting_user_team = requesting_user.team
+        target_user_team = target_user.team
+        
+        if not requesting_user_team or not target_user_team:
+            log.error(f"Team data missing: requesting_user_team={requesting_user_team}, target_user_team={target_user_team}")
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Compare team PUBLIC IDs (not internal database IDs)
+        if target_user_team.public_id != requesting_user_team.public_id:
+            log.warning(f"Cross-team access attempt: requesting_user={requesting_user_id} (team_public_id={requesting_user_team.public_id}) tried to access target_user={public_id} (team_public_id={target_user_team.public_id})")
+            # Return 404 to avoid revealing existence of users in other teams
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Additional verification: JWT team_id should match requesting user's team public_id
+        if requesting_team_id != requesting_user_team.public_id:
+            log.error(f"JWT team_id mismatch: JWT contains team_id={requesting_team_id}, but user belongs to team_public_id={requesting_user_team.public_id}")
+            raise HTTPException(status_code=401, detail="Invalid authentication")
+        
+        log.info(f"Team access control passed: both users in team {requesting_user_team.public_id}")
+        
+        log.info(f"User access granted: {public_id}")
         
         # Use model_validate with field validators handling data sanitization
-        return WelcomepageUserDTO.model_validate(user)
+        return WelcomepageUserDTO.model_validate(target_user)
         
     except OperationalError:
         db.rollback()

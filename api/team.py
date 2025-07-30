@@ -1,7 +1,6 @@
 import httpx
 import os
 import json
-import uuid
 import logging
 from typing import Optional
 
@@ -97,9 +96,10 @@ def upsert_team_db_logic(
         if not team:
             team_lookup_id = public_id
     if not team:
-        generated_uuid = str(uuid.uuid4())
+        from utils.short_id import generate_short_id_with_collision_check
+        generated_short_id = generate_short_id_with_collision_check(db, Team, "team")
 
-    effective_public_id = team.public_id if team else (team_lookup_id if team_lookup_id else generated_uuid)
+    effective_public_id = team.public_id if team else (team_lookup_id if team_lookup_id else generated_short_id)
 
     # --- PRE_SIGNUP logic enforcement ---
     if user_role == 'PRE_SIGNUP':
