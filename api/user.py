@@ -96,6 +96,15 @@ async def upsert_user(
 ):
     log = new_logger("upsert_user")
     
+    # Log the readable fields being passed to upsert_user (excluding file uploads)
+    log.info(f"upsert_user called with: id={id}, public_id={public_id}, name={name}, role={role}, "
+             f"auth_role={auth_role}, auth_email={auth_email}, location={location}, greeting={greeting}, "
+             f"nickname={nickname}, hi_yall_text={hi_yall_text}, handwave_emoji={handwave_emoji}, "
+             f"handwave_emoji_url={handwave_emoji_url}, selected_prompts={selected_prompts}, "
+             f"answers={'[JSON data]' if answers else None}, team_id={team_id}, "
+             f"has_profile_photo={profile_photo is not None}, has_wave_gif={wave_gif is not None}, "
+             f"has_pronunciation_recording={pronunciation_recording is not None}")
+    
     # Step 1: Process all file uploads first and get URLs
     form_data = await request.form()
     

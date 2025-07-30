@@ -29,10 +29,22 @@ class AnswerImage(BaseModel):
         validate_by_name = True
         from_attributes = True
 
+class Reaction(BaseModel):
+    emoji: str
+    user: str
+    user_id: str = Field(alias="userId")
+    timestamp: Optional[str] = None
+    id: str
+
+    class Config:
+        validate_by_name = True
+        from_attributes = True
+
 class Answer(BaseModel):
     text: str
     image: Optional[AnswerImage] = None
     special_data: Optional[Any] = Field(None, alias="specialData")
+    reactions: Optional[List[Reaction]] = None
 
     class Config:
         validate_by_name = True
