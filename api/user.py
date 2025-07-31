@@ -26,6 +26,13 @@ class UserAuthUpdateRequest(BaseModel):
     auth_email: str
     auth_role: str
 
+class GoogleAuthRequest(BaseModel):
+    email: str
+    name: str
+    google_id: str
+    public_id: str = None  # Optional - from anonymous user cookies
+    team_public_id: str = None  # Optional - from anonymous user cookies
+
 user_retry_logger = new_logger("fetch_user_by_id_retry")
 
 @router.post("/users/update_auth_fields", response_model=WelcomepageUserDTO)
@@ -61,6 +68,110 @@ def update_auth_fields(
         raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     log.info(f"Updated user [{user.public_id}] with auth_email [{user.auth_email}] and auth_role [{user.auth_role}]")
     return WelcomepageUserDTO.model_validate(user)
+
+@router.post("/users/google_auth")
+def google_auth(
+    payload: GoogleAuthRequest = Body(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Enhanced Google authentication with two-step lookup:
+    1. Try to find existing user by email (returning user)
+    2. If not found, try by cookie public_id (anonymous user converting)
+    3. If neither exists, create new user and potentially team
+    4. Update auth fields and return user data for session
+    """
+    log = new_logger("google_auth")
+    log.info(f"Google auth attempt for email [{payload.email}], name [{payload.name}], google_id [{payload.google_id}]")
+    log.info(f"Cookie data - public_id [{payload.public_id}], team_public_id [{payload.team_public_id}]")
+    
+    try:
+        # Step 1: Try to find user by email (existing authenticated user)
+        existing_user = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
+        if existing_user:
+            log.info(f"Found existing user by email [{existing_user.public_id}] - returning user")
+            # Update Google ID if not set
+            if not existing_user.google_id:
+                existing_user.google_id = payload.google_id
+                db.commit()
+                db.refresh(existing_user)
+            
+            return {
+                "success": True,
+                "public_id": existing_user.public_id,
+                "auth_role": existing_user.auth_role or "ADMIN",
+                "team_public_id": existing_user.team.public_id if existing_user.team else None,
+                "message": "Existing user authenticated"
+            }
+        
+        # Step 2: Try to find user by cookie public_id (anonymous user converting)
+        if payload.public_id:
+            anonymous_user = db.query(WelcomepageUser).filter_by(public_id=payload.public_id).first()
+            if anonymous_user:
+                log.info(f"Found anonymous user by public_id [{anonymous_user.public_id}] - converting to authenticated")
+                # Update the anonymous user with Google auth info
+                anonymous_user.auth_email = payload.email
+                anonymous_user.auth_role = "ADMIN"
+                anonymous_user.google_id = payload.google_id
+                # Update name if it was placeholder or empty
+                if not anonymous_user.name or anonymous_user.name.startswith("User"):
+                    anonymous_user.name = payload.name
+                
+                db.commit()
+                db.refresh(anonymous_user)
+                
+                return {
+                    "success": True,
+                    "public_id": anonymous_user.public_id,
+                    "auth_role": anonymous_user.auth_role,
+                    "team_public_id": anonymous_user.team.public_id if anonymous_user.team else None,
+                    "message": "Anonymous user converted to authenticated"
+                }
+        
+        # Step 3: Create new user and potentially team
+        log.info("No existing user found - creating new user and team")
+        
+        # Create new team first
+        import uuid
+        team_public_id = str(uuid.uuid4())
+        new_team = Team(
+            public_id=team_public_id,
+            name=f"{payload.name}'s Team",  # Default team name
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(new_team)
+        db.flush()  # Get the team ID
+        
+        # Create new user
+        user_public_id = str(uuid.uuid4())
+        new_user = WelcomepageUser(
+            public_id=user_public_id,
+            name=payload.name,
+            role="USER",
+            auth_role="ADMIN",
+            auth_email=payload.email,
+            google_id=payload.google_id,
+            team_id=new_team.id,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        
+        log.info(f"Created new user [{new_user.public_id}] and team [{new_team.public_id}]")
+        
+        return {
+            "success": True,
+            "public_id": new_user.public_id,
+            "auth_role": new_user.auth_role,
+            "team_public_id": new_team.public_id,
+            "message": "New user and team created"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        log.exception("Error in google_auth endpoint")
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from sqlalchemy.exc import OperationalError

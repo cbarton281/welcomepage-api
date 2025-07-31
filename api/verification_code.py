@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 from models.verification_code import VerificationCode
 from models.team import Team
+from models.welcomepage_user import WelcomepageUser
 
 
 router = APIRouter()
@@ -43,10 +44,20 @@ def generate_code_with_retry(payload: GenerateCodeRequest, db: Session, log):
 
     db.query(VerificationCode).filter_by(email=email, used=False).update({"used": True})
 
+    # Check if user already exists by email
+    existing_user = db.query(WelcomepageUser).filter_by(auth_email=email).first()
+
+    if existing_user:
+        # Use existing user's correct public_id
+        verification_public_id = existing_user.public_id
+    else:
+        # Use anonymous cookie data for new users
+        verification_public_id = payload.public_id
+
     verification_code = VerificationCode(
         email=email,
         code=code,
-        public_id=payload.public_id if payload.public_id else None,
+        public_id=verification_public_id,
         created_at=now,
         expires_at=expires_at,
         used=False,
