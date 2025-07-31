@@ -490,40 +490,62 @@ def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends
         # Get the requesting user's team information
         requesting_user_id = current_user.get('user_id')
         requesting_team_id = current_user.get('team_id')
+        requesting_user_role = current_user.get('role')
         
-        # Enforce team-based access control - team_id is required in JWT
-        if not requesting_team_id:
-            log.error(f"SECURITY: JWT missing required team_id field. Requesting user: {requesting_user_id}. This indicates an invalid or malformed JWT.")
-            # Return 404 to avoid revealing information about the authentication system
-            raise HTTPException(status_code=404, detail="User not found")
+        # Handle anonymous users (PRE_SIGNUP) who don't exist in database yet
+        if requesting_user_role == 'PRE_SIGNUP':
+            log.info(f"Anonymous user access: {requesting_user_id} with team {requesting_team_id}")
+            
+            # For anonymous users, we only need to verify team_id is provided
+            if not requesting_team_id:
+                log.error(f"SECURITY: Anonymous user JWT missing required team_id field. User: {requesting_user_id}")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Get target user's team
+            target_user_team = target_user.team
+            if not target_user_team:
+                log.error(f"Target user has no team: {public_id}")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # For anonymous users, compare JWT team_id with target user's team public_id
+            if requesting_team_id != target_user_team.public_id:
+                log.warning(f"Cross-team access attempt by anonymous user: requesting_team={requesting_team_id} tried to access target_user={public_id} (team_public_id={target_user_team.public_id})")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            log.info(f"Anonymous user team access control passed: team {requesting_team_id}")
         
-        # Get requesting user's actual team from database for verification
-        requesting_user = db.query(WelcomepageUser).filter_by(public_id=requesting_user_id).first()
-        
-        if not requesting_user:
-            log.warning(f"Requesting user not found in database: {requesting_user_id}")
-            raise HTTPException(status_code=401, detail="Invalid authentication")
-        
-        # Get team public IDs for comparison (JWT contains public IDs, not internal IDs)
-        requesting_user_team = requesting_user.team
-        target_user_team = target_user.team
-        
-        if not requesting_user_team or not target_user_team:
-            log.error(f"Team data missing: requesting_user_team={requesting_user_team}, target_user_team={target_user_team}")
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Compare team PUBLIC IDs (not internal database IDs)
-        if target_user_team.public_id != requesting_user_team.public_id:
-            log.warning(f"Cross-team access attempt: requesting_user={requesting_user_id} (team_public_id={requesting_user_team.public_id}) tried to access target_user={public_id} (team_public_id={target_user_team.public_id})")
-            # Return 404 to avoid revealing existence of users in other teams
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Additional verification: JWT team_id should match requesting user's team public_id
-        if requesting_team_id != requesting_user_team.public_id:
-            log.error(f"JWT team_id mismatch: JWT contains team_id={requesting_team_id}, but user belongs to team_public_id={requesting_user_team.public_id}")
-            raise HTTPException(status_code=401, detail="Invalid authentication")
-        
-        log.info(f"Team access control passed: both users in team {requesting_user_team.public_id}")
+        else:
+            # For authenticated users (USER, ADMIN), enforce full team-based access control
+            if not requesting_team_id:
+                log.error(f"SECURITY: JWT missing required team_id field. Requesting user: {requesting_user_id}. This indicates an invalid or malformed JWT.")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Get requesting user's actual team from database for verification
+            requesting_user = db.query(WelcomepageUser).filter_by(public_id=requesting_user_id).first()
+            
+            if not requesting_user:
+                log.warning(f"Requesting user not found in database: {requesting_user_id}")
+                raise HTTPException(status_code=401, detail="Invalid authentication")
+            
+            # Get team public IDs for comparison (JWT contains public IDs, not internal IDs)
+            requesting_user_team = requesting_user.team
+            target_user_team = target_user.team
+            
+            if not requesting_user_team or not target_user_team:
+                log.error(f"Team data missing: requesting_user_team={requesting_user_team}, target_user_team={target_user_team}")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Compare team PUBLIC IDs (not internal database IDs)
+            if target_user_team.public_id != requesting_user_team.public_id:
+                log.warning(f"Cross-team access attempt: requesting_user={requesting_user_id} (team_public_id={requesting_user_team.public_id}) tried to access target_user={public_id} (team_public_id={target_user_team.public_id})")
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Additional verification: JWT team_id should match requesting user's team public_id
+            if requesting_team_id != requesting_user_team.public_id:
+                log.error(f"JWT team_id mismatch: JWT contains team_id={requesting_team_id}, but user belongs to team_public_id={requesting_user_team.public_id}")
+                raise HTTPException(status_code=401, detail="Invalid authentication")
+            
+            log.info(f"Authenticated user team access control passed: both users in team {requesting_user_team.public_id}")
         
         log.info(f"User access granted: {public_id}")
         
