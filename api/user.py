@@ -82,7 +82,7 @@ def google_auth(
     4. Update auth fields and return user data for session
     """
     log = new_logger("google_auth")
-    log.info(f"Google auth attempt for email [{payload.email}], name [{payload.name}], google_id [{payload.google_id}]")
+    log.info(f"Google auth attempt for email [{payload.email}], name [{payload.name}]")
     log.info(f"Cookie data - public_id [{payload.public_id}], team_public_id [{payload.team_public_id}]")
     
     try:
@@ -90,11 +90,7 @@ def google_auth(
         existing_user = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
         if existing_user:
             log.info(f"Found existing user by email [{existing_user.public_id}] - returning user")
-            # Update Google ID if not set
-            if not existing_user.google_id:
-                existing_user.google_id = payload.google_id
-                db.commit()
-                db.refresh(existing_user)
+            log.info(f"Google authentication successful")
             
             return {
                 "success": True,
@@ -112,7 +108,7 @@ def google_auth(
                 # Update the anonymous user with Google auth info
                 anonymous_user.auth_email = payload.email
                 anonymous_user.auth_role = "ADMIN"
-                anonymous_user.google_id = payload.google_id
+                log.info(f"Converting anonymous user to Google auth")
                 # Update name if it was placeholder or empty
                 if not anonymous_user.name or anonymous_user.name.startswith("User"):
                     anonymous_user.name = payload.name
@@ -150,7 +146,6 @@ def google_auth(
             role="USER",
             auth_role="ADMIN",
             auth_email=payload.email,
-            google_id=payload.google_id,
             team_id=new_team.id,
             created_at=datetime.now(timezone.utc)
         )
