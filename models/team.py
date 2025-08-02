@@ -13,6 +13,7 @@ class Team(Base):
     company_logo_url = Column(String, nullable=True)  # Path or URL to the uploaded logo
     color_scheme = Column(String, nullable=False)
     color_scheme_data = Column(JSON, nullable=True)  # Store the full color scheme object
+    slack_settings = Column(JSON, nullable=True)  # Store Slack integration settings (workspace ID, etc.)
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
 
     users = relationship("WelcomepageUser", back_populates="team")
@@ -26,5 +27,6 @@ class Team(Base):
             "company_logo_url": self.company_logo_url,
             "color_scheme": self.color_scheme,
             "color_scheme_data": self.color_scheme_data,
+            "slack_settings": self.slack_settings,
         }
 
