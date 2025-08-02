@@ -189,6 +189,71 @@ async def get_team_members(
         has_previous=has_previous
     )
 
+@router.delete("/teams/{public_id}/members/{member_public_id}")
+async def delete_team_member(
+    public_id: str,
+    member_public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Delete a team member from the team.
+    Only ADMIN users can delete team members.
+    """
+    log = new_logger("delete_team_member")
+    log.info(f"Deleting team member {member_public_id} from team {public_id}")
+    
+    # First verify the team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    current_user_id = current_user.get('user_id') if isinstance(current_user, dict) else None
+    current_user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    # Clean up team_id if it has extra path components
+    if current_user_team_id and '/' in current_user_team_id:
+        current_user_team_id = current_user_team_id.split('/')[0]
+    
+    if current_user_team_id != team.public_id:
+        log.warning(f"User {current_user_id} attempted to delete member from team {public_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only delete members from your own team")
+    
+    # Find the member to delete
+    member_to_delete = db.query(WelcomepageUser).filter(
+        WelcomepageUser.public_id == member_public_id,
+        WelcomepageUser.team_id == team.id
+    ).first()
+    
+    if not member_to_delete:
+        log.warning(f"Member not found: {member_public_id} in team {public_id}")
+        raise HTTPException(status_code=404, detail="Team member not found")
+    
+    # Prevent self-deletion
+    if member_to_delete.public_id == current_user_id:
+        log.warning(f"User {current_user_id} attempted to delete themselves")
+        raise HTTPException(status_code=400, detail="You cannot delete yourself")
+    
+    try:
+        # Delete the member
+        db.delete(member_to_delete)
+        db.commit()
+        
+        log.info(f"Successfully deleted member {member_public_id} from team {public_id}")
+        
+        return {
+            "success": True,
+            "message": f"Team member {member_to_delete.name} has been deleted successfully",
+            "deleted_member_id": member_public_id
+        }
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to delete member {member_public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete team member")
+
 from fastapi.concurrency import run_in_threadpool
 
 team_upsert_retry_logger = new_logger("upsert_team_retry")
