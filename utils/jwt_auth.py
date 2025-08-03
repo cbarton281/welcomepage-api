@@ -42,6 +42,7 @@ def get_current_user(api_key: str = Depends(api_key_header)):
         log.error(f"JWT decoding failed: {str(e)}. Token: {token}")
         raise credentials_exception
 
+
 def require_roles(*roles):
     """
     Dependency for FastAPI endpoints to require one or more roles.

@@ -60,10 +60,12 @@ from api.team import router as team_router
 from api.verification_code import router as verification_code_router
 from api.reactions import router as reactions_router
 from api.id_check import router as id_check_router
+from api.visits import router as visits_router
 
 app.include_router(users_router, prefix="/api")
 app.include_router(team_router, prefix="/api")
 app.include_router(verification_code_router, prefix="/api")
 app.include_router(reactions_router, prefix="/api/reactions")
 app.include_router(id_check_router, prefix="/api")
+app.include_router(visits_router, prefix="/api")
 

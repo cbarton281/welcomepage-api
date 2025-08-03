@@ -8,13 +8,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
-from sqlalchemy import desc, asc
+from sqlalchemy import desc, asc, func
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from pydantic import BaseModel
 
 from database import get_db
 from models.team import Team
 from models.welcomepage_user import WelcomepageUser
+from models.page_visit import PageVisit
 from schemas.team import TeamCreate, TeamRead
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
@@ -151,6 +152,23 @@ async def get_team_members(
     has_next = page < total_pages
     has_previous = page > 1
     
+    # Get visit counts for all team members in a single efficient query
+    member_ids = [member.id for member in members]
+    visit_counts = {}
+    
+    if member_ids:
+        # Query to get unique visit counts for all members (all visitors are authenticated)
+        visit_stats = db.query(
+            PageVisit.visited_user_id,
+            func.count(func.distinct(PageVisit.visitor_public_id)).label('unique_visits')
+        ).filter(
+            PageVisit.visited_user_id.in_(member_ids)
+        ).group_by(PageVisit.visited_user_id).all()
+        
+        # Create a lookup dictionary for visit counts
+        visit_counts = {stat.visited_user_id: stat.unique_visits for stat in visit_stats}
+        log.info(f"Retrieved visit counts for {len(visit_counts)} members")
+    
     # Transform data to match frontend expectations
     member_responses = []
     for member in members:
@@ -159,9 +177,8 @@ async def get_team_members(
         first_name = name_parts[0] if len(name_parts) > 0 else ''
         last_name = name_parts[1] if len(name_parts) > 1 else ''
         
-        # Calculate unique visits (placeholder logic - you may want to implement actual visit tracking)
-        # For now, we'll use a simple hash-based approach to generate consistent "visits"
-        unique_visits = hash(member.public_id) % 200 + 50  # Generate 50-250 visits
+        # Get real unique visit count from database
+        unique_visits = visit_counts.get(member.id, 0)
         
         member_responses.append(TeamMemberResponse(
             id=member.id,
@@ -172,7 +189,7 @@ async def get_team_members(
             profile_image=member.profile_photo_url,
             date_created=member.created_at.isoformat() if member.created_at else datetime.now().isoformat(),
             last_modified=member.updated_at.isoformat() if member.updated_at else datetime.now().isoformat(),
-            unique_visits=abs(unique_visits),  # Ensure positive
+            unique_visits=unique_visits,
             auth_role=member.auth_role,
             is_draft=member.is_draft
         ))
