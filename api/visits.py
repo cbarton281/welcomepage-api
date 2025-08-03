@@ -49,6 +49,22 @@ def get_client_ip(request: Request) -> str:
     """Extract client IP address from request headers for geolocation."""
     log = new_logger("get_client_ip")
     
+    # Debug: Log all relevant headers
+    headers_to_check = [
+        "x-vercel-forwarded-for",
+        "X-Forwarded-For", 
+        "X-Real-IP",
+        "x-forwarded-for",
+        "x-real-ip"
+    ]
+    
+    log.info("=== IP Header Debug ===")
+    for header in headers_to_check:
+        value = request.headers.get(header)
+        if value:
+            log.info(f"{header}: {value}")
+    log.info("=== End IP Headers ===")
+    
     # Try Vercel-specific headers first (for production deployments)
     vercel_ip = request.headers.get("x-vercel-forwarded-for")
     if vercel_ip:
