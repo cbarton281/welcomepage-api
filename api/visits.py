@@ -47,19 +47,32 @@ async def get_visitor_location(ip_address: str) -> dict:
 
 def get_client_ip(request: Request) -> str:
     """Extract client IP address from request headers for geolocation."""
-    # Check for forwarded IP first (common in production behind proxies)
+    log = new_logger("get_client_ip")
+    
+    # Try Vercel-specific headers first (for production deployments)
+    vercel_ip = request.headers.get("x-vercel-forwarded-for")
+    if vercel_ip:
+        log.info(f"Using Vercel forwarded IP: {vercel_ip}")
+        return vercel_ip.split(",")[0].strip()
+    
+    # Check for standard forwarded IP (common in production behind proxies)
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         # Take the first IP if there are multiple
-        return forwarded_for.split(",")[0].strip()
+        client_ip = forwarded_for.split(",")[0].strip()
+        log.info(f"Using X-Forwarded-For IP: {client_ip}")
+        return client_ip
     
     # Check other common headers
     real_ip = request.headers.get("X-Real-IP")
     if real_ip:
+        log.info(f"Using X-Real-IP: {real_ip}")
         return real_ip
     
     # Fall back to direct client IP
-    return request.client.host if request.client else "unknown"
+    fallback_ip = request.client.host if request.client else "unknown"
+    log.info(f"Using fallback IP: {fallback_ip}")
+    return fallback_ip
 
 
 @router.post("/visits/record", response_model=PageVisitResponse)
