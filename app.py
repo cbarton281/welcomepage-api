@@ -57,7 +57,7 @@ from api.verification_code import router as verification_code_router
 from api.reactions import router as reactions_router
 from api.id_check import router as id_check_router
 from api.visits import router as visits_router
-from api.health import router as health_router
+from api.healthcheck import router as health_router
 
 app.include_router(users_router, prefix="/api")
 app.include_router(team_router, prefix="/api")
