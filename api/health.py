@@ -1,12 +1,12 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from database import get_db
 from utils.logger_factory import new_logger
 
-app = FastAPI()
+router = APIRouter()
 
-@app.get("/api/health")
+@router.get("/health")
 def health_check(db: Session = Depends(get_db)):
     """
     Health check endpoint that performs a benign database operation
