@@ -13,6 +13,7 @@ class RecordVisitRequest(BaseModel):
     visited_user_public_id: str
     referrer: Optional[str] = None
     session_id: Optional[str] = None
+    real_client_ip: Optional[str] = None  # Real client IP from Next.js (bypasses infrastructure)
 
 
 class UpdateVisitDurationRequest(BaseModel):

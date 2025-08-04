@@ -124,10 +124,16 @@ async def record_visit(
         log.error("No visitor public_id found in authenticated user")
         raise HTTPException(status_code=401, detail="Invalid authentication")
     
-    # Get client IP for geolocation and user agent for analytics
-    client_ip = get_client_ip(request)
+    # Get client IP for geolocation - prioritize real_client_ip from request body
+    if visit_data.real_client_ip:
+        client_ip = visit_data.real_client_ip
+        log.info(f"Using real client IP from request body: {client_ip}")
+    else:
+        client_ip = get_client_ip(request)
+        log.info(f"Using client IP from headers: {client_ip}")
+    
     user_agent = request.headers.get("User-Agent", "")
-    log.info(f"Client IP extracted: {client_ip}")
+    log.info(f"Final client IP for geolocation: {client_ip}")
     
     # Get visitor location
     location_data = await get_visitor_location(client_ip)
