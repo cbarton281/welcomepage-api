@@ -111,8 +111,13 @@ async def get_team_members(
         log.warning(f"User {current_user_id} attempted to access team {public_id} members")
         raise HTTPException(status_code=403, detail="Access denied: You can only view members of your own team")
     
-    # Build base query
-    query = db.query(WelcomepageUser).filter(WelcomepageUser.team_id == team.id)
+    # Build base query - only include registered users (with auth_email and USER/ADMIN roles)
+    query = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.auth_email.isnot(None),
+        WelcomepageUser.auth_email != '',
+        WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
+    )
     
     # Apply search filter if provided
     if search:
@@ -270,6 +275,80 @@ async def delete_team_member(
         db.rollback()
         log.error(f"Failed to delete member {member_public_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete team member")
+
+# Pydantic model for role change request
+class ChangeRoleRequest(BaseModel):
+    new_role: str
+
+@router.patch("/teams/{public_id}/members/{member_public_id}/role")
+async def change_team_member_role(
+    public_id: str,
+    member_public_id: str,
+    request: ChangeRoleRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Change a team member's role.
+    Only ADMIN users can change team member roles.
+    """
+    log = new_logger("change_team_member_role")
+    log.info(f"Changing role for member {member_public_id} in team {public_id} to {request.new_role}")
+    
+    # Validate the new role
+    if request.new_role not in ["USER", "ADMIN"]:
+        log.warning(f"Invalid role requested: {request.new_role}")
+        raise HTTPException(status_code=400, detail="Invalid role. Must be USER or ADMIN")
+    
+    # First verify the team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    current_user_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    current_user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if current_user_team_id != team.public_id:
+        log.warning(f"User {current_user_id} attempted to change role in team {public_id} but belongs to team {current_user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Find the target member
+    target_member = db.query(WelcomepageUser).filter_by(
+        public_id=member_public_id,
+        team_id=team.id
+    ).first()
+    
+    if not target_member:
+        log.warning(f"Member {member_public_id} not found in team {public_id}")
+        raise HTTPException(status_code=404, detail="Team member not found")
+    
+    # Prevent users from changing their own role
+    if current_user_id == member_public_id:
+        log.warning(f"User {current_user_id} attempted to change their own role")
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+    
+    try:
+        # Update the member's role
+        old_role = target_member.auth_role
+        target_member.auth_role = request.new_role
+        db.commit()
+        
+        log.info(f"Successfully changed role for member {member_public_id} from {old_role} to {request.new_role}")
+        
+        return {
+            "success": True,
+            "message": f"Role changed from {old_role} to {request.new_role}",
+            "member_public_id": member_public_id,
+            "old_role": old_role,
+            "new_role": request.new_role
+        }
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to change role for member {member_public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to change team member role")
 
 from fastapi.concurrency import run_in_threadpool
 
