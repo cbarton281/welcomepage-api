@@ -194,6 +194,7 @@ async def upsert_user(
     selected_prompts: str = Form(None),
     answers: str = Form(None),
     team_id: int = Form(None),
+    team_public_id: str = Form(None),  # Support team assignment by public ID
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
@@ -206,7 +207,7 @@ async def upsert_user(
              f"auth_role={auth_role}, auth_email={auth_email}, location={location}, greeting={greeting}, "
              f"nickname={nickname}, hi_yall_text={hi_yall_text}, handwave_emoji={handwave_emoji}, "
              f"handwave_emoji_url={handwave_emoji_url}, selected_prompts={selected_prompts}, "
-             f"answers={'[JSON data]' if answers else None}, team_id={team_id}, "
+             f"answers={'[JSON data]' if answers else None}, team_id={team_id}, team_public_id={team_public_id}, "
              f"has_profile_photo={profile_photo is not None}, has_wave_gif={wave_gif is not None}, "
              f"has_pronunciation_recording={pronunciation_recording is not None}")
     
@@ -293,9 +294,22 @@ async def upsert_user(
             
             log.info(f"Uploaded prompt image for '{prompt_text}': {image_url}")
     
-    # Step 3: Save complete user record with all URLs in one database operation
+    # Step 3: Handle team assignment - convert team_public_id to team_id if provided
+    effective_team_id = team_id
+    if team_public_id and not team_id:
+        log.info(f"Looking up team by public_id: {team_public_id}")
+        from models.team import Team
+        target_team = db.query(Team).filter_by(public_id=team_public_id).first()
+        if target_team:
+            effective_team_id = target_team.id
+            log.info(f"Found team {team_public_id} with internal ID {effective_team_id}")
+        else:
+            log.error(f"Team not found for public_id: {team_public_id}")
+            raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Step 4: Save complete user record with all URLs in one database operation
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_recording_url
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_recording_url
     )
 
     return WelcomepageUserDTO.model_validate(db_user)

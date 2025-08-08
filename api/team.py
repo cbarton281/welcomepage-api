@@ -465,3 +465,120 @@ def upsert_team_db_logic(
         db.rollback()
         log.error(f"DB error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to upsert team")
+
+
+# Team invitation endpoints
+class TeamInfoResponse(BaseModel):
+    public_id: str
+    organization_name: str
+    logo_url: Optional[str]
+    member_count: int
+
+
+@router.get("/teams/{public_id}/info", response_model=TeamInfoResponse)
+async def get_team_info(public_id: str, db: Session = Depends(get_db)):
+    """
+    Get basic team information for invitation purposes.
+    This endpoint is public and doesn't require authentication.
+    """
+    log = new_logger("get_team_info")
+    log.info(f"Fetching team info for invitation: {public_id}")
+    
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found for invitation: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Count team members (only registered users)
+    member_count = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.auth_email.isnot(None),
+        WelcomepageUser.auth_email != '',
+        WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
+    ).count()
+    
+    team_info = TeamInfoResponse(
+        public_id=team.public_id,
+        organization_name=team.organization_name,
+        logo_url=team.company_logo_url,
+        member_count=member_count
+    )
+    
+    log.info(f"Team info retrieved: {team_info.dict()}")
+    return team_info
+
+
+class JoinTeamResponse(BaseModel):
+    success: bool
+    message: str
+    team_public_id: str
+    user_public_id: str
+
+
+@router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
+async def join_team(
+    public_id: str, 
+    db: Session = Depends(get_db), 
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Allow an authenticated user to join a team via invitation.
+    Only authenticated users (USER or ADMIN) can join teams.
+    """
+    log = new_logger("join_team")
+    log.info(f"User attempting to join team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_role = current_user.get('role') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    log.info(f"User {user_public_id} (role: {user_role}) attempting to join team {public_id}")
+    
+    # Verify target team exists
+    target_team = fetch_team_by_public_id(db, public_id)
+    if not target_team:
+        log.warning(f"Target team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Get the user from database
+    user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
+    if not user:
+        log.error(f"User not found in database: {user_public_id}")
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if user is already in the target team
+    if user.team_id == target_team.id:
+        log.info(f"User {user_public_id} is already a member of team {public_id}")
+        return JoinTeamResponse(
+            success=True,
+            message="You are already a member of this team",
+            team_public_id=target_team.public_id,
+            user_public_id=user_public_id
+        )
+    
+    try:
+        # Update user's team membership
+        old_team_id = user.team_id
+        user.team_id = target_team.id
+        user.auth_role = 'USER'  # New team members start as USER role
+        
+        db.commit()
+        db.refresh(user)
+        
+        log.info(f"User {user_public_id} successfully joined team {public_id} (moved from team_id {old_team_id} to {target_team.id})")
+        
+        return JoinTeamResponse(
+            success=True,
+            message=f"Successfully joined {target_team.organization_name}",
+            team_public_id=target_team.public_id,
+            user_public_id=user_public_id
+        )
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to join team: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to join team")

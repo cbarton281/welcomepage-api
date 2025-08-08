@@ -23,6 +23,7 @@ from typing import Optional
 class GenerateCodeRequest(BaseModel):
     email: str
     public_id: Optional[str] = None
+    intended_auth_role: Optional[str] = "USER"  # Default to USER role
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 import logging
@@ -61,6 +62,7 @@ def generate_code_with_retry(payload: GenerateCodeRequest, db: Session, log):
         created_at=now,
         expires_at=expires_at,
         used=False,
+        intended_auth_role=payload.intended_auth_role,  # Store intended role
     )
     log.info(f"Verification code generated [{verification_code.to_dict()}]")
     try:
@@ -156,8 +158,12 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
         team = db.query(Team).filter_by(id=user.team_id).first()
         team_public_id = team.public_id
     
-    auth_role = user.auth_role if user.auth_role else "PRE_SIGNUP"
+    # Use intended_auth_role from verification code, fallback to user's current auth_role
+    intended_role = verification_code.intended_auth_role if verification_code.intended_auth_role else user.auth_role
+    auth_role = intended_role if intended_role else "PRE_SIGNUP"
     user_public_id = user.public_id if user.public_id else public_id
+    
+    log.info(f"Returning auth_role: {auth_role} (intended: {verification_code.intended_auth_role}, current: {user.auth_role})")
     return {"success": True, "public_id": user_public_id, "auth_role": auth_role, "team_public_id": team_public_id}
 
 @router.post("/verify_code/")

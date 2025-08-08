@@ -37,7 +37,9 @@ def get_current_user(api_key: str = Depends(api_key_header)):
         if user_id is None or role is None:
             log.error(f"Invalid JWT: missing user ID or role. Payload: {payload}")
             raise credentials_exception
-        return {"user_id": user_id, "role": role, "team_id": team_id}
+        # Return both 'user_id' and 'public_id' for compatibility with endpoints
+        # Some routes expect current_user['public_id'] while others use 'user_id'
+        return {"user_id": user_id, "public_id": user_id, "role": role, "team_id": team_id}
     except JWTError as e:
         log.error(f"JWT decoding failed: {str(e)}. Token: {token}")
         raise credentials_exception

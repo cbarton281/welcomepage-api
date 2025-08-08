@@ -12,6 +12,7 @@ class VerificationCode(Base):
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False, nullable=False)
     public_id = Column(String, index=True, nullable=True)
+    intended_auth_role = Column(String, nullable=True, default="USER")  # Store intended role for authentication
 
     def to_dict(self):
         return {
@@ -22,4 +23,5 @@ class VerificationCode(Base):
             "expires_at": self.expires_at,
             "used": self.used,
             "public_id": self.public_id,
+            "intended_auth_role": self.intended_auth_role,
         }

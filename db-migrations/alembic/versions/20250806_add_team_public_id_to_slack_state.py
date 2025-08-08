@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade():
     # Add team_public_id column to slack_state_store table
-    op.add_column('slack_state_store', sa.Column('team_public_id', sa.String(length=10), nullable=False))
+    op.add_column('slack_state_store', sa.Column('team_public_id', sa.String(length=50), nullable=False))
     
     # Add index for efficient team-based queries
     op.create_index('idx_slack_state_store_team_public_id', 'slack_state_store', ['team_public_id'])

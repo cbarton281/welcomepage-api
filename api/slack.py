@@ -8,26 +8,33 @@ from services.slack_installation_service import SlackInstallationService
 from schemas.slack import SlackOAuthStartResponse, SlackInstallationResponse
 from utils.jwt_auth import get_current_user
 from utils.logger_factory import new_logger
+from utils.jwt_auth import require_roles
 
 router = APIRouter()
 
 
 @router.get("/oauth/start", response_model=SlackOAuthStartResponse)
 async def start_slack_oauth(
-    team_public_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
 ):
     """
     Start Slack OAuth flow
-    This endpoint is publicly accessible for Slack marketplace installations
-    Requires team_public_id as a query parameter
+    This endpoint requires admin authentication
+    Uses the authenticated user's team_public_id
     """
     log = new_logger("start_slack_oauth")
     try:
+        
+        # Get team_public_id from authenticated user
+        team_public_id = current_user.get("team_id")
+        if not team_public_id:
+            raise HTTPException(status_code=400, detail="Team ID not found in user context")
+        
         service = SlackInstallationService(db)
         result = service.start_oauth_flow(team_public_id)
         
-        log.info(f"Started Slack OAuth flow for team {team_public_id} with state: {result.state}")
+        log.info(f"Started Slack OAuth flow for team {team_public_id} with state: {result.state} authorize url: {result.authorize_url}")
         return result
         
     except ValueError as e:
