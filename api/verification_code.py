@@ -158,9 +158,14 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
         team = db.query(Team).filter_by(id=user.team_id).first()
         team_public_id = team.public_id
     
-    # Use intended_auth_role from verification code, fallback to user's current auth_role
-    intended_role = verification_code.intended_auth_role if verification_code.intended_auth_role else user.auth_role
-    auth_role = intended_role if intended_role else "PRE_SIGNUP"
+    auth_role = None
+    if user.auth_role and user.auth_role != "PRE_SIGNUP":
+        auth_role = user.auth_role
+    elif verification_code.intended_auth_role:
+        auth_role = verification_code.intended_auth_role
+    else:
+        auth_role = "PRE_SIGNUP"
+    
     user_public_id = user.public_id if user.public_id else public_id
     
     log.info(f"Returning auth_role: {auth_role} (intended: {verification_code.intended_auth_role}, current: {user.auth_role})")
