@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from utils.supabase_storage import upload_to_supabase_storage
 from datetime import datetime, timezone
 from schemas.peer_data import PeerDataResponse, PeerAnswer
+from utils.short_id import generate_file_id
 
 router = APIRouter()
 
@@ -217,7 +218,6 @@ async def upsert_user(
     # Handle profile photo upload
     profile_photo_url = None
     if profile_photo:
-        from utils.short_id import generate_file_id
         photo_filename = f"{generate_file_id(public_id)}-profile-photo"
         content = await profile_photo.read()
         profile_photo_url = await upload_to_supabase_storage(

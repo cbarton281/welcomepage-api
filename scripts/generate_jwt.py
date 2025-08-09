@@ -26,8 +26,9 @@ def main():
         "team_id": args.team_id,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(seconds=args.seconds)
     }
-
+    print(payload)
     token = jwt.encode(payload, args.secret, algorithm="HS256")
+    print("----------------------------------------------------------\n")
     print(token)
 
 if __name__ == "__main__":

@@ -1,1 +1,18 @@
-select * from welcomepage_users where auth_email = 'charles.barton+U3@gmail.com'
+select * from welcomepage_users where auth_email like 'charles.barton+%@gmail.com'
+
+select auth_email, auth_role, * from welcomepage_users 
+where team_id = 1 
+order by auth_role 
+
+SELECT 
+  teams.public_id AS team_public_id,
+  welcomepage_users.auth_email,
+  welcomepage_users.public_id AS user_public_id
+FROM welcomepage_users
+JOIN teams ON welcomepage_users.team_id = teams.id;
+
+
+select auth_email, * from welcomepage_users where auth_email like 'charles.barton%@gmail.com'
+order by auth_email
+
+------------------
