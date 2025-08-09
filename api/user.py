@@ -144,7 +144,7 @@ def google_auth(
         new_user = WelcomepageUser(
             public_id=user_public_id,
             name=payload.name,
-            role="USER",
+            role="",  # Empty job role - user will fill this in later
             auth_role="ADMIN",
             auth_email=payload.email,
             team_id=new_team.id,
@@ -722,5 +722,3 @@ def get_peer_data(team_public_id: str, db: Session = Depends(get_db), current_us
     #         )
     #     ]
     # }
-    
-
