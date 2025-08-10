@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from utils.supabase_storage import upload_to_supabase_storage
 from datetime import datetime, timezone
 from schemas.peer_data import PeerDataResponse, PeerAnswer
-from utils.short_id import generate_file_id
+from utils.short_id import generate_short_id_with_collision_check, generate_file_id
 
 router = APIRouter()
 
@@ -129,8 +129,7 @@ def google_auth(
         log.info("No existing user found - creating new user and team")
         
         # Create new team first
-        import uuid
-        team_public_id = str(uuid.uuid4())
+        team_public_id = generate_short_id_with_collision_check(db, Team, "team")
         new_team = Team(
             public_id=team_public_id,
             name=f"{payload.name}'s Team",  # Default team name
@@ -140,7 +139,7 @@ def google_auth(
         db.flush()  # Get the team ID
         
         # Create new user
-        user_public_id = str(uuid.uuid4())
+        user_public_id = generate_short_id_with_collision_check(db, WelcomepageUser, "user")
         new_user = WelcomepageUser(
             public_id=user_public_id,
             name=payload.name,
@@ -430,7 +429,6 @@ def upsert_user_db_logic(
                 raise HTTPException(status_code=500, detail="Database error. Please try again later.")
         else:
             # Create new user
-            from utils.short_id import generate_short_id_with_collision_check
             effective_public_id = user_lookup_id if user_lookup_id else generate_short_id_with_collision_check(db, WelcomepageUser, "user")
             db_user = WelcomepageUser(
                 public_id=effective_public_id,

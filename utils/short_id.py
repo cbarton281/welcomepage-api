@@ -1,9 +1,10 @@
-import random
+import secrets
 import string
+import random
 
 def generate_short_id(length: int = 10) -> str:
     """
-    Generate a short alphanumeric ID using lowercase letters and digits.
+    Generate a cryptographically secure short alphanumeric ID using lowercase letters and digits.
     
     Args:
         length: Length of the ID to generate (default: 10)
@@ -18,8 +19,8 @@ def generate_short_id(length: int = 10) -> str:
     # Use lowercase letters and digits (36 possible characters)
     characters = string.ascii_lowercase + string.digits  # a-z0-9
     
-    # Generate random ID
-    return ''.join(random.choices(characters, k=length))
+    # Generate cryptographically secure random ID
+    return ''.join(secrets.choice(characters) for _ in range(length))
 
 
 def generate_short_id_with_collision_check(db, table_class, id_type: str, max_attempts: int = 5) -> str:
