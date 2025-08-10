@@ -144,7 +144,7 @@ def google_auth(
         new_user = WelcomepageUser(
             public_id=user_public_id,
             name=payload.name,
-            role="",  # Empty job role - user will fill this in later
+            role="",  
             auth_role="ADMIN",
             auth_email=payload.email,
             team_id=new_team.id,
