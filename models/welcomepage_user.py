@@ -10,7 +10,7 @@ from utils.short_id import generate_short_id
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'
     id = Column(Integer, primary_key=True)
-    public_id = Column(String(10), unique=True, index=True, default=lambda: generate_short_id(), nullable=False)
+    public_id = Column(String(10), unique=True, index=True,nullable=False)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     location = Column(String, nullable=False)

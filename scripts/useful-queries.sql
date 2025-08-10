@@ -1,4 +1,4 @@
-select * from welcomepage_users where auth_email like 'charles.barton+u9@gmail.com'
+select * from welcomepage_users where auth_email like 'charles.barton+u33@gmail.com'
 
 select auth_email, auth_role, * from welcomepage_users 
 where team_id = 1 
@@ -16,5 +16,7 @@ select auth_email, * from welcomepage_users where auth_email like 'charles.barto
 order by auth_email
 
 select * from verification_codes order by id desc
+
+select * from alembic_version
 
 ------------------

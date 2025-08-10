@@ -8,7 +8,7 @@ class Team(Base):
     __tablename__ = "teams"
 
     id = Column(Integer, primary_key=True, index=True)
-    public_id = Column(String(10), unique=True, index=True, default=lambda: generate_short_id(), nullable=False)
+    public_id = Column(String(10), unique=True, index=True, nullable=False)
     organization_name = Column(String, nullable=False)
     company_logo_url = Column(String, nullable=True)  # Path or URL to the uploaded logo
     color_scheme = Column(String, nullable=False)
@@ -29,4 +29,3 @@ class Team(Base):
             "color_scheme_data": self.color_scheme_data,
             "slack_settings": self.slack_settings,
         }
-
