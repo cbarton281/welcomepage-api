@@ -13,7 +13,7 @@ def send_verification_email(to_email: str, code: str):
     msg["Subject"] = "Your Welcomepage Verification Code"
     msg["From"] = "noreply@welcomepage.app"
     msg["To"] = to_email
-    logo_url = os.environ.get("PUBLIC_ASSETS_URL") + "/welcomepage-logo.png"
+    logo_url = os.environ.get("WEBAPP_URL") + "/welcomepage-logo.png"
 
     html = f'''
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; border: 1px solid #eee; border-radius: 16px; overflow: hidden; background-color: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);">
@@ -36,4 +36,3 @@ def send_verification_email(to_email: str, code: str):
         server.starttls()
         server.login(from_email, password)
         server.sendmail(from_email, to_email, msg.as_string())
-

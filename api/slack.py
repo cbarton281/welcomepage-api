@@ -64,7 +64,7 @@ async def slack_oauth_callback(
         if error == "access_denied":
             log.info("User canceled Slack OAuth installation")
             return RedirectResponse(
-                url=os.getenv("PUBLIC_ASSETS_URL") + "/integration/slack/oauthcancelled",
+                url=os.getenv("WEBAPP_URL") + "/integration/slack/oauthcancelled",
                 status_code=302
             )
         
@@ -72,7 +72,7 @@ async def slack_oauth_callback(
         if not code or not state:
             log.error("Missing required OAuth parameters")
             return RedirectResponse(
-                url=os.getenv("PUBLIC_ASSETS_URL") + "/integration/slack/installerror",
+                url=os.getenv("WEBAPP_URL") + "/integration/slack/installerror",
                 status_code=302
             )
         
@@ -84,20 +84,20 @@ async def slack_oauth_callback(
         
         # Redirect to team settings page with success parameter
         return RedirectResponse(
-            url="/team-settings?slack_success=true",
+            url=f"{os.getenv('WEBAPP_URL')}/team-settings?slack_success=true",
             status_code=302
         )
         
     except ValueError as e:
         log.error(f"OAuth validation error: {str(e)}")
         return RedirectResponse(
-            url=os.getenv("PUBLIC_ASSETS_URL") + "/integration/slack/installerror",
+            url=os.getenv("WEBAPP_URL") + "/integration/slack/installerror",
             status_code=302
         )
     except Exception as e:
         log.error(f"OAuth callback failed: {str(e)}")
         return RedirectResponse(
-            url=os.getenv("PUBLIC_ASSETS_URL") + "/integration/slack/installerror",
+            url=os.getenv("WEBAPP_URL") + "/integration/slack/installerror",
             status_code=302
         )
 
