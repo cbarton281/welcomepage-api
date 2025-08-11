@@ -426,12 +426,23 @@ def upsert_team_db_logic(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in color_scheme_data")
     
-    # Parse slack settings data
     slack_settings_obj = None
     if slack_settings:
         try:
-            slack_settings_obj = json.loads(slack_settings)
-            log.info(f"slack settings data: {slack_settings_obj}")
+            incoming_slack_settings = json.loads(slack_settings)
+            log.info(f"Incoming slack settings data: {incoming_slack_settings}")
+            
+            # If team exists, merge with existing slack_settings to preserve slack_app data
+            if team and team.slack_settings:
+                existing_slack_settings = team.slack_settings.copy()
+                # Merge incoming settings with existing settings
+                existing_slack_settings.update(incoming_slack_settings)
+                slack_settings_obj = existing_slack_settings
+                log.info(f"Merged slack settings: {slack_settings_obj}")
+            else:
+                # No existing settings, use incoming settings as-is
+                slack_settings_obj = incoming_slack_settings
+                
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in slack_settings")
     try:

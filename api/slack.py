@@ -81,9 +81,9 @@ async def slack_oauth_callback(
         
         log.info(f"Slack installation completed (Slack team: {result.team_id})")
         
-        # Redirect to success page
+        # Redirect to team settings page with success parameter
         return RedirectResponse(
-            url="https://go.welcomepage.app/integration/slack/installsuccess",
+            url="/team-settings?slack_success=true",
             status_code=302
         )
         

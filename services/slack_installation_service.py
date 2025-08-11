@@ -158,14 +158,20 @@ class SlackInstallationService:
             if not team:
                 raise ValueError(f"Team not found: {team_identifier}")
             
+            # Get existing slack_settings or initialize empty dict
+            existing_settings = team.slack_settings or {}
+            
             # Convert installation data to dict for JSON storage
-            slack_settings = installation_data.dict()
+            slack_app_data = installation_data.dict()
             
             # Convert datetime to ISO string for JSON serialization
-            if slack_settings.get("installed_at"):
-                slack_settings["installed_at"] = slack_settings["installed_at"].isoformat()
+            if slack_app_data.get("installed_at"):
+                slack_app_data["installed_at"] = slack_app_data["installed_at"].isoformat()
             
-            team.slack_settings = slack_settings
+            # Preserve existing settings and nest Slack app data under 'slack_app' property
+            existing_settings["slack_app"] = slack_app_data
+            
+            team.slack_settings = existing_settings
             self.db.commit()
             
             log.info(f"Saved Slack installation for team {team_identifier} (Slack team: {installation_data.team_name})")
@@ -222,7 +228,7 @@ class SlackInstallationService:
             if not team or not team.slack_settings:
                 return None
             
-            return SlackInstallationData(**team.slack_settings)
+            return SlackInstallationData(**team.slack_settings.get("slack_app", {}))
             
         except Exception as e:
             log.error(f"Failed to get installation for team {team_identifier}: {str(e)}")
@@ -243,21 +249,27 @@ class SlackInstallationService:
                 raise ValueError(f"Team not found: {team_identifier}")
             
             # Revoke tokens before removing installation
-            if team.slack_settings:
-                installation = SlackInstallationData(**team.slack_settings)
+            if team.slack_settings and team.slack_settings.get("slack_app"):
+                installation = SlackInstallationData(**team.slack_settings.get("slack_app"))
                 if installation.bot_token:
                     self._revoke_token(installation.bot_token)
                 if installation.user_token:
                     self._revoke_token(installation.user_token)
             
-            # Clear slack_settings
-            team.slack_settings = None
+            # Preserve other slack_settings but remove slack_app data
+            if team.slack_settings:
+                existing_settings = team.slack_settings.copy()
+                existing_settings.pop("slack_app", None)  # Remove slack_app data
+                team.slack_settings = existing_settings if existing_settings else None
+            else:
+                team.slack_settings = None
+            
             self.db.commit()
             
             log.info(f"Uninstalled Slack for team {team_identifier}")
             return True
             
         except Exception as e:
-            log.err or(f"Failed to uninstall Slack for team {team_identifier}: {str(e)}")
+            log.error(f"Failed to uninstall Slack for team {team_identifier}: {str(e)}")
             self.db.rollback()
             return False
