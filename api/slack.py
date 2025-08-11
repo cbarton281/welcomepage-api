@@ -6,10 +6,12 @@ import os
 
 from database import get_db
 from services.slack_installation_service import SlackInstallationService
+from services.slack_event_service import SlackEventService
 from schemas.slack import SlackOAuthStartResponse, SlackInstallationResponse
 from utils.jwt_auth import get_current_user
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
+from utils.slack_signature_verifier import SlackSignatureVerifier
 
 router = APIRouter()
 
@@ -203,3 +205,31 @@ async def cleanup_expired_states(
     except Exception as e:
         log.error(f"Failed to cleanup expired states: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to cleanup expired states")
+
+
+@router.post("/events")
+async def handle_slack_events(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Handle Slack events webhook
+    """
+    log = new_logger("handle_slack_events")
+    try:
+        # Verify Slack signature
+        verifier = SlackSignatureVerifier()
+        if not verifier.verify(request):
+            log.error("Invalid Slack signature")
+            raise HTTPException(status_code=403, detail="Invalid Slack signature")
+        
+        # Handle event
+        service = SlackEventService(db)
+        event = await request.json()
+        service.handle_event(event)
+        
+        return {"success": True, "message": "Event handled successfully"}
+        
+    except Exception as e:
+        log.error(f"Failed to handle event: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to handle event")

@@ -7,7 +7,8 @@ order by auth_role
 SELECT 
   teams.public_id AS team_public_id,
   welcomepage_users.auth_email,
-  welcomepage_users.public_id AS user_public_id
+  welcomepage_users.public_id AS user_public_id,
+  welcomepage_users.auth_role
 FROM welcomepage_users
 JOIN teams ON welcomepage_users.team_id = teams.id;
 
