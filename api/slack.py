@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 import os
+import json
 
 from database import get_db
 from services.slack_installation_service import SlackInstallationService
@@ -214,22 +215,48 @@ async def handle_slack_events(
 ):
     """
     Handle Slack events webhook
+    This endpoint receives events from Slack including app_uninstalled, team_join, etc.
     """
     log = new_logger("handle_slack_events")
     try:
+        # Get request headers and body for signature verification
+        body = await request.body()
+        timestamp = request.headers.get("X-Slack-Request-Timestamp")
+        signature = request.headers.get("X-Slack-Signature")
+        
+        if not timestamp or not signature:
+            log.error("Missing required Slack headers")
+            raise HTTPException(status_code=400, detail="Missing required headers")
+        
         # Verify Slack signature
         verifier = SlackSignatureVerifier()
-        if not verifier.verify(request):
+        if not verifier.verify_signature(body, timestamp, signature):
             log.error("Invalid Slack signature")
             raise HTTPException(status_code=403, detail="Invalid Slack signature")
         
-        # Handle event
+        # Parse the event payload
+        payload = json.loads(body.decode('utf-8'))
+        log.info(f"Received Slack event: {payload.get('type', 'unknown')}")
+        
+        # Handle URL verification challenge - return plain string like Flask version
+        if payload.get("type") == "url_verification":
+            challenge = payload.get("challenge")
+            if challenge:
+                log.info("Responding to Slack URL verification challenge")
+                return PlainTextResponse(challenge)
+            else:
+                log.error("No challenge found in URL verification request")
+                raise HTTPException(status_code=400, detail="No challenge found")
+        
+        # Handle other events using the service
         service = SlackEventService(db)
-        event = await request.json()
-        service.handle_event(event)
+        result = service.handle_event(payload)
         
-        return {"success": True, "message": "Event handled successfully"}
+        return result
         
+    except HTTPException:
+        raise
     except Exception as e:
-        log.error(f"Failed to handle event: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to handle event")
+        log.error(f"Failed to handle Slack event: {str(e)}")
+        # Return 200 to prevent Slack from retrying
+        return {"status": "error", "message": str(e)}
