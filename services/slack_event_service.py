@@ -1,6 +1,3 @@
-import json
-import os
-from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
@@ -89,7 +86,6 @@ class SlackEventService:
             
             # Find team by slack team_id in the slack_settings
             team = self._find_team_by_slack_team_id(team_id)
-            log.info(f"Found team {team.public_id} for Slack team {team_id}")
             if team:
                 log.info(f"Found team {team.public_id} for Slack team {team_id}")
                 
