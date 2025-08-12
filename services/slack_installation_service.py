@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from models.team import Team
 from models.slack_state_store import SlackStateStore
@@ -147,6 +148,7 @@ class SlackInstallationService:
     def _save_installation_to_team(self, team_identifier: str, installation_data: SlackInstallationData):
         """Save Slack installation data to team's slack_settings"""
         log = new_logger("save_installation_to_team")
+        log.info(f"Saving Slack installation for team {team_identifier}")   
         try:
             # Try to find team by ID first (for hardcoded team_id=1), then by public_id
             team = None
@@ -158,23 +160,39 @@ class SlackInstallationService:
             if not team:
                 raise ValueError(f"Team not found: {team_identifier}")
             
+            log.info(f"Found team {team.public_id} for Slack team {team_identifier}")
             # Get existing slack_settings or initialize empty dict
             existing_settings = team.slack_settings or {}
+            log.info(f"Existing slack_settings: {existing_settings}")
             
             # Convert installation data to dict for JSON storage
-            slack_app_data = installation_data.dict()
+            slack_app_data = installation_data.model_dump()
+            log.info(f"Installation data: {slack_app_data}")
             
             # Convert datetime to ISO string for JSON serialization
             if slack_app_data.get("installed_at"):
                 slack_app_data["installed_at"] = slack_app_data["installed_at"].isoformat()
             
+            log.info(f"Installation data after conversion: {slack_app_data}")
+            
             # Preserve existing settings and nest Slack app data under 'slack_app' property
             existing_settings["slack_app"] = slack_app_data
             
-            team.slack_settings = existing_settings
+            log.info(f"Updated slack_settings: {existing_settings}")
+            
+            # Create a new dict to ensure SQLAlchemy detects the change
+            team.slack_settings = dict(existing_settings)
+            log.info(f"New slack_settings: {team.slack_settings}")
+            
+            # Explicitly mark the field as modified for SQLAlchemy
+            flag_modified(team, 'slack_settings')
+            log.info(f"Marked slack_settings as modified")
+            
             self.db.commit()
+            log.info(f"Committed transaction")
             
             log.info(f"Saved Slack installation for team {team_identifier} (Slack team: {installation_data.team_name})")
+            log.info(f"Updated slack_settings: {team.slack_settings}")
             
         except Exception as e:
             log.error(f"Failed to save installation to team {team_identifier}: {str(e)}")
