@@ -22,7 +22,7 @@ def deployment_meta():
         git_sha = os.getenv("VERCEL_GIT_COMMIT_SHA")
         branch = os.getenv("VERCEL_GIT_COMMIT_REF")
         
-        display = f"{env}:{git_sha[:7] if git_sha else 'unknown'}@{deployment_id[4:12] if deployment_id else 'unknown'}"
+        display = f"{env}:{git_sha[:7] if git_sha else 'unknown'}@{deployment_id[:8] if deployment_id else 'unknown'}"
     else:
         # Local development
         env = "local"
@@ -56,7 +56,7 @@ def deployment_meta():
         "deployment_id": deployment_id,
         "url": url,
         "region": region,
-        "git_sha": git_sha,
+        "git_sha": git_sha[:7] if git_sha and len(git_sha) > 7 else git_sha,
         "branch": branch,
         "display": display,
         "is_vercel": is_vercel,
