@@ -13,6 +13,15 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 async def upload_to_supabase_storage(file_content: bytes, filename: str, content_type: str = "application/octet-stream"):
     """Upload file to Supabase Storage bucket and return the public URL."""
+    
+    # Check file size limit (5MB to stay under Supabase 6MB limit with overhead)
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB in bytes
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413, 
+            detail=f"File size ({len(file_content)} bytes) exceeds maximum allowed size ({MAX_FILE_SIZE} bytes). Please compress your image and try again."
+        )
+    
     try:
         res = supabase.storage.from_(SUPABASE_BUCKET).upload(
             path=filename,

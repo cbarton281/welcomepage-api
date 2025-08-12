@@ -235,8 +235,8 @@ class SlackBlocksService:
                                 "text": button_text,
                                 "emoji": True
                             },
-                            "value": "click_me_123",
-                            "action_id": "button-action",
+                            "value": "sign_up_click",
+                            "action_id": "sign_up_button",
                             "url": signup_url
                         }
                     ]

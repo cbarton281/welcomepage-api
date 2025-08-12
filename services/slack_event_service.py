@@ -249,7 +249,7 @@ class SlackEventService:
             has_published_page = False
             signup_url = ""
             
-            wp_webapp_url = os.getenv('WP_WEBAPP_URL', 'https://welcomepage.com')
+            wp_webapp_url = os.getenv('WEBAPP_URL')
             
             if existing_user:
                 log.info(f"Found existing user {existing_user.public_id} for Slack user {user_id}")
