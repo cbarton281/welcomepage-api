@@ -20,6 +20,6 @@ select * from verification_codes order by id desc
 
 select * from alembic_version
 
-select * from teams where public_id = 'c2b52ea3-bcdf-47fa-a16c-9ef04f31c949'
+select slack_settings, * from teams where public_id = 'c2b52ea3-bcdf-47fa-a16c-9ef04f31c949'
 
 ------------------

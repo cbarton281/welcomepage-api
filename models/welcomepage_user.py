@@ -30,6 +30,7 @@ class WelcomepageUser(Base):
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
     auth_role = Column(String(32), nullable=True)  # Authorization role (admin, user, pre-signup, etc)
     auth_email = Column(String(256), nullable=True)  # Authorization email, distinct from profile email
+    slack_user_id = Column(String(32), nullable=True)  # Slack user ID for integration
 
     team = relationship("Team", back_populates="users")
 
@@ -51,6 +52,7 @@ class WelcomepageUser(Base):
             'role': self.role,
             'auth_role': self.auth_role,
             'auth_email': self.auth_email,
+            'slack_user_id': self.slack_user_id,
             'location': self.location,
             'nickname': self.nickname,
             'greeting': self.greeting,

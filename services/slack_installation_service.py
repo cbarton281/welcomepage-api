@@ -11,6 +11,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from models.team import Team
 from models.slack_state_store import SlackStateStore
+from models.welcomepage_user import WelcomepageUser
 from schemas.slack import SlackInstallationData, SlackOAuthStartResponse, SlackInstallationResponse
 from utils.slack_state_manager import SlackStateManager
 from utils.logger_factory import new_logger
@@ -96,6 +97,9 @@ class SlackInstallationService:
             
             # Save installation to team
             self._save_installation_to_team(team_public_id, installation_data)
+            
+            # Update installer user's Slack user ID
+            self._update_user_slack_id(team_public_id, installation_data.user_id)
             
             return SlackInstallationResponse(
                 success=True,
@@ -196,6 +200,36 @@ class SlackInstallationService:
             
         except Exception as e:
             log.error(f"Failed to save installation to team {team_identifier}: {str(e)}")
+            self.db.rollback()
+            raise
+    
+    def _update_user_slack_id(self, team_identifier: str, slack_user_id: str):
+        """Update user's Slack ID"""
+        log = new_logger("update_user_slack_id")
+        try:
+            # Try to find team by ID first (for hardcoded team_id=1), then by public_id
+            team = None
+            if team_identifier.isdigit():
+                team = self.db.query(Team).filter_by(id=int(team_identifier)).first()
+            else:
+                team = self.db.query(Team).filter_by(public_id=team_identifier).first()
+            
+            if not team:
+                raise ValueError(f"Team not found: {team_identifier}")
+            
+            log.info(f"Found team {team.public_id} for Slack team {team_identifier}")
+            
+            # Update user's Slack ID
+            user = self.db.query(WelcomepageUser).filter_by(team_id=team.id).first()
+            if user:
+                user.slack_user_id = slack_user_id
+                self.db.commit()
+                log.info(f"Updated user's Slack ID for team {team_identifier}")
+            else:
+                log.warning(f"No user found for team {team_identifier}")
+                
+        except Exception as e:
+            log.error(f"Failed to update user's Slack ID for team {team_identifier}: {str(e)}")
             self.db.rollback()
             raise
     
