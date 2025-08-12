@@ -9,6 +9,8 @@ from models.welcomepage_user import WelcomepageUser
 from services.slack_installation_service import SlackInstallationService
 from schemas.slack import SlackInstallationData
 from utils.logger_factory import new_logger
+from services.slack_blocks_service import SlackBlocksService
+import os
 
 
 class SlackEventService:
@@ -190,6 +192,7 @@ class SlackEventService:
         log.info("Handling app home opened event")
         
         try:
+            # Extract event data
             event_data = payload.get("event", {})
             user_id = event_data.get("user")
             team_id = payload.get("team_id")
@@ -198,14 +201,132 @@ class SlackEventService:
                 log.error("Missing user_id or team_id in app_home_opened event")
                 return {"status": "error", "message": "Missing required fields"}
             
-            # TODO: Implement app home view logic
-            # This would involve:
-            # 1. Getting Slack installation data
-            # 2. Creating/updating app home view
-            # 3. Publishing view to Slack
+            log.info(f"Processing app home opened for user {user_id} in Slack team {team_id}")
             
-            log.info(f"Would update app home for user {user_id} in team {team_id}")
-            return {"status": "ok", "message": "App home opened event processed"}
+            # Find the team by Slack team_id
+            team = self._find_team_by_slack_team_id(team_id)
+            if not team:
+                log.error(f"No team found for Slack team_id: {team_id}")
+                return {"status": "error", "message": "Team not found"}
+            
+            log.info(f"Found team {team.public_id} for Slack team {team_id}")
+            
+            # Get Slack installation data to create WebClient
+            installation = self.installation_service.get_installation_for_team(team.public_id)
+            if not installation or not installation.bot_token:
+                log.error(f"No Slack installation found for team {team.public_id}")
+                return {"status": "error", "message": "Slack installation not found"}
+            
+            # Create Slack WebClient
+            client = WebClient(token=installation.bot_token)
+            
+            # Get user profile from Slack
+            try:
+                slack_user_profile = client.users_profile_get(user=user_id)
+                slack_user_info = client.users_info(user=user_id)
+                
+                slack_profile_data = slack_user_profile.get("profile", {})
+                slack_user_data = slack_user_info.get("user", {})
+                
+                display_name = slack_profile_data.get("display_name") or slack_profile_data.get("real_name") or slack_user_data.get("name", "User")
+                real_name = slack_profile_data.get("real_name", display_name)
+                
+                log.info(f"Retrieved Slack profile for user {user_id}: {display_name}")
+                
+            except SlackApiError as e:
+                log.error(f"Failed to get Slack user profile: {e}")
+                display_name = "User"
+                real_name = "User"
+            
+            # Look up existing user by slack_user_id
+            existing_user = self.db.query(WelcomepageUser).filter(
+                WelcomepageUser.slack_user_id == user_id,
+                WelcomepageUser.team_id == team.id
+            ).first()
+            
+            # Determine user state and generate appropriate view
+            is_new_user = existing_user is None
+            has_published_page = False
+            signup_url = ""
+            
+            wp_webapp_url = os.getenv('WP_WEBAPP_URL', 'https://welcomepage.com')
+            
+            if existing_user:
+                log.info(f"Found existing user {existing_user.public_id} for Slack user {user_id}")
+                has_published_page = not existing_user.is_draft
+                
+                # Generate signup/signin URL based on user state
+                if existing_user.auth_email:
+                    # User has completed auth, send them to signin
+                    signup_url = f"{wp_webapp_url}/auth"
+                else:
+                    # User exists but hasn't completed auth, send them to join flow
+                    signup_url = f"{wp_webapp_url}/join/{team.public_id}"
+            else:
+                log.info(f"No existing user found for Slack user {user_id}, will show new user flow")
+                
+                # Check if team has auto-invite enabled
+                auto_invite = False
+                if team.slack_settings:
+                    auto_invite = team.slack_settings.get("auto_invite_new_members", False)
+                
+                if auto_invite:
+                    # Create a new user record for this Slack user
+                    try:
+                        new_user = WelcomepageUser(
+                            name=real_name,
+                            role="Team Member",  # Default role
+                            location="Unknown",  # Default location
+                            greeting="Hello!",  # Default greeting
+                            selected_prompts=[],  # Empty prompts
+                            answers={},  # Empty answers
+                            team_id=team.id,
+                            slack_user_id=user_id,
+                            auth_role="PRE_SIGNUP",  # Pre-signup state
+                            is_draft=True  # Draft state
+                        )
+                        
+                        self.db.add(new_user)
+                        self.db.commit()
+                        
+                        log.info(f"Created new user {new_user.public_id} for Slack user {user_id}")
+                        existing_user = new_user
+                        
+                    except Exception as e:
+                        log.error(f"Failed to create new user for Slack user {user_id}: {str(e)}")
+                        self.db.rollback()
+                
+                # Generate signup URL for new users
+                signup_url = f"{wp_webapp_url}/join/{team.public_id}"
+            
+            # Generate app home view blocks
+            view = SlackBlocksService.app_home_page_blocks(
+                signup_url=signup_url,
+                has_published_page=has_published_page,
+                is_new_user=is_new_user,
+                organization_name=team.organization_name
+            )
+            
+            log.info(f"Generated app home view for user {user_id}")
+            log.debug(f"App home view blocks: {view}")
+            
+            # Publish the view to Slack
+            try:
+                response = client.views_publish(
+                    user_id=user_id,
+                    view=view
+                )
+                
+                if response.get("ok"):
+                    log.info(f"Successfully published app home view for user {user_id}")
+                    return {"status": "ok", "message": "App home view published successfully"}
+                else:
+                    log.error(f"Failed to publish app home view: {response}")
+                    return {"status": "error", "message": "Failed to publish view"}
+                    
+            except SlackApiError as e:
+                log.error(f"Slack API error publishing app home view: {e}")
+                return {"status": "error", "message": f"Slack API error: {e.response['error']}"}
             
         except Exception as e:
             log.error(f"Error handling app_home_opened event: {str(e)}")
