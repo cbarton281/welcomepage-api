@@ -400,7 +400,9 @@ def upsert_user_db_logic(
             db_user.selected_prompts = selected_prompts_list
             db_user.answers = answers_dict
             db_user.team_id = team_id
-            db_user.slack_user_id = slack_user_id
+            # Preserve existing slack_user_id if none provided in request
+            if slack_user_id is not None:
+                db_user.slack_user_id = slack_user_id   
             
             # Update file URLs if provided
             if profile_photo_url:
