@@ -265,36 +265,31 @@ class SlackEventService:
             else:
                 log.info(f"No existing user found for Slack user {user_id}, will show new user flow")
                 
-                # Check if team has auto-invite enabled
-                auto_invite = False
-                if team.slack_settings:
-                    auto_invite = team.slack_settings.get("auto_invite_new_members", False)
-                
-                if auto_invite:
-                    # Create a new user record for this Slack user
-                    try:
-                        new_user = WelcomepageUser(
-                            name=real_name,
-                            role="Team Member",  # Default role
-                            location="Unknown",  # Default location
-                            greeting="Hello!",  # Default greeting
-                            selected_prompts=[],  # Empty prompts
-                            answers={},  # Empty answers
-                            team_id=team.id,
-                            slack_user_id=user_id,
-                            auth_role="PRE_SIGNUP",  # Pre-signup state
-                            is_draft=True  # Draft state
-                        )
-                        
-                        self.db.add(new_user)
-                        self.db.commit()
-                        
-                        log.info(f"Created new user {new_user.public_id} for Slack user {user_id}")
-                        existing_user = new_user
-                        
-                    except Exception as e:
-                        log.error(f"Failed to create new user for Slack user {user_id}: {str(e)}")
-                        self.db.rollback()
+                # Always create a user record for Slack users who open the app home
+                # This ensures they have a slack_user_id for proper integration
+                try:
+                    new_user = WelcomepageUser(
+                        name=real_name,
+                        role="Team Member",  # Default role
+                        location="Unknown",  # Default location
+                        greeting="Hello!",  # Default greeting
+                        selected_prompts=[],  # Empty prompts
+                        answers={},  # Empty answers
+                        team_id=team.id,
+                        slack_user_id=user_id,
+                        auth_role="PRE_SIGNUP",  # Pre-signup state
+                        is_draft=True  # Draft state
+                    )
+                    
+                    self.db.add(new_user)
+                    self.db.commit()
+                    
+                    log.info(f"Created new user {new_user.public_id} for Slack user {user_id}")
+                    existing_user = new_user
+                    
+                except Exception as e:
+                    log.error(f"Failed to create new user for Slack user {user_id}: {str(e)}")
+                    self.db.rollback()
                 
                 # Generate signup URL for new users
                 signup_url = f"{wp_webapp_url}/join/{team.public_id}"

@@ -1,6 +1,6 @@
 select slack_user_id, * from welcomepage_users where auth_email like 'charles.barton@gmail.com'
 
-select  * from welcomepage_users order by id where public_id = 'vd71ukv0q2'
+select  * from welcomepage_users order by id desc where public_id = 'vd71ukv0q2'
 
 select auth_email, auth_role, * from welcomepage_users 
 where team_id = 1 
@@ -26,4 +26,4 @@ select * from alembic_version
 
 select slack_settings, * from teams where public_id = 'c2b52ea3-bcdf-47fa-a16c-9ef04f31c949'
 
-------------------
+select * from teams
