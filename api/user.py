@@ -210,7 +210,7 @@ async def upsert_user(
              f"handwave_emoji_url={handwave_emoji_url}, selected_prompts={selected_prompts}, "
              f"answers={'[JSON data]' if answers else None}, team_id={team_id}, team_public_id={team_public_id}, "
              f"has_profile_photo={profile_photo is not None}, has_wave_gif={wave_gif is not None}, "
-             f"has_pronunciation_recording={pronunciation_recording is not None}")
+             f"has_pronunciation_recording={pronunciation_recording is not None} slack_user_id={slack_user_id}")
     
     # Step 1: Process all file uploads first and get URLs
     form_data = await request.form()

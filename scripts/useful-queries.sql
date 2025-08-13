@@ -1,4 +1,6 @@
-select * from welcomepage_users where auth_email like 'charles.barton+u33@gmail.com'
+select slack_user_id, * from welcomepage_users where auth_email like 'charles.barton@gmail.com'
+
+select  * from welcomepage_users order by id where public_id = 'vd71ukv0q2'
 
 select auth_email, auth_role, * from welcomepage_users 
 where team_id = 1 
@@ -8,7 +10,9 @@ SELECT
   teams.public_id AS team_public_id,
   welcomepage_users.auth_email,
   welcomepage_users.public_id AS user_public_id,
-  welcomepage_users.auth_role
+  welcomepage_users.auth_role,
+  welcomepage_users.slack_user_id, 
+  welcomepage_users.name
 FROM welcomepage_users
 JOIN teams ON welcomepage_users.team_id = teams.id;
 
