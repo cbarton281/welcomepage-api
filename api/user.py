@@ -195,6 +195,7 @@ async def upsert_user(
     answers: str = Form(None),
     team_id: int = Form(None),
     team_public_id: str = Form(None),  # Support team assignment by public ID
+    slack_user_id: str = Form(None),  # Preserve Slack user ID
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
@@ -308,7 +309,7 @@ async def upsert_user(
     
     # Step 4: Save complete user record with all URLs in one database operation
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_recording_url
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_recording_url, slack_user_id
     )
 
     return WelcomepageUserDTO.model_validate(db_user)
@@ -320,7 +321,7 @@ async def upsert_user(
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
-    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_recording_url=None
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_recording_url=None, slack_user_id=None
 ):
     # All arguments are plain values, no FastAPI Form/File/Depends here
     # All business logic remains unchanged
@@ -399,6 +400,7 @@ def upsert_user_db_logic(
             db_user.selected_prompts = selected_prompts_list
             db_user.answers = answers_dict
             db_user.team_id = team_id
+            db_user.slack_user_id = slack_user_id
             
             # Update file URLs if provided
             if profile_photo_url:
@@ -445,6 +447,7 @@ def upsert_user_db_logic(
                 selected_prompts=selected_prompts_list,
                 answers=answers_dict,
                 team_id=team_id,
+                slack_user_id=slack_user_id,
                 is_draft=True,
                 profile_photo_url=profile_photo_url,
                 wave_gif_url=wave_gif_url,
