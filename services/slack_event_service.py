@@ -285,9 +285,8 @@ class SlackEventService:
                 is_new_user=is_new_user,
                 organization_name=team.organization_name
             )
-            
             log.info(f"Generated app home view for user {user_id}")
-            log.debug(f"App home view blocks: {view}")
+            log.info(f"App home view blocks: {view}")
             
             # Publish the view to Slack
             try:

@@ -17,9 +17,11 @@ class WelcomepageUser(Base):
     nickname = Column(String)
     greeting = Column(String, nullable=False)
     hi_yall_text = Column(String)
+    handwave_emoji = Column(JSON)
     handwave_emoji_url = Column(String)
     profile_photo_url = Column(String)
     wave_gif_url = Column(String)
+    pronunciation_text = Column(String)
     pronunciation_recording_url = Column(String)
     selected_prompts = Column(JSON, nullable=False)  # list of strings
     answers = Column(JSON, nullable=False)  # dict
@@ -57,9 +59,11 @@ class WelcomepageUser(Base):
             'nickname': self.nickname,
             'greeting': self.greeting,
             'hi_yall_text': self.hi_yall_text,
+            'handwaveEmoji': self.handwave_emoji,
             'handwaveEmojiUrl': self.handwave_emoji_url,
             'profilePhotoUrl': self.profile_photo_url,
             'waveGifUrl': self.wave_gif_url,
+            'pronunciationText': self.pronunciation_text,
             'pronunciationRecordingUrl': self.pronunciation_recording_url,
             'selectedPrompts': self.selected_prompts,
             'answers': self.answers,

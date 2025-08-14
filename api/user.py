@@ -196,6 +196,7 @@ async def upsert_user(
     team_id: int = Form(None),
     team_public_id: str = Form(None),  # Support team assignment by public ID
     slack_user_id: str = Form(None),  # Preserve Slack user ID
+    pronunciation_text: str = Form(None),  # Written pronunciation
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
@@ -209,8 +210,9 @@ async def upsert_user(
              f"nickname={nickname}, hi_yall_text={hi_yall_text}, handwave_emoji={handwave_emoji}, "
              f"handwave_emoji_url={handwave_emoji_url}, selected_prompts={selected_prompts}, "
              f"answers={'[JSON data]' if answers else None}, team_id={team_id}, team_public_id={team_public_id}, "
-             f"has_profile_photo={profile_photo is not None}, has_wave_gif={wave_gif is not None}, "
-             f"has_pronunciation_recording={pronunciation_recording is not None} slack_user_id={slack_user_id}")
+             f"pronunciation_text={pronunciation_text}, has_profile_photo={profile_photo is not None}, "
+             f"has_wave_gif={wave_gif is not None}, has_pronunciation_recording={pronunciation_recording is not None} "
+             f"slack_user_id={slack_user_id}")
     
     # Step 1: Process all file uploads first and get URLs
     form_data = await request.form()
@@ -258,6 +260,16 @@ async def upsert_user(
     except Exception as e:
         log.warning(f"Invalid answers JSON: {answers!r}. Using empty dict. Error: {e}")
         answers_dict = {}
+    
+    # Parse handwave_emoji JSON string if provided
+    parsed_handwave_emoji = None
+    if handwave_emoji:
+        try:
+            parsed_handwave_emoji = json.loads(handwave_emoji)
+            log.info(f"Parsed handwave_emoji: {parsed_handwave_emoji}")
+        except Exception as e:
+            log.warning(f"Invalid handwave_emoji JSON: {handwave_emoji!r}. Using None. Error: {e}")
+            parsed_handwave_emoji = None
     
     # Process dynamic prompt image uploads
     for field_name, file_data in form_data.items():
@@ -309,7 +321,7 @@ async def upsert_user(
     
     # Step 4: Save complete user record with all URLs in one database operation
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_recording_url, slack_user_id
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id
     )
 
     return WelcomepageUserDTO.model_validate(db_user)
@@ -321,7 +333,7 @@ async def upsert_user(
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
-    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_recording_url=None, slack_user_id=None
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None
 ):
     # All arguments are plain values, no FastAPI Form/File/Depends here
     # All business logic remains unchanged
@@ -409,6 +421,8 @@ def upsert_user_db_logic(
                 db_user.profile_photo_url = profile_photo_url
             if wave_gif_url:
                 db_user.wave_gif_url = wave_gif_url
+            if pronunciation_text is not None:
+                db_user.pronunciation_text = pronunciation_text
             if pronunciation_recording_url:
                 db_user.pronunciation_recording_url = pronunciation_recording_url
             
@@ -453,6 +467,7 @@ def upsert_user_db_logic(
                 is_draft=True,
                 profile_photo_url=profile_photo_url,
                 wave_gif_url=wave_gif_url,
+                pronunciation_text=pronunciation_text,
                 pronunciation_recording_url=pronunciation_recording_url,
 
                 created_at=datetime.now(timezone.utc),
