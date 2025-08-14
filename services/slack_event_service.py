@@ -96,9 +96,10 @@ class SlackEventService:
                 if team.slack_settings and team.slack_settings.get("slack_app"):
                     log.info(f"Removing Slack installation data for team {team.public_id}")
                     
-                    # Preserve other slack_settings but remove slack_app data
+                    # Preserve other slack_settings but remove slack_app data and auto_invite_users
                     existing_settings = team.slack_settings.copy()
                     existing_settings.pop("slack_app", None)  # Remove slack_app data
+                    existing_settings.pop("auto_invite_users", None)  # Remove auto_invite_users setting
                     team.slack_settings = existing_settings if existing_settings else None
                     
                     # Mark the database field as modified for SQLAlchemy

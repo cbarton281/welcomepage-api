@@ -526,6 +526,16 @@ class JoinTeamResponse(BaseModel):
     user_public_id: str
 
 
+class UpdateSlackSettingsRequest(BaseModel):
+    auto_invite_users: bool
+
+
+class UpdateSlackSettingsResponse(BaseModel):
+    success: bool
+    message: str
+    auto_invite_users: bool
+
+
 @router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
 async def join_team(
     public_id: str, 
@@ -593,3 +603,67 @@ async def join_team(
         db.rollback()
         log.error(f"Failed to join team: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to join team")
+
+
+@router.patch("/teams/{public_id}/slack-settings", response_model=UpdateSlackSettingsResponse)
+async def update_slack_settings(
+    public_id: str,
+    request: UpdateSlackSettingsRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Update Slack settings for a team.
+    Only ADMIN users can update Slack settings.
+    """
+    log = new_logger("update_slack_settings")
+    log.info(f"Updating Slack settings for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to update Slack settings for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only update settings for your own team")
+    
+    try:
+        # Get existing slack_settings or initialize empty dict
+        existing_settings = team.slack_settings or {}
+        
+        # Update the auto_invite_users setting
+        existing_settings["auto_invite_users"] = request.auto_invite_users
+        
+        # Update the team's slack_settings
+        team.slack_settings = dict(existing_settings)
+        
+        # Explicitly mark the field as modified for SQLAlchemy
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'slack_settings')
+        
+        db.commit()
+        db.refresh(team)
+        
+        log.info(f"Updated Slack settings for team {public_id}: auto_invite_users = {request.auto_invite_users}")
+        
+        return UpdateSlackSettingsResponse(
+            success=True,
+            message="Slack settings updated successfully",
+            auto_invite_users=request.auto_invite_users
+        )
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to update Slack settings for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update Slack settings")

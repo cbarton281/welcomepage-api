@@ -182,6 +182,9 @@ class SlackInstallationService:
             # Preserve existing settings and nest Slack app data under 'slack_app' property
             existing_settings["slack_app"] = slack_app_data
             
+            # Set auto_invite_users to true when Slack installation is performed
+            existing_settings["auto_invite_users"] = True
+            
             log.info(f"Updated slack_settings: {existing_settings}")
             
             # Create a new dict to ensure SQLAlchemy detects the change
@@ -350,10 +353,11 @@ class SlackInstallationService:
             if installation_data.user_token:
                 self._revoke_token(installation_data.user_token)
             
-            # Preserve other slack_settings but remove slack_app data
+            # Preserve other slack_settings but remove slack_app data and auto_invite_users
             if team.slack_settings:
                 existing_settings = team.slack_settings.copy()
                 existing_settings.pop("slack_app", None)  # Remove slack_app data
+                existing_settings.pop("auto_invite_users", None)  # Remove auto_invite_users setting
                 team.slack_settings = existing_settings if existing_settings else None
             else:
                 team.slack_settings = None
