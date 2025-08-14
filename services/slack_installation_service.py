@@ -325,3 +325,44 @@ class SlackInstallationService:
             log.error(f"Failed to uninstall Slack for team {team_identifier}: {str(e)}")
             self.db.rollback()
             return False
+
+    def check_custom_profile_field(self, team_identifier: str) -> bool:
+        """Check if the custom 'Welcomepage' profile field is configured in Slack workspace"""
+        log = new_logger("check_custom_profile_field")
+        log.info(f"Checking custom profile field for team {team_identifier}")
+        try:
+            # Get Slack installation for the team
+            installation = self.get_installation_for_team(team_identifier)
+            if not installation or not installation.bot_token:
+                log.warning(f"No Slack installation or bot token found for team {team_identifier}")
+                return False
+            
+            # Use bot token to check for custom profile fields
+            client = WebClient(token=installation.bot_token)
+            
+            # Call team.profile.get to get custom profile fields
+            response = client.team_profile_get()
+            
+            if not response.get("ok"):
+                log.error(f"Slack API error: {response.get('error', 'Unknown error')}")
+                return False
+            
+            # Check if 'Welcomepage' field exists in custom fields
+            profile = response.get("profile", {})
+            fields = profile.get("fields", [])
+            
+            for field in fields:
+                log.info(f"Checking field: {field}")
+                if field.get("label", "").lower() == "welcomepage":
+                    log.info(f"Found Welcomepage custom profile field for team {team_identifier}")
+                    return True
+            
+            log.info(f"Welcomepage custom profile field not found for team {team_identifier}")
+            return False
+            
+        except SlackApiError as e:
+            log.error(f"Slack API error checking custom profile field for team {team_identifier}: {e.response['error']}")
+            return False
+        except Exception as e:
+            log.error(f"Failed to check custom profile field for team {team_identifier}: {str(e)}")
+            return False

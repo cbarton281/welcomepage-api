@@ -208,6 +208,44 @@ async def cleanup_expired_states(
         raise HTTPException(status_code=500, detail="Failed to cleanup expired states")
 
 
+@router.get("/custom-profile-field/{team_public_id}")
+async def check_custom_profile_field(
+    team_public_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Check if the custom 'Welcomepage' profile field is configured in Slack workspace
+    Requires ADMIN role and team access
+    """
+    log = new_logger("check_custom_profile_field")
+    try:
+        # Verify user has admin role
+        if current_user.get("role") != "ADMIN":
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Verify user has access to this team
+        user_team_id = current_user.get("team_id")
+        if user_team_id != team_public_id:
+            raise HTTPException(status_code=403, detail="Access denied to this team")
+        
+        service = SlackInstallationService(db)
+        profile_configured = service.check_custom_profile_field(team_public_id)
+        
+        log.info(f"Custom profile field check for team {team_public_id}: {profile_configured}")
+        
+        return {
+            "profile_configured": profile_configured,
+            "team_id": team_public_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to check custom profile field: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to check custom profile field")
+
+
 @router.post("/events")
 async def handle_slack_events(
     request: Request,
