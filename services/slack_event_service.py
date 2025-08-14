@@ -92,23 +92,27 @@ class SlackEventService:
             if team:
                 log.info(f"Found team {team.public_id} for Slack team {team_id}")
                 
-                # Update slack_settings to mark as uninstalled
+                # Remove Slack installation data when app is uninstalled from Slack
                 if team.slack_settings and team.slack_settings.get("slack_app"):
-                    # existing_settings = team.slack_settings.copy()
-                    # slack_app_data = existing_settings.get("slack_app", {})
-                    # slack_app_data["uninstalled_at"] = datetime.utcnow().isoformat()
-                    # slack_app_data["is_installed"] = False
-                    # existing_settings["slack_app"] = slack_app_data
-                    # team.slack_settings = existing_settings
-                    # self.db.commit()
+                    log.info(f"Removing Slack installation data for team {team.public_id}")
                     
-                    log.info(f"Marked Slack app as uninstalled for team {team.public_id}")
+                    # Preserve other slack_settings but remove slack_app data
+                    existing_settings = team.slack_settings.copy()
+                    existing_settings.pop("slack_app", None)  # Remove slack_app data
+                    team.slack_settings = existing_settings if existing_settings else None
+                    
+                    # Mark the database field as modified for SQLAlchemy
+                    from sqlalchemy.orm.attributes import flag_modified
+                    flag_modified(team, "slack_settings")
+                    
+                    self.db.commit()
+                    log.info(f"Successfully removed Slack installation data for team {team.public_id}")
                 else:
                     log.warning(f"No slack_app data found for team {team.public_id}")
             else:
                 log.warning(f"Team not found for Slack team_id: {team_id}")
             
-            return {"status": "ok"}
+            return {"status": "ok", "message": "App uninstall event processed successfully"}
             
         except Exception as e:
             log.error(f"Error handling app_uninstalled event: {str(e)}")

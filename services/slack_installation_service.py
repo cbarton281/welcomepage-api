@@ -280,7 +280,18 @@ class SlackInstallationService:
             if not team or not team.slack_settings:
                 return None
             
-            return SlackInstallationData(**team.slack_settings.get("slack_app", {}))
+            # Check if slack_app data exists and has required fields
+            slack_app_data = team.slack_settings.get("slack_app")
+            if not slack_app_data or not isinstance(slack_app_data, dict):
+                return None
+            
+            # Verify that required fields exist before creating SlackInstallationData
+            required_fields = ['team_id', 'team_name', 'bot_token', 'user_id']
+            if not all(field in slack_app_data for field in required_fields):
+                log.warning(f"Slack installation data incomplete for team {team_identifier}, missing required fields")
+                return None
+            
+            return SlackInstallationData(**slack_app_data)
             
         except Exception as e:
             log.error(f"Failed to get installation for team {team_identifier}: {str(e)}")
@@ -300,13 +311,44 @@ class SlackInstallationService:
             if not team:
                 raise ValueError(f"Team not found: {team_identifier}")
             
-            # Revoke tokens before removing installation
+            # Get installation data before removing it
+            installation_data = None
             if team.slack_settings and team.slack_settings.get("slack_app"):
-                installation = SlackInstallationData(**team.slack_settings.get("slack_app"))
-                if installation.bot_token:
-                    self._revoke_token(installation.bot_token)
-                if installation.user_token:
-                    self._revoke_token(installation.user_token)
+                installation_data = SlackInstallationData(**team.slack_settings.get("slack_app"))
+            
+            if not installation_data:
+                log.warning(f"No Slack installation found for team {team_identifier}")
+                return True  # Already uninstalled
+            
+            # Call Slack apps.uninstall API to uninstall from Slack workspace
+            try:
+                if installation_data.bot_token:
+                    client = WebClient(token=installation_data.bot_token)
+                    uninstall_response = client.apps_uninstall(
+                        client_id=self.client_id,
+                        client_secret=self.client_secret
+                    )
+                    
+                    if uninstall_response.get("ok"):
+                        log.info(f"Successfully uninstalled app from Slack workspace for team {team_identifier}")
+                    else:
+                        log.warning(f"Slack apps.uninstall API returned error: {uninstall_response.get('error', 'Unknown error')}")
+                        # Continue with local cleanup even if Slack API fails
+                else:
+                    log.warning(f"No bot token found for team {team_identifier}, skipping Slack API uninstall")
+                    
+            except SlackApiError as e:
+                log.error(f"Slack API error during uninstall for team {team_identifier}: {e.response.get('error', str(e))}")
+                # Continue with local cleanup even if Slack API fails
+            except Exception as e:
+                log.error(f"Unexpected error calling Slack apps.uninstall for team {team_identifier}: {str(e)}")
+                # Continue with local cleanup even if Slack API fails
+            
+            # Revoke tokens after uninstalling from Slack
+            if installation_data.bot_token:
+                self._revoke_token(installation_data.bot_token)
+            if installation_data.user_token:
+                self._revoke_token(installation_data.user_token)
             
             # Preserve other slack_settings but remove slack_app data
             if team.slack_settings:
@@ -316,6 +358,8 @@ class SlackInstallationService:
             else:
                 team.slack_settings = None
             
+            # Mark the database field as modified for SQLAlchemy
+            flag_modified(team, "slack_settings")
             self.db.commit()
             
             log.info(f"Uninstalled Slack for team {team_identifier}")
