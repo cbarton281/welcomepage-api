@@ -527,13 +527,15 @@ class JoinTeamResponse(BaseModel):
 
 
 class UpdateSlackSettingsRequest(BaseModel):
-    auto_invite_users: bool
+    auto_invite_users: Optional[bool] = None
+    publish_channel: Optional[str] = None
 
 
 class UpdateSlackSettingsResponse(BaseModel):
     success: bool
     message: str
-    auto_invite_users: bool
+    auto_invite_users: Optional[bool] = None
+    publish_channel: Optional[str] = None
 
 
 @router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
@@ -605,6 +607,45 @@ async def join_team(
         raise HTTPException(status_code=500, detail="Failed to join team")
 
 
+@router.get("/teams/{public_id}/slack-settings")
+async def get_slack_settings(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Get Slack settings for a team.
+    Only ADMIN users can access Slack settings.
+    """
+    log = new_logger("get_slack_settings")
+    log.info(f"Getting Slack settings for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to access Slack settings for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only access settings for your own team")
+    
+    # Return slack_settings or empty dict if none exist
+    slack_settings = team.slack_settings or {}
+    log.info(f"Retrieved Slack settings for team {public_id}: {slack_settings}")
+    
+    return slack_settings
+
+
 @router.patch("/teams/{public_id}/slack-settings", response_model=UpdateSlackSettingsResponse)
 async def update_slack_settings(
     public_id: str,
@@ -639,11 +680,19 @@ async def update_slack_settings(
         raise HTTPException(status_code=403, detail="Access denied: You can only update settings for your own team")
     
     try:
+        # Validate that at least one field is provided
+        if request.auto_invite_users is None and request.publish_channel is None:
+            raise HTTPException(status_code=400, detail="At least one field must be provided")
+        
         # Get existing slack_settings or initialize empty dict
         existing_settings = team.slack_settings or {}
         
-        # Update the auto_invite_users setting
-        existing_settings["auto_invite_users"] = request.auto_invite_users
+        # Update the settings based on what was provided
+        if request.auto_invite_users is not None:
+            existing_settings["auto_invite_users"] = request.auto_invite_users
+            
+        if request.publish_channel is not None:
+            existing_settings["publish_channel"] = request.publish_channel
         
         # Update the team's slack_settings
         team.slack_settings = dict(existing_settings)
@@ -655,12 +704,13 @@ async def update_slack_settings(
         db.commit()
         db.refresh(team)
         
-        log.info(f"Updated Slack settings for team {public_id}: auto_invite_users = {request.auto_invite_users}")
+        log.info(f"Updated Slack settings for team {public_id}: auto_invite_users = {request.auto_invite_users}, publish_channel = {request.publish_channel}")
         
         return UpdateSlackSettingsResponse(
             success=True,
             message="Slack settings updated successfully",
-            auto_invite_users=request.auto_invite_users
+            auto_invite_users=existing_settings.get("auto_invite_users"),
+            publish_channel=existing_settings.get("publish_channel")
         )
         
     except Exception as e:
