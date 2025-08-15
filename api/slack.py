@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import os
 import json
+import logging
 
 from database import get_db
 from services.slack_installation_service import SlackInstallationService
@@ -13,6 +14,8 @@ from utils.jwt_auth import get_current_user
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
 from utils.slack_signature_verifier import SlackSignatureVerifier
+from slack import WebClient
+from models.welcomepage_user import WelcomepageUser
 
 router = APIRouter()
 
@@ -298,3 +301,104 @@ async def handle_slack_events(
         log.error(f"Failed to handle Slack event: {str(e)}")
         # Return 200 to prevent Slack from retrying
         return {"status": "error", "message": str(e)}
+
+
+@router.get("/channels")
+async def search_slack_channels(
+    query: str = Query(..., min_length=3, description="Channel name search query (minimum 3 characters)"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Search for public Slack channels in the team's connected workspace.
+    Requires minimum 3 characters for search query.
+    """
+    log = new_logger("search_slack_channels")
+    log.info(f"Starting channel search for query: '{query}'")
+    log.info(f"Current user: {current_user}")
+    
+    try:
+        # Get user's team
+        user_public_id = current_user.get('public_id')
+        log.info(f"Looking up user with public_id: {user_public_id}")
+        
+        user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
+        if not user:
+            log.error(f"User not found for public_id: {user_public_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        log.info(f"Found user: {user.public_id}, team_id: {user.team_id}")
+        
+        # Check if user has a team
+        if not user.team:
+            log.error(f"User {user_public_id} has no team associated")
+            raise HTTPException(status_code=404, detail="User has no team")
+        
+        log.info(f"User team public_id: {user.team.public_id}")
+        
+        # Get team's Slack installation
+        installation_service = SlackInstallationService(db)
+        log.info(f"Getting Slack installation for team: {user.team.public_id}")
+        
+        installation = installation_service.get_installation_for_team(user.team.public_id)
+        
+        if not installation:
+            log.error(f"No Slack installation found for team: {user.team.public_id}")
+            raise HTTPException(status_code=404, detail="No Slack integration found for this team")
+        
+        log.info(f"Found Slack installation, bot_token exists: {bool(installation.bot_token)}")
+        
+        # Initialize Slack client with bot token
+        slack_client = WebClient(token=installation.bot_token)
+        log.info("Initialized Slack WebClient")
+        
+        # Fetch public channels
+        log.info("Calling Slack conversations_list API")
+        response = slack_client.conversations_list(
+            types="public_channel",
+            exclude_archived=True,
+            limit=50  # Reasonable limit for search results
+        )
+        
+        log.info(f"Slack API response ok: {response.get('ok', False)}")
+        
+        if not response["ok"]:
+            error_msg = response.get('error', 'Unknown error')
+            log.error(f"Slack API error: {error_msg}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch channels from Slack: {error_msg}")
+        
+        # Filter channels by search query (case-insensitive)
+        channels = response["channels"]
+        log.info(f"Retrieved {len(channels)} channels from Slack")
+        
+        query_lower = query.lower()
+        
+        matching_channels = [
+            {
+                "id": channel["id"],
+                "name": channel["name"]
+            }
+            for channel in channels
+            if query_lower in channel["name"].lower()
+        ]
+        
+        log.info(f"Found {len(matching_channels)} matching channels")
+        
+        # Sort by relevance (exact matches first, then alphabetical)
+        matching_channels.sort(key=lambda ch: (
+            not ch["name"].lower().startswith(query_lower),  # Exact matches first
+            ch["name"].lower()  # Then alphabetical
+        ))
+        
+        # Limit results to prevent overwhelming UI
+        result = matching_channels[:20]
+        log.info(f"Returning {len(result)} channels")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        log.error(f"Error searching Slack channels: {str(e)}")
+        log.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Internal server error while searching channels")
