@@ -2,15 +2,13 @@ import httpx
 import os
 import json
 import logging
-from typing import Optional, List
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Query
+from typing import Optional, List, Dict, Any, Union
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, UploadFile, File
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import OperationalError
-from sqlalchemy import desc, asc, func
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+from sqlalchemy.exc import OperationalError, IntegrityError, DataError, DatabaseError
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 
 from database import get_db
 from models.team import Team
@@ -468,13 +466,14 @@ def upsert_team_db_logic(
         db.refresh(team)
         log.info(f"Upserted team: {team.to_dict()}")
         return team
-    except OperationalError as e:
+    except OperationalError:
+        # These exceptions are handled by the @retry decorator - let them bubble up
         db.rollback()
-        log.exception("OperationalError in verify_code_with_retry, will retry.")
-        raise  # trigger the retry
+        raise
     except Exception as e:
+        # Only catch non-retryable exceptions here
         db.rollback()
-        log.error(f"DB error: {str(e)}")
+        log.error(f"Non-retryable DB error: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to upsert team")
 
 
@@ -487,6 +486,12 @@ class TeamInfoResponse(BaseModel):
 
 
 @router.get("/teams/{public_id}/info", response_model=TeamInfoResponse)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(team_retry_logger, logging.WARNING)
+)
 async def get_team_info(public_id: str, db: Session = Depends(get_db)):
     """
     Get basic team information for invitation purposes.
@@ -526,16 +531,21 @@ class JoinTeamResponse(BaseModel):
     user_public_id: str
 
 
+class SlackChannelData(BaseModel):
+    id: str  # Channel ID like C0123ABCDEF or G0123ABCDEF
+    name: str  # Channel name like "general"
+
+
 class UpdateSlackSettingsRequest(BaseModel):
     auto_invite_users: Optional[bool] = None
-    publish_channel: Optional[str] = None
+    publish_channel: Optional[SlackChannelData] = None  # Only accept channel object with id and name
 
 
 class UpdateSlackSettingsResponse(BaseModel):
     success: bool
     message: str
     auto_invite_users: Optional[bool] = None
-    publish_channel: Optional[str] = None
+    publish_channel: Optional[SlackChannelData] = None
 
 
 @router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
@@ -692,7 +702,12 @@ async def update_slack_settings(
             existing_settings["auto_invite_users"] = request.auto_invite_users
             
         if request.publish_channel is not None:
-            existing_settings["publish_channel"] = request.publish_channel
+            # Convert SlackChannelData model to dict for JSON storage
+            if request.publish_channel:
+                existing_settings["publish_channel"] = {
+                    "id": request.publish_channel.id,
+                    "name": request.publish_channel.name
+                }
         
         # Update the team's slack_settings
         team.slack_settings = dict(existing_settings)

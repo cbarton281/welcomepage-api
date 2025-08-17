@@ -4,20 +4,28 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from urllib.parse import urlencode
 
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
+from typing import Dict, Any, Optional
+from urllib.parse import urlencode
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
-
+from sqlalchemy.exc import OperationalError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+from slack_sdk.errors import SlackApiError
+from slack_sdk import WebClient
+import logging
 from models.team import Team
 from models.slack_state_store import SlackStateStore
 from models.welcomepage_user import WelcomepageUser
-from schemas.slack import SlackInstallationData, SlackOAuthStartResponse, SlackInstallationResponse
+from schemas.slack import SlackOAuthStartResponse, SlackInstallationResponse, SlackInstallationData
 from utils.slack_state_manager import SlackStateManager
 from utils.logger_factory import new_logger
+import os
+import requests
 
-
-
+# Create retry loggers
+installation_retry_logger = new_logger("slack_installation_retry")
+user_update_retry_logger = new_logger("slack_user_update_retry")
+uninstall_retry_logger = new_logger("slack_uninstall_retry")
 
 class SlackInstallationService:
     """Service for handling Slack OAuth installation flow"""
@@ -149,6 +157,12 @@ class SlackInstallationService:
             installer_user_id=installer.get("id")
         )
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(OperationalError),
+        before_sleep=before_sleep_log(installation_retry_logger, logging.WARNING)
+    )
     def _save_installation_to_team(self, team_identifier: str, installation_data: SlackInstallationData):
         """Save Slack installation data to team's slack_settings"""
         log = new_logger("save_installation_to_team")
@@ -206,6 +220,12 @@ class SlackInstallationService:
             self.db.rollback()
             raise
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(OperationalError),
+        before_sleep=before_sleep_log(user_update_retry_logger, logging.WARNING)
+    )
     def _update_user_slack_id(self, team_identifier: str, slack_user_id: str):
         """Update user's Slack ID"""
         log = new_logger("update_user_slack_id")
@@ -269,37 +289,13 @@ class SlackInstallationService:
         except Exception as e:
             log.error(f"Unexpected error during token revocation: {e}")
     
-    def get_installation_for_team(self, team_identifier: str) -> Optional[SlackInstallationData]:
-        """Get Slack installation data for a team"""
-        log = new_logger("get_installation_for_team")
-        try:
-            # Try to find team by ID first (for hardcoded team_id=1), then by public_id
-            team = None
-            if team_identifier.isdigit():
-                team = self.db.query(Team).filter_by(id=int(team_identifier)).first()
-            else:
-                team = self.db.query(Team).filter_by(public_id=team_identifier).first()
-            
-            if not team or not team.slack_settings:
-                return None
-            
-            # Check if slack_app data exists and has required fields
-            slack_app_data = team.slack_settings.get("slack_app")
-            if not slack_app_data or not isinstance(slack_app_data, dict):
-                return None
-            
-            # Verify that required fields exist before creating SlackInstallationData
-            required_fields = ['team_id', 'team_name', 'bot_token', 'user_id']
-            if not all(field in slack_app_data for field in required_fields):
-                log.warning(f"Slack installation data incomplete for team {team_identifier}, missing required fields")
-                return None
-            
-            return SlackInstallationData(**slack_app_data)
-            
-        except Exception as e:
-            log.error(f"Failed to get installation for team {team_identifier}: {str(e)}")
-            return None
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(OperationalError),
+        before_sleep=before_sleep_log(uninstall_retry_logger, logging.WARNING)
+    )
     def uninstall_slack(self, team_identifier: str) -> bool:
         """Remove Slack installation from team"""
         log = new_logger("uninstall_slack")
@@ -379,14 +375,30 @@ class SlackInstallationService:
         log = new_logger("check_custom_profile_field")
         log.info(f"Checking custom profile field for team {team_identifier}")
         try:
-            # Get Slack installation for the team
-            installation = self.get_installation_for_team(team_identifier)
-            if not installation or not installation.bot_token:
-                log.warning(f"No Slack installation or bot token found for team {team_identifier}")
+            # Get team data
+            team = None
+            if team_identifier.isdigit():
+                team = self.db.query(Team).filter_by(id=int(team_identifier)).first()
+            else:
+                team = self.db.query(Team).filter_by(public_id=team_identifier).first()
+            
+            if not team or not team.slack_settings:
+                log.warning(f"No team or Slack settings found for team {team_identifier}")
+                return False
+            
+            # Get Slack installation from team settings
+            slack_app_data = team.slack_settings.get("slack_app")
+            if not slack_app_data or not isinstance(slack_app_data, dict):
+                log.warning(f"No Slack app installation found for team {team_identifier}")
+                return False
+            
+            bot_token = slack_app_data.get('bot_token')
+            if not bot_token:
+                log.warning(f"No bot token found for team {team_identifier}")
                 return False
             
             # Use bot token to check for custom profile fields
-            client = WebClient(token=installation.bot_token)
+            client = WebClient(token=bot_token)
             
             # Call team.profile.get to get custom profile fields
             response = client.team_profile_get()

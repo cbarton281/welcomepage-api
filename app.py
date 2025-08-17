@@ -61,6 +61,7 @@ from api.id_check import router as id_check_router
 from api.visits import router as visits_router
 from api.healthcheck import router as health_router
 from api.slack import router as slack_router
+from api.slack_publish import router as slack_publish_router
 from api.deployment import router as deployment_router
 
 app.include_router(users_router, prefix="/api")
@@ -71,4 +72,5 @@ app.include_router(id_check_router, prefix="/api")
 app.include_router(visits_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(slack_router, prefix="/api/slack")
+app.include_router(slack_publish_router, prefix="/api/slack")
 app.include_router(deployment_router, prefix="/api")

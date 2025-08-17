@@ -1,12 +1,24 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+import logging
 from database import get_db
 from utils.logger_factory import new_logger
+
+# Create retry logger
+health_retry_logger = new_logger("health_check_retry")
 
 router = APIRouter()
 
 @router.get("/health")
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(health_retry_logger, logging.WARNING)
+)
 def health_check(db: Session = Depends(get_db)):
     """
     Health check endpoint that performs a benign database operation
@@ -41,12 +53,16 @@ def health_check(db: Session = Depends(get_db)):
                 }
             )
             
+    except OperationalError:
+        # These exceptions are handled by the @retry decorator - let them bubble up
+        raise
     except Exception as e:
-        log.error(f"Health check failed with exception: {str(e)}")
+        # Only catch non-retryable exceptions here
+        log.error(f"Health check failed with non-retryable exception: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail={
-                "status": "unhealthy", 
+                "status": "unhealthy",
                 "message": "Database connection failed",
                 "database": "disconnected",
                 "error": str(e)

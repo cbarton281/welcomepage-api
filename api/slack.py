@@ -8,13 +8,16 @@ import logging
 
 from database import get_db
 from services.slack_installation_service import SlackInstallationService
-from services.slack_event_service import SlackEventService
-from schemas.slack import SlackOAuthStartResponse, SlackInstallationResponse
+from models.slack_state_store import SlackStateStore
+from models.team import Team
+from models.welcomepage_user import WelcomepageUser
+from schemas.slack import SlackInstallationData, SlackOAuthStartResponse, SlackInstallationResponse
 from utils.jwt_auth import get_current_user
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
 from utils.slack_signature_verifier import SlackSignatureVerifier
 from slack import WebClient
+from services.slack_event_service import SlackEventService
 from models.welcomepage_user import WelcomepageUser
 
 router = APIRouter()
@@ -112,7 +115,7 @@ async def slack_oauth_callback(
 async def get_slack_installation(
     team_public_id: str,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user =Depends(require_roles("ADMIN"))
 ):
     """
     Get Slack installation status for a team
@@ -124,28 +127,82 @@ async def get_slack_installation(
         if user_team_id != team_public_id:
             raise HTTPException(status_code=403, detail="Access denied to this team")
         
-        service = SlackInstallationService(db)
-        installation = service.get_installation_for_team(team_public_id)
+        # Get team data directly
+        team = db.query(Team).filter_by(public_id=team_public_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
         
-        if not installation:
-            return {"installed": False, "message": "Slack not installed for this team"}
+        if not team.slack_settings or not isinstance(team.slack_settings, dict):
+            raise HTTPException(status_code=404, detail="No Slack integration found for this team")
         
-        # Return safe installation info (no tokens)
+        slack_app_data = team.slack_settings.get("slack_app")
+        if not slack_app_data or not isinstance(slack_app_data, dict):
+            raise HTTPException(status_code=404, detail="No Slack integration found for this team")
+        
+        # Return safe installation info (no tokens) - flatten the structure to match frontend expectations
         return {
-            "installed": True,
-            "team_id": installation.team_id,
-            "team_name": installation.team_name,
-            "enterprise_id": installation.enterprise_id,
-            "enterprise_name": installation.enterprise_name,
-            "is_enterprise_install": installation.is_enterprise_install,
-            "installed_at": installation.installed_at,
-            "bot_scopes": installation.bot_scopes,
-            "user_scopes": installation.user_scopes
+            "team_id": slack_app_data.get("team_id"),
+            "team_name": slack_app_data.get("team_name"),
+            "enterprise_id": slack_app_data.get("enterprise_id"),
+            "enterprise_name": slack_app_data.get("enterprise_name"),
+            "is_enterprise_install": slack_app_data.get("is_enterprise_install", False),
+            "installed_at": slack_app_data.get("installed_at"),
+            "bot_scopes": slack_app_data.get("bot_scopes", []),
+            "user_scopes": slack_app_data.get("user_scopes", [])
         }
         
     except Exception as e:
         log.error(f"Failed to get installation status: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get installation status")
+
+
+@router.get("/status/{team_public_id}")
+async def get_slack_status(
+    team_public_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Get minimal Slack status for regular users (read-only)
+    Returns only: hasInstallation (bool) and publishChannel (string|null)
+    """
+    log = new_logger("get_slack_status")
+    log.info(f"🔍 SLACK STATUS REQUEST - User ID: {current_user.get('user_id')}, Role: {current_user.get('role')}, Team ID: {current_user.get('team_id')} Team Public ID: {team_public_id}")
+    try:
+        # Verify user has access to this team
+        user_team_id = current_user.get("team_id")
+        if user_team_id != team_public_id:
+            raise HTTPException(status_code=403, detail="Access denied to this team")
+        
+        # Get team to access slack_settings directly
+        team = db.query(Team).filter_by(public_id=team_public_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        # Check if Slack installation exists in team settings
+        slack_settings = team.slack_settings or {}
+        slack_app_data = slack_settings.get("slack_app")
+        
+        if not slack_app_data or not isinstance(slack_app_data, dict):
+            return {
+                "hasInstallation": False,
+                "publishChannel": None
+            }
+        
+        # Get publish_channel from team.slack_settings (not from installation data)
+        slack_settings = team.slack_settings or {}
+        publish_channel_data = slack_settings.get("publish_channel")
+        
+        # Return minimal status data for regular users
+        return {
+            "hasInstallation": True,
+            "publishChannel": publish_channel_data,  # Expect object with id and name
+            "teamName": slack_app_data.get("team_name")
+        }
+        
+    except Exception as e:
+        log.error(f"Failed to get Slack status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get Slack status")
 
 
 @router.delete("/installation/{team_public_id}")
@@ -336,20 +393,26 @@ async def search_slack_channels(
         
         log.info(f"User team public_id: {user.team.public_id}")
         
-        # Get team's Slack installation
-        installation_service = SlackInstallationService(db)
-        log.info(f"Getting Slack installation for team: {user.team.public_id}")
-        
-        installation = installation_service.get_installation_for_team(user.team.public_id)
-        
-        if not installation:
-            log.error(f"No Slack installation found for team: {user.team.public_id}")
+        # Get team's Slack installation from team settings
+        team = user.team
+        if not team.slack_settings or not isinstance(team.slack_settings, dict):
+            log.error(f"No Slack settings found for team: {team.public_id}")
             raise HTTPException(status_code=404, detail="No Slack integration found for this team")
         
-        log.info(f"Found Slack installation, bot_token exists: {bool(installation.bot_token)}")
+        slack_app_data = team.slack_settings.get("slack_app")
+        if not slack_app_data or not isinstance(slack_app_data, dict):
+            log.error(f"No Slack app installation found for team: {team.public_id}")
+            raise HTTPException(status_code=404, detail="No Slack integration found for this team")
+        
+        bot_token = slack_app_data.get('bot_token')
+        if not bot_token:
+            log.error(f"No bot token found in Slack installation for team: {team.public_id}")
+            raise HTTPException(status_code=404, detail="Slack integration is incomplete")
+        
+        log.info(f"Found Slack installation, bot_token exists: {bool(bot_token)}")
         
         # Initialize Slack client with bot token
-        slack_client = WebClient(token=installation.bot_token)
+        slack_client = WebClient(token=bot_token)
         log.info("Initialized Slack WebClient")
         
         # Fetch public channels

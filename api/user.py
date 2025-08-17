@@ -2,7 +2,7 @@ import json
 import logging
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, IntegrityError, DataError, DatabaseError
 from sqlalchemy import text
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from models.welcomepage_user import WelcomepageUser
@@ -59,13 +59,14 @@ def update_auth_fields(
     try:
         db.commit()
         db.refresh(user)
-    except OperationalError as e:
+    except OperationalError:
+        # These exceptions are handled by the @retry decorator - let them bubble up
         db.rollback()
-        log.exception("OperationalError in verify_code_with_retry, will retry.")
-        raise  # trigger the retry
+        raise
     except Exception as e:
+        # Only catch non-retryable exceptions here
         db.rollback()
-        log.exception("Database commit/refresh failed in update_auth_fields.")
+        log.exception("Non-retryable database error in update_auth_fields.")
         raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     log.info(f"Updated user [{user.public_id}] with auth_email [{user.auth_email}] and auth_role [{user.auth_role}]")
     return WelcomepageUserDTO.model_validate(user)
@@ -329,7 +330,7 @@ async def upsert_user(
 @retry(
     stop=stop_after_attempt(5),  # Increased attempts for connection issues
     wait=wait_exponential(multiplier=1, min=2, max=15),  # Longer max wait for connection recovery
-    retry=retry_if_exception_type((OperationalError, Exception)),  # Catch broader exceptions
+    retry=retry_if_exception_type((OperationalError, IntegrityError, DataError, DatabaseError)),  # Only retry database exceptions
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
@@ -491,9 +492,9 @@ def upsert_user_db_logic(
         return db_user, user_identifier, db_user.public_id
     except HTTPException as http_exc:
         raise http_exc
-    except Exception as e:
-        log.exception("Unhandled exception in upsert_user")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except (OperationalError, Exception):
+        # OperationalError and Exception are both in retry_if_exception_type - let them bubble up
+        raise
 
 
 @router.get("/users/{public_id}", response_model=WelcomepageUserDTO)
@@ -582,9 +583,13 @@ def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends
     except OperationalError:
         db.rollback()
         raise  # trigger the retry
+    except OperationalError:
+        # These exceptions are handled by the @retry decorator - let them bubble up
+        raise
     except Exception as e:
+        # Only catch non-retryable exceptions here
         db.rollback()
-        log.exception("Database error in get_user.")
+        log.exception("Non-retryable database error in get_user.")
         raise HTTPException(status_code=500, detail="Database error. Please try again later.")
 
 @router.get("/users/peer-data/{team_public_id}", response_model=PeerDataResponse)
@@ -668,9 +673,13 @@ def get_peer_data(team_public_id: str, db: Session = Depends(get_db), current_us
     except OperationalError:
         db.rollback()
         raise  # trigger the retry
+    except OperationalError:
+        # These exceptions are handled by the @retry decorator - let them bubble up
+        raise
     except Exception as e:
+        # Only catch non-retryable exceptions here
         db.rollback()
-        log.exception("Database error in get_peer_data.")
+        log.exception("Non-retryable database error in get_peer_data.")
         raise HTTPException(status_code=500, detail="Database error. Please try again later.")
     
     # LEGACY SAMPLE DATA - DO NOT DELETE

@@ -1,5 +1,7 @@
 select slack_user_id, * from welcomepage_users where auth_email like 'charles.barton@gmail.com'
 
+select * from welcomepage_users where public_id = 'e7i1vk3namqhj0qvkgeh'
+
 select  * from welcomepage_users order by id desc where public_id = 'vd71ukv0q2'
 
 select auth_email, auth_role, * from welcomepage_users 

@@ -1,5 +1,8 @@
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
+import logging
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -12,6 +15,11 @@ from utils.logger_factory import new_logger
 from services.slack_blocks_service import SlackBlocksService
 import os
 from urllib.parse import urlencode
+
+# Create retry loggers
+event_retry_logger = new_logger("slack_event_retry")
+uninstall_event_retry_logger = new_logger("slack_uninstall_event_retry")
+team_join_retry_logger = new_logger("slack_team_join_retry")
 
 
 class SlackEventService:
@@ -74,6 +82,12 @@ class SlackEventService:
             log.error("No challenge found in URL verification request")
             return {"status": "error", "message": "No challenge found"}
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(OperationalError),
+        before_sleep=before_sleep_log(uninstall_event_retry_logger, logging.WARNING)
+    )
     def _handle_app_uninstalled(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Handle app uninstalled event"""
         log = new_logger("app_uninstalled")
@@ -115,15 +129,25 @@ class SlackEventService:
             
             return {"status": "ok", "message": "App uninstall event processed successfully"}
             
+        except OperationalError:
+            # These exceptions are handled by the @retry decorator - let them bubble up
+            raise
         except Exception as e:
-            log.error(f"Error handling app_uninstalled event: {str(e)}")
+            # Only catch non-retryable exceptions here
+            log.error(f"Non-retryable error handling app_uninstalled event: {str(e)}")
             self.db.rollback()
             return {"status": "error", "message": str(e)}
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(OperationalError),
+        before_sleep=before_sleep_log(team_join_retry_logger, logging.WARNING)
+    )
     def _handle_team_join(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle team join event (new user joins Slack workspace)"""
+        """Handle team_join event when a new user joins the Slack workspace"""
         log = new_logger("team_join")
-        log.info("Handling team join event")
+        log.info("Handling team_join event")
         
         try:
             event_data = payload.get("event", {})
@@ -156,8 +180,12 @@ class SlackEventService:
             log.info(f"Would send invitation to user {user_data.get('id')} in team {team_id}")
             return {"status": "ok", "message": "Team join event processed"}
             
+        except OperationalError:
+            # These exceptions are handled by the @retry decorator - let them bubble up
+            raise
         except Exception as e:
-            log.error(f"Error handling team_join event: {str(e)}")
+            # Only catch non-retryable exceptions here
+            log.error(f"Non-retryable error handling team_join event: {str(e)}")
             return {"status": "error", "message": str(e)}
     
     def _handle_user_profile_changed(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -189,6 +217,7 @@ class SlackEventService:
             return {"status": "ok", "message": "Profile change event processed"}
             
         except Exception as e:
+            # No @retry decorator on this method, so handle normally
             log.error(f"Error handling user_profile_changed event: {str(e)}")
             return {"status": "error", "message": str(e)}
     
@@ -217,14 +246,23 @@ class SlackEventService:
             
             log.info(f"Found team {team.public_id} for Slack team {team_id}")
             
-            # Get Slack installation data to create WebClient
-            installation = self.installation_service.get_installation_for_team(team.public_id)
-            if not installation or not installation.bot_token:
-                log.error(f"No Slack installation found for team {team.public_id}")
+            # Get Slack installation data from team settings
+            if not team.slack_settings or not isinstance(team.slack_settings, dict):
+                log.error(f"No Slack settings found for team {team.public_id}")
+                return {"status": "error", "message": "Slack installation not found"}
+            
+            slack_app_data = team.slack_settings.get("slack_app")
+            if not slack_app_data or not isinstance(slack_app_data, dict):
+                log.error(f"No Slack app installation found for team {team.public_id}")
+                return {"status": "error", "message": "Slack installation not found"}
+            
+            bot_token = slack_app_data.get('bot_token')
+            if not bot_token:
+                log.error(f"No bot token found in Slack installation for team {team.public_id}")
                 return {"status": "error", "message": "Slack installation not found"}
             
             # Create Slack WebClient
-            client = WebClient(token=installation.bot_token)
+            client = WebClient(token=bot_token)
             
             # Get user profile from Slack
             try:
@@ -312,6 +350,7 @@ class SlackEventService:
                 return {"status": "error", "message": f"Slack API error: {e.response['error']}"}
             
         except Exception as e:
+            # No @retry decorator on this method, so handle normally
             log.error(f"Error handling app_home_opened event: {str(e)}")
             return {"status": "error", "message": str(e)}
 
