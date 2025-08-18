@@ -26,7 +26,14 @@ async def upload_to_supabase_storage(file_content: bytes, filename: str, content
         res = supabase.storage.from_(SUPABASE_BUCKET).upload(
             path=filename,
             file=file_content,
-            file_options={"content-type": content_type, "upsert": "true"}
+            file_options={
+                "content-type": content_type,
+                "cache-control": "max-age=31536000" if content_type == "image/gif" else "max-age=3600",
+                "upsert": "true",
+                "x-amz-acl": "public-read",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, HEAD"
+            }
         )
         if hasattr(res, "error") and res.error:
             raise Exception(f"Supabase upload failed: {res.error}")

@@ -156,6 +156,8 @@ class SlackPublishService:
                 team_data=team_data,
                 custom_msg=custom_message
             )
+            log.info(f"blocks {blocks}")
+            log.info(f"custom_message [{custom_message}]")
             
             # Post to Slack
             client = WebClient(token=bot_token)

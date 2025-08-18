@@ -230,17 +230,13 @@ async def upsert_user(
         )
         log.info(f"Uploaded profile photo: {profile_photo_url}")
     
-    # Handle wave gif upload
+    # Handle wave video upload and conversion
     wave_gif_url = None
     if wave_gif:
-        gif_filename = f"{generate_file_id(public_id)}-wave-gif"
-        content = await wave_gif.read()
-        wave_gif_url = await upload_to_supabase_storage(
-            file_content=content,
-            filename=gif_filename,
-            content_type=wave_gif.content_type or "image/gif"
-        )
-        log.info(f"Uploaded wave gif: {wave_gif_url}")
+        from services.wave_video_service import WaveVideoService
+        wave_service = WaveVideoService()
+        wave_gif_url = await wave_service.process_wave_video(wave_gif, public_id)
+        log.info(f"Processed and uploaded wave video/gif: {wave_gif_url}")
     
     # Handle pronunciation recording upload
     pronunciation_recording_url = None

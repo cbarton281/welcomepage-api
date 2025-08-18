@@ -25,7 +25,7 @@ class SlackBlocksService:
             resp = requests.head(image_url, timeout=2)
             log.info(f"Image validation - status: {resp.status_code}, content-type: {resp.headers.get('Content-Type', '')}")
             
-            if resp.status_code == 200 and resp.headers.get('Content-Type', '').startswith('image/'):
+            if resp.status_code == 200 and (resp.headers.get('Content-Type', '').startswith('image/') or resp.headers.get('Content-Type', '').startswith('video/webm')):
                 return image_url
         except Exception as e:
             log.info(f"Exception validating image_url {image_url}: {str(e)}")
@@ -292,10 +292,11 @@ class SlackBlocksService:
         
         welcome_str = f"Welcome <@{slack_user_id}>!" if slack_user_id else f"Welcome {full_name}!"
         
-        # Validate wave gif URL
-        if wave_gif_url:
-            wave_gif_url = SlackBlocksService.get_valid_image_url(wave_gif_url)
-        else:
+        # Handle wave gif URL
+        if not wave_gif_url:
+            wave_gif_url = f"{wp_webapp_url}/default_wave.gif"
+        elif not wave_gif_url.endswith('.gif'):
+            log.warning(f"Wave URL {wave_gif_url} is not a GIF, using default")
             wave_gif_url = f"{wp_webapp_url}/default_wave.gif"
         
         blocks = [
@@ -308,8 +309,14 @@ class SlackBlocksService:
             },
             {
                 "type": "image",
+                "title": {
+                    "type": "plain_text",
+                    "text": f"{nickname}'s Wave",
+                    "emoji": True
+                },
+                "block_id": "wave_gif",
                 "image_url": wave_gif_url,
-                "alt_text": f"Welcomepage photo for {full_name}"
+                "alt_text": f"Wave animation from {full_name}"
             },
             {
                 "type": "section",
