@@ -13,3 +13,5 @@ tenacity
 slack-sdk
 requests
 aiohttp
+imageio-ffmpeg
+
