@@ -201,7 +201,8 @@ async def upsert_user(
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))
 ):
     log = new_logger("upsert_user")
     
@@ -303,9 +304,26 @@ async def upsert_user(
             
             log.info(f"Uploaded prompt image for '{prompt_text}': {image_url}")
     
-    # Step 3: Handle team assignment - convert team_public_id to team_id if provided
+    # Step 3: Handle team assignment - extract from JWT if not provided in form data
     effective_team_id = team_id
-    if team_public_id and not team_id:
+    
+    # If no team_id provided in form data, extract from JWT
+    if effective_team_id is None:
+        jwt_team_id = current_user.get('team_id')
+        if jwt_team_id:
+            log.info(f"Using team from JWT: {jwt_team_id}")
+            # Convert team public_id from JWT to internal team_id
+            from models.team import Team
+            target_team = db.query(Team).filter_by(public_id=jwt_team_id).first()
+            if target_team:
+                effective_team_id = target_team.id
+                log.info(f"Found team {jwt_team_id} with internal ID {effective_team_id}")
+            else:
+                log.error(f"Team not found for JWT team_id: {jwt_team_id}")
+                raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Handle explicit team_public_id parameter (for legacy support)
+    elif team_public_id and not team_id:
         log.info(f"Looking up team by public_id: {team_public_id}")
         from models.team import Team
         target_team = db.query(Team).filter_by(public_id=team_public_id).first()
@@ -318,7 +336,7 @@ async def upsert_user(
     
     # Step 4: Save complete user record with all URLs in one database operation
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id, current_user
     )
 
     return WelcomepageUserDTO.model_validate(db_user)
@@ -330,7 +348,7 @@ async def upsert_user(
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
-    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None, current_user=None
 ):
     # All arguments are plain values, no FastAPI Form/File/Depends here
     # All business logic remains unchanged
@@ -372,9 +390,9 @@ def upsert_user_db_logic(
             if prompt not in answers_dict:
                 answers_dict[prompt] = {"text": "", "image": None, "specialData": None}
 
-        # Enforce that team_id is present
-        if team_id is None:
-            raise HTTPException(status_code=422, detail="team_id is required and must be an integer")
+        # Enforce that effective_team_id is present (from form data or JWT)
+        if effective_team_id is None:
+            raise HTTPException(status_code=422, detail="Team assignment failed - no team information available")
 
         # UPSERT logic: update if id exists, else create
         db_user = None
