@@ -67,7 +67,7 @@ class WelcomepageUser(Base):
             'pronunciationRecordingUrl': self.pronunciation_recording_url,
             'selectedPrompts': self.selected_prompts,
             'answers': self.answers,
-
+            'team_id': self.team_id,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
         }
