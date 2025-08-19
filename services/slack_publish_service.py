@@ -44,7 +44,8 @@ class SlackPublishService:
         Returns:
             Dict containing success status, message timestamp, and any errors
         """
-        log = new_logger(f"publish_welcomepage_user_{user_public_id}")
+        log = new_logger(f"publish_welcomepage")
+        log.info(f"user public id: {user_public_id}  custom message: {custom_message}")
         
         if not db:
             db = next(get_db())
@@ -59,7 +60,8 @@ class SlackPublishService:
                     "error": "User not found",
                     "message": "The specified user could not be found"
                 }
-            
+            log.info(f"user: {user.to_dict()}")
+
             team = user.team
             if not team:
                 log.error(f"Team not found for user: {user_public_id}")
@@ -68,6 +70,7 @@ class SlackPublishService:
                     "error": "Team not found",
                     "message": "User's team could not be found"
                 }
+            log.info(f"team: {team.to_dict()}")
             
             # Get Slack installation and publish channel from team settings
             if not team.slack_settings or not isinstance(team.slack_settings, dict):

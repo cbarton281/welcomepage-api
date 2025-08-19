@@ -266,6 +266,9 @@ class SlackBlocksService:
     ) -> List[Dict[str, Any]]:
         """Generate blocks for when a user publishes their story"""
         log = new_logger("story_publish_blocks")
+        log.info(f"user_data: {user_data}")
+        log.info(f"team_data: {team_data}")
+        log.info(f"custom_msg: {custom_msg}")
         
         wp_webapp_url = os.getenv('WEBAPP_URL')
         
@@ -295,9 +298,7 @@ class SlackBlocksService:
         # Handle wave gif URL
         if not wave_gif_url:
             wave_gif_url = f"{wp_webapp_url}/default_wave.gif"
-        elif not wave_gif_url.endswith('.gif'):
-            log.warning(f"Wave URL {wave_gif_url} is not a GIF, using default")
-            wave_gif_url = f"{wp_webapp_url}/default_wave.gif"
+            log.warning(f"Wave URL not specified using default")
         
         blocks = [
             {
