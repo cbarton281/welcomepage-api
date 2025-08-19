@@ -573,8 +573,12 @@ def get_user(public_id: str, db: Session = Depends(get_db), current_user=Depends
         
         log.info(f"User access granted: {public_id}")
         
+        # Create response data with team public ID
+        user_data = target_user.__dict__.copy()
+        user_data['team_public_id'] = target_user.team.public_id
+        
         # Use model_validate with field validators handling data sanitization
-        return WelcomepageUserDTO.model_validate(target_user)
+        return WelcomepageUserDTO.model_validate(user_data)
         
     except OperationalError:
         db.rollback()
