@@ -97,7 +97,7 @@ def google_auth(
             return {
                 "success": True,
                 "public_id": existing_user.public_id,
-                "auth_role": existing_user.auth_role or "ADMIN",
+                "auth_role": existing_user.auth_role,
                 "team_public_id": existing_user.team.public_id if existing_user.team else None,
                 "message": "Existing user authenticated"
             }
@@ -390,8 +390,8 @@ def upsert_user_db_logic(
             if prompt not in answers_dict:
                 answers_dict[prompt] = {"text": "", "image": None, "specialData": None}
 
-        # Enforce that effective_team_id is present (from form data or JWT)
-        if effective_team_id is None:
+        # Enforce that team_id is present (from form data or JWT)
+        if team_id is None:
             raise HTTPException(status_code=422, detail="Team assignment failed - no team information available")
 
         # UPSERT logic: update if id exists, else create
