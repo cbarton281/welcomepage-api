@@ -198,7 +198,8 @@ class SlackEventService:
             wp_webapp_url = os.getenv('WEBAPP_URL')
             slack_params = {
                 'slack_user_id': user_id,
-                'slack_name': user_name
+                'slack_name': user_name,
+                'from': 'slack'
             }
             signup_url = f"{wp_webapp_url}/join/{team.public_id}?{urlencode(slack_params)}"
             
@@ -370,7 +371,7 @@ class SlackEventService:
                     signup_url = f"{wp_webapp_url}/auth"
                 else:
                     # User exists but hasn't completed auth, send them to join flow
-                    signup_url = f"{wp_webapp_url}/join/{team.public_id}"
+                    signup_url = f"{wp_webapp_url}/join/{team.public_id}?from=slack"
             else:
                 log.info(f"No existing user found for Slack user {user_id}, will show new user flow")
                 
@@ -378,7 +379,8 @@ class SlackEventService:
                 # Pass Slack user info via URL parameters for single-point creation
                 slack_params = {
                     'slack_user_id': user_id,
-                    'slack_name': real_name
+                    'slack_name': real_name,
+                    'from': 'slack'
                 }
                 signup_url = f"{wp_webapp_url}/join/{team.public_id}?{urlencode(slack_params)}"
                 log.info(f"Generated join URL with Slack params for user {user_id}: {signup_url}")
