@@ -141,7 +141,7 @@ class SlackEventService:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(OperationalError),
+        retry=retry_if_exception_type((OperationalError, SlackApiError)),
         before_sleep=before_sleep_log(team_join_retry_logger, logging.WARNING)
     )
     def _handle_team_join(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -153,6 +153,10 @@ class SlackEventService:
             event_data = payload.get("event", {})
             user_data = event_data.get("user", {})
             team_id = payload.get("team_id")
+            user_id = user_data.get("id")
+            
+            log.info(f"Processing team_join for user {user_id} in Slack team {team_id}")
+            log.info(f"User data: {user_data}")
             
             # Check if user is a bot
             if user_data.get("is_bot", False):
@@ -165,22 +169,83 @@ class SlackEventService:
                 log.warning(f"Team not found for Slack team_id: {team_id}")
                 return {"status": "error", "message": "Team not found"}
             
+            log.info(f"Found team {team.public_id} for Slack team {team_id}")
+            
             # Check if auto-invite is enabled
             auto_invite = team.slack_settings.get("auto_invite_users", False) if team.slack_settings else False
             if not auto_invite:
                 log.info("Auto-invite disabled for this team")
                 return {"status": "ignored", "message": "Auto-invite disabled"}
             
-            # TODO: Implement user invitation logic
-            # This would involve:
-            # 1. Creating a WelcomepageUser record
-            # 2. Sending a Slack message to the new user
-            # 3. Providing them with a signup link
+            # Get bot token from team's Slack settings
+            slack_app_data = team.slack_settings.get("slack_app", {})
+            bot_token = slack_app_data.get("bot_token")
+            if not bot_token:
+                log.error(f"No bot token found in Slack settings for team {team.public_id}")
+                return {"status": "error", "message": "Slack bot token not found"}
             
-            log.info(f"Would send invitation to user {user_data.get('id')} in team {team_id}")
-            return {"status": "ok", "message": "Team join event processed"}
+            # Create Slack WebClient
+            client = WebClient(token=bot_token)
             
-        except OperationalError:
+            # Extract user information for the message
+            profile = user_data.get("profile", {})
+            user_name = profile.get("display_name") or profile.get("real_name") or user_data.get("real_name") or user_data.get("name", "User")
+            company_name = team.organization_name 
+            
+            log.info(f"Sending welcome message to user {user_name} for company {company_name}")
+            
+            # Generate signup URL with Slack user info
+            wp_webapp_url = os.getenv('WEBAPP_URL')
+            slack_params = {
+                'slack_user_id': user_id,
+                'slack_name': user_name
+            }
+            signup_url = f"{wp_webapp_url}/join/{team.public_id}?{urlencode(slack_params)}"
+            
+            # Generate message blocks
+            blocks = SlackBlocksService.new_user_blocks(
+                user_name=user_name,
+                company_name=company_name,
+                signup_url=signup_url
+            )
+            
+            log.info(f"Generated welcome message blocks for user {user_id} {blocks}")
+            
+            # Open DM channel with the user
+            try:
+                dm_response = client.conversations_open(users=[user_id])
+                if not dm_response.get("ok"):
+                    log.error(f"Failed to open DM channel with user {user_id}: {dm_response}")
+                    return {"status": "error", "message": "Failed to open DM channel"}
+                
+                channel_id = dm_response["channel"]["id"]
+                log.info(f"Opened DM channel {channel_id} with user {user_id}")
+                
+            except SlackApiError as e:
+                log.error(f"Slack API error opening DM channel: {e}")
+                raise  # Let retry decorator handle this
+            
+            # Send welcome message
+            try:
+                message_response = client.chat_postMessage(
+                    channel=channel_id,
+                    blocks=blocks,
+                    text=f"Welcome to {company_name}! Please create your Welcomepage."  # Fallback text
+                )
+                
+                if message_response.get("ok"):
+                    log.info(f"Successfully sent welcome message to user {user_id}")
+                    log.info(f"Message response: {message_response}")
+                    return {"status": "ok", "message": "Welcome message sent successfully"}
+                else:
+                    log.error(f"Failed to send welcome message: {message_response}")
+                    return {"status": "error", "message": "Failed to send message"}
+                    
+            except SlackApiError as e:
+                log.error(f"Slack API error sending message: {e}")
+                raise  # Let retry decorator handle this
+            
+        except (OperationalError, SlackApiError):
             # These exceptions are handled by the @retry decorator - let them bubble up
             raise
         except Exception as e:
