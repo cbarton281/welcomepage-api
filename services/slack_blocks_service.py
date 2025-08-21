@@ -140,7 +140,7 @@ class SlackBlocksService:
         )
         section_str = section_template.substitute(companyName=company_name)
         
-        wave_image_url = f"{wp_webapp_url}/services/new-member-wave.png"
+        wave_image_url = f"{wp_webapp_url}/new-member-wave.png"
         
         blocks = [
             {
