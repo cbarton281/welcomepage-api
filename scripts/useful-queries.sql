@@ -1,6 +1,6 @@
-select slack_user_id, * from welcomepage_users where auth_email like 'charles.barton@gmail.com'
+select slack_user_id, team_id, * from welcomepage_users where public_id like '0bmntxfqao'
 
-select * from welcomepage_users where public_id = 'e7i1vk3nam'
+select * from welcomepage_users where public_id = 'sbl6ckotdw'
 
 select  * from welcomepage_users order by id desc where public_id = 'vd71ukv0q2'
 
@@ -20,7 +20,6 @@ FROM welcomepage_users AS u
 JOIN teams AS t ON u.team_id = t.id
 WHERE u.auth_email LIKE 'charles.barton%@gmail.com'
 ORDER BY u.id DESC;
-
 
 select auth_email, * from welcomepage_users where auth_email like 'charles.barton%@gmail.com'
 order by auth_email
