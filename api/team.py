@@ -356,8 +356,8 @@ team_upsert_retry_logger = new_logger("upsert_team_retry")
 
 @router.post("/teams/", response_model=TeamRead)
 async def upsert_team(
-    organization_name: str = Form(...),
-    color_scheme: str = Form(...),
+    organization_name: Optional[str] = Form(None),
+    color_scheme: Optional[str] = Form(None),
     color_scheme_data: Optional[str] = Form(None),
     slack_settings: Optional[str] = Form(None),
     company_logo: Optional[UploadFile] = File(None),
@@ -426,35 +426,33 @@ def upsert_team_db_logic(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in color_scheme_data")
     
+    # Parse slack_settings only if provided; do not merge with existing values
     slack_settings_obj = None
-    if slack_settings:
+    if slack_settings is not None:
         try:
-            incoming_slack_settings = json.loads(slack_settings)
-            log.info(f"Incoming slack settings data: {incoming_slack_settings}")
-            
-            # If team exists, merge with existing slack_settings to preserve slack_app data
-            if team and team.slack_settings:
-                existing_slack_settings = team.slack_settings.copy()
-                # Merge incoming settings with existing settings
-                existing_slack_settings.update(incoming_slack_settings)
-                slack_settings_obj = existing_slack_settings
-                log.info(f"Merged slack settings: {slack_settings_obj}")
-            else:
-                # No existing settings, use incoming settings as-is
-                slack_settings_obj = incoming_slack_settings
-                
+            slack_settings_obj = json.loads(slack_settings)
+            log.info(f"Incoming slack settings data parsed")
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in slack_settings")
     try:
         if team:
             log.info("Team exists, updating...")
-            team.organization_name = organization_name
-            team.color_scheme = color_scheme
-            team.company_logo_url = logo_blob_url
-            team.color_scheme_data = color_scheme_obj
-            team.slack_settings = slack_settings_obj
+            # Only update fields that are explicitly provided in the form
+            if organization_name is not None:
+                team.organization_name = organization_name
+            if color_scheme is not None:
+                team.color_scheme = color_scheme
+            if logo_blob_url is not None:
+                team.company_logo_url = logo_blob_url
+            if color_scheme_data is not None:
+                team.color_scheme_data = color_scheme_obj
+            if slack_settings is not None:
+                team.slack_settings = slack_settings_obj
         else:
             log.info("Creating new team...")
+            # Validate required fields for creation
+            if not organization_name or not color_scheme:
+                raise HTTPException(status_code=400, detail="organization_name and color_scheme are required for team creation")
             team = Team(
                 public_id=effective_public_id,
                 organization_name=organization_name,
