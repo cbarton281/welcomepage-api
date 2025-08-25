@@ -290,6 +290,34 @@ class SlackInstallationService:
             log.error(f"Unexpected error during token revocation: {e}")
     
     
+    def _cleanup_slack_settings(self, team: Team) -> None:
+        """Cleanup Slack-related fields in team's slack_settings and commit.
+
+        Removes keys:
+        - "slack_app"
+        - "auto_invite_users"
+        - "publish_channel"
+        """
+        log = new_logger("cleanup_slack_settings")
+        try:
+            if team.slack_settings:
+                existing_settings = team.slack_settings.copy()
+                existing_settings.pop("slack_app", None)
+                existing_settings.pop("auto_invite_users", None)
+                existing_settings.pop("publish_channel", None)
+                team.slack_settings = existing_settings if existing_settings else None
+            else:
+                team.slack_settings = None
+
+            # Mark the database field as modified for SQLAlchemy and commit
+            flag_modified(team, "slack_settings")
+            self.db.commit()
+            log.info(f"Cleaned up slack_settings for team {team.public_id}")
+        except Exception as e:
+            log.error(f"Failed to cleanup slack_settings for team {getattr(team, 'public_id', '?')}: {str(e)}")
+            self.db.rollback()
+            raise
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -349,18 +377,8 @@ class SlackInstallationService:
             if installation_data.user_token:
                 self._revoke_token(installation_data.user_token)
             
-            # Preserve other slack_settings but remove slack_app data and auto_invite_users
-            if team.slack_settings:
-                existing_settings = team.slack_settings.copy()
-                existing_settings.pop("slack_app", None)  # Remove slack_app data
-                existing_settings.pop("auto_invite_users", None)  # Remove auto_invite_users setting
-                team.slack_settings = existing_settings if existing_settings else None
-            else:
-                team.slack_settings = None
-            
-            # Mark the database field as modified for SQLAlchemy
-            flag_modified(team, "slack_settings")
-            self.db.commit()
+            # Cleanup slack settings consistently (removes publish_channel as well)
+            self._cleanup_slack_settings(team)
             
             log.info(f"Uninstalled Slack for team {team_identifier}")
             return True
