@@ -240,87 +240,145 @@ class SlackPublishService:
         retry=retry_if_exception_type((OperationalError, IntegrityError, DataError, DatabaseError, SlackApiError)),
         before_sleep=before_sleep_log(test_channel_retry_logger, logging.WARNING)
     )
-    def test_channel_connection(team_public_id: str, channel_id: str, db: Session = None) -> Dict[str, Any]:
+    def test_channel_connection(
+        team_public_id: str,
+        channel_id: str,
+        *,
+        auto_join: bool = False,
+        send_test_message: bool = True,
+        db: Session = None
+    ) -> Dict[str, Any]:
         """
-        Test if the bot can post to a specific channel
-        
-        Args:
-            team_public_id: Public ID of the team
-            channel_id: Channel ID to test
-            db: Database session
-            
-        Returns:
-            Dict containing success status and any errors
+        Comprehensive verification that the bot can post to the specified channel.
+        Performs membership check, optional join, and optional test post.
+
+        Returns a normalized result dict with fields compatible with the API layer.
         """
         log = new_logger(f"test_channel_connection_{team_public_id}")
-        
+
         if not db:
             db = next(get_db())
-        
+
         try:
-            # Get team data
+            # Get team and Slack installation
             team = db.query(Team).filter_by(public_id=team_public_id).first()
             if not team:
-                return {
-                    "success": False,
-                    "error": "Team not found",
-                    "message": "The specified team could not be found"
-                }
-            
-            # Get Slack installation from team settings
-            if not team.slack_settings or not isinstance(team.slack_settings, dict):
-                return {
-                    "success": False,
-                    "error": "No Slack integration",
-                    "message": "This team doesn't have Slack integration set up"
-                }
-            
-            slack_app_data = team.slack_settings.get("slack_app")
-            if not slack_app_data or not isinstance(slack_app_data, dict):
-                return {
-                    "success": False,
-                    "error": "No Slack integration",
-                    "message": "This team doesn't have Slack integration set up"
-                }
-            
-            bot_token = slack_app_data.get('bot_token')
+                return {"success": False, "error": "Team not found", "message": "The specified team could not be found"}
+
+            settings = team.slack_settings if isinstance(team.slack_settings, dict) else None
+            if not settings:
+                return {"success": False, "error": "No Slack integration", "message": "This team doesn't have Slack integration set up"}
+
+            slack_app_data = settings.get("slack_app") if isinstance(settings.get("slack_app"), dict) else None
+            if not slack_app_data:
+                return {"success": False, "error": "No Slack integration", "message": "This team doesn't have Slack integration set up"}
+
+            bot_token = slack_app_data.get("bot_token")
             if not bot_token:
-                return {
-                    "success": False,
-                    "error": "Invalid Slack integration",
-                    "message": "Slack integration is incomplete"
-                }
-            
-            # Generate test message blocks
-            blocks = SlackBlocksService.channel_test_message(f"#{channel_id}")
-            
-            # Post test message to Slack
+                return {"success": False, "error": "Invalid Slack integration", "message": "Slack integration is incomplete"}
+
             client = WebClient(token=bot_token)
-            
-            response = client.chat_postMessage(
-                channel=channel_id,
-                blocks=blocks,
-                text="Welcomepage channel test"
-            )
-            
-            if response["ok"]:
-                log.info(f"Successfully posted test message to channel: {channel_id}")
-                return {
-                    "success": True,
-                    "message": "Channel test successful",
-                    "slack_response": {
-                        "channel": response["channel"],
-                        "timestamp": response["ts"]
-                    }
-                }
+
+            result: Dict[str, Any] = {
+                "channel_id": channel_id,
+                "channel_name": None,
+                "bot_member": False,
+                "joined": False,
+                "message_sent": False,
+                "errors": {},
+            }
+
+            # Resolve channel name for nicer messaging (best-effort)
+            try:
+                info = client.conversations_info(channel=channel_id)
+                if info.get("ok"):
+                    ch = info.get("channel", {})
+                    result["channel_name"] = ch.get("name")
+            except Exception as e:
+                log.info(f"conversations_info failed (non-fatal): {e}")
+                result["errors"]["info_failed"] = str(e)
+
+            # Identify bot user id
+            bot_user_id = None
+            try:
+                auth = client.auth_test()
+                if auth.get("ok"):
+                    bot_user_id = auth.get("user_id")
+                else:
+                    result["errors"]["auth_test_failed"] = auth.get("error", "unknown_error")
+            except Exception as e:
+                log.error(f"auth_test failed: {e}")
+                result["errors"]["auth_test_failed"] = str(e)
+
+            # Membership check
+            if bot_user_id:
+                try:
+                    members_resp = client.conversations_members(channel=channel_id, limit=1000)
+                    members = members_resp.get("members", [])
+                    result["bot_member"] = bot_user_id in members
+                except Exception as e:
+                    log.error(f"conversations_members failed: {e}")
+                    result["errors"]["members_failed"] = str(e)
+
+            # Attempt join if not member and allowed
+            if not result["bot_member"] and auto_join:
+                try:
+                    join_resp = client.conversations_join(channel=channel_id)
+                    if join_resp.get("ok"):
+                        result["joined"] = True
+                        # Re-check membership after join
+                        try:
+                            members_resp = client.conversations_members(channel=channel_id, limit=1000)
+                            members = members_resp.get("members", [])
+                            result["bot_member"] = bot_user_id in members if bot_user_id else False
+                        except Exception as e:
+                            log.error(f"post-join conversations_members failed: {e}")
+                            result["errors"]["members_after_join_failed"] = str(e)
+                    else:
+                        result["errors"]["join_failed"] = join_resp.get("error", "unknown_error")
+                except Exception as e:
+                    log.error(f"conversations_join failed: {e}")
+                    result["errors"]["join_exception"] = str(e)
+
+            # Optional test message
+            if send_test_message and result["bot_member"]:
+                try:
+                    channel_name_for_blocks = result.get("channel_name") or "this channel"
+                    blocks = SlackBlocksService.channel_test_message(channel_name_for_blocks)
+                    fallback_text = f"It works! {channel_name_for_blocks} is now ready to receive Welcomepage messages."
+                    msg = client.chat_postMessage(channel=channel_id, text=fallback_text, blocks=blocks)
+                    result["message_sent"] = bool(msg.get("ok"))
+                    if not result["message_sent"]:
+                        result["errors"]["post_failed"] = msg.get('error', 'unknown_error')
+                except Exception as e:
+                    log.error(f"chat_postMessage failed: {e}")
+                    result["errors"]["post_exception"] = str(e)
+
+            # Compute can_post and reason
+            can_post = False
+            reason: Optional[str] = None
+            if result["bot_member"]:
+                if send_test_message:
+                    can_post = result["message_sent"]
+                    if not can_post:
+                        reason = "Test message failed"
+                else:
+                    can_post = True
             else:
-                log.error(f"Channel test failed: {response}")
-                return {
-                    "success": False,
-                    "error": "Channel test failed",
-                    "message": "Failed to post test message to channel"
-                }
-                
+                reason = "Bot is not a member of the channel"
+
+            result["can_post"] = can_post
+            if not can_post and reason:
+                result["reason"] = reason
+
+            # success mirrors can_post for legacy callers
+            result["success"] = can_post
+
+            log.info(
+                f"test_channel_connection result: channel={result.get('channel_name') or result.get('channel_id')} can_post={result['can_post']} bot_member={result['bot_member']} joined={result['joined']} errors={bool(result['errors'])}"
+            )
+            return result
+
         except SlackApiError as e:
             log.error(f"Slack API error during channel test: {e.response['error']}")
             error_msg = e.response.get('error', 'Unknown Slack error')
@@ -334,12 +392,7 @@ class SlackPublishService:
             else:
                 user_message = f"Slack error: {error_msg}"
             
-            return {
-                "success": False,
-                "error": "Slack API error",
-                "message": user_message,
-                "slack_error": error_msg
-            }
+            return {"success": False, "error": "Slack API error", "message": user_message, "slack_error": error_msg}
             
         except (OperationalError, IntegrityError, DataError, DatabaseError, SlackApiError):
             # These exceptions are handled by the @retry decorator - let them bubble up

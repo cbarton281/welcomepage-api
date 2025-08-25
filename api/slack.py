@@ -18,6 +18,8 @@ from utils.jwt_auth import require_roles
 from utils.slack_signature_verifier import SlackSignatureVerifier
 from slack import WebClient
 from services.slack_event_service import SlackEventService
+from services.slack_blocks_service import SlackBlocksService
+from services.slack_publish_service import SlackPublishService
 from models.welcomepage_user import WelcomepageUser
 
 router = APIRouter()
@@ -564,7 +566,7 @@ async def create_slack_channel(
 async def can_post_to_channel(
     channel_id: Optional[str] = Body(None),
     name: Optional[str] = Body(None),
-    send_test_message: bool = Body(False),
+    send_test_message: bool = Body(True),
     auto_join: bool = Body(False),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -589,143 +591,63 @@ async def can_post_to_channel(
             raw = name.strip()
             resolved_name = (raw[1:] if raw.startswith('#') else raw).lower()
 
-        # Load team + slack installation
-        user_public_id = current_user.get('public_id')
-        user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
-        if not user or not user.team:
-            raise HTTPException(status_code=404, detail="User or team not found")
-        team = user.team
-        slack_settings = team.slack_settings or {}
-        slack_app_data = slack_settings.get("slack_app")
-        if not isinstance(slack_app_data, dict):
-            raise HTTPException(status_code=404, detail="No Slack integration found for this team")
-        bot_token = slack_app_data.get('bot_token')
-        if not bot_token:
-            raise HTTPException(status_code=404, detail="Slack integration is incomplete")
+        # Get user's team
+        user_team_id = current_user.get("team_id")
+        if not user_team_id:
+            raise HTTPException(status_code=400, detail="User team not found")
 
-        client = WebClient(token=bot_token)
-
-        result = {
-            "channel_id": None,
-            "channel_name": None,
-            "exists": False,
-            "bot_member": False,
-            "joined": False,
-            "message_sent": False,
-            "errors": {}
-        }
-
-        # Resolve channel_id if name provided
+        # If only name was passed, resolve channel id by listing
         if not channel_id and resolved_name:
-            log.info("Attempting to look up channel by name")
+            # Use Slack client to resolve
+            team = db.query(Team).filter_by(public_id=user_team_id).first()
+            if not team:
+                raise HTTPException(status_code=404, detail="Team not found")
+            slack_settings = team.slack_settings or {}
+            slack_app_data = slack_settings.get("slack_app") or {}
+            bot_token = slack_app_data.get('bot_token')
+            if not bot_token:
+                raise HTTPException(status_code=400, detail="Slack integration not configured")
+            client = WebClient(token=bot_token)
+
             try:
-                list_resp = client.conversations_list(types="public_channel", exclude_archived=True, limit=1000)
-                for ch in list_resp.get("channels", []):
-                    if ch.get('name', '').lower() == resolved_name and not ch.get('is_archived', False):
-                        channel_id = ch.get('id')
-                        result["channel_name"] = ch.get('name')
+                log.info(f"Resolving channel by name: {resolved_name}")
+                cursor = None
+                found = None
+                while True:
+                    resp = client.conversations_list(types="public_channel,private_channel", limit=200, cursor=cursor)
+                    if not resp.get("ok"):
+                        raise Exception(resp.get('error', 'unknown_error'))
+                    channels = resp.get("channels", [])
+                    for ch in channels:
+                        if ch.get("name", "").lower() == resolved_name:
+                            found = ch
+                            break
+                    cursor = resp.get("response_metadata", {}).get("next_cursor")
+                    if found or not cursor:
                         break
-                if not channel_id:
-                    result["errors"]["not_found"] = True
-                    return result
+                if not found:
+                    raise HTTPException(status_code=404, detail="Channel not found")
+                channel_id = found.get("id")
+            except HTTPException:
+                raise
             except Exception as e:
-                log.error(f"Failed to list channels: {e}")
-                raise HTTPException(status_code=500, detail="Failed to look up channel by name")
+                log.error(f"Failed to resolve channel by name: {e}")
+                raise HTTPException(status_code=500, detail="Failed to resolve channel by name")
 
-        # From this point channel_id should be present
-        if not channel_id:
-            raise HTTPException(status_code=400, detail="Channel not resolved")
-        result["channel_id"] = channel_id
+        # Delegate to service for verification and (optional) posting
+        service_result = SlackPublishService.test_channel_connection(
+            user_team_id,
+            channel_id,
+            auto_join=auto_join,
+            send_test_message=send_test_message,
+            db=db,
+        )
 
-        # Fetch channel info to confirm existence/name
-        try:
-            log.info("Fetching channel info")
-            info = client.conversations_info(channel=channel_id)
-            if not info.get("ok"):
-                result["errors"]["info_failed"] = info.get('error', 'unknown_error')
-                return result
-            channel_obj = info.get("channel", {})
-            result["channel_name"] = channel_obj.get("name")
-            result["exists"] = True
-        except Exception as e:
-            log.error(f"conversations_info failed: {e}")
-            result["errors"]["info_exception"] = str(e)
-            return result
+        # Also include resolved channel_name (if we had one by name lookup and service couldn't fetch it)
+        if resolved_name and not service_result.get("channel_name"):
+            service_result["channel_name"] = resolved_name
 
-        # Determine bot user id
-        bot_user_id = slack_app_data.get('bot_user_id')
-        if not bot_user_id:
-            log.info("Fetching bot user id")
-            try:
-                auth = client.auth_test()
-                bot_user_id = auth.get('user_id')
-            except Exception as e:
-                log.error(f"auth_test failed: {e}")
-                result["errors"]["auth_test_failed"] = str(e)
-                return result
-
-        # Check membership
-        try:
-            log.info("Checking membership")
-            members_resp = client.conversations_members(channel=channel_id, limit=1000)
-            members = members_resp.get("members", [])
-            result["bot_member"] = bot_user_id in members
-        except Exception as e:
-            log.error(f"conversations_members failed: {e}")
-            result["errors"]["members_failed"] = str(e)
-
-        # Attempt to join if not member and auto_join
-        if auto_join and not result["bot_member"]:
-            try:
-                log.info("Attempting to join channel")
-                join_resp = client.conversations_join(channel=channel_id)
-                if join_resp.get("ok"):
-                    result["joined"] = True
-                    result["bot_member"] = True
-                else:
-                    result["errors"]["join_failed"] = join_resp.get('error', 'unknown_error')
-            except Exception as e:
-                log.error(f"conversations_join failed: {e}")
-                result["errors"]["join_exception"] = str(e)
-
-        # Send test message if requested and member
-        if send_test_message and result["bot_member"]:
-            try:
-                log.info("Sending test message")
-                msg = client.chat_postMessage(channel=channel_id, text="Welcomepage test: bot can post here.")
-                result["message_sent"] = bool(msg.get("ok"))
-                if not result["message_sent"]:
-                    result["errors"]["post_failed"] = msg.get('error', 'unknown_error')
-            except Exception as e:
-                log.error(f"chat_postMessage failed: {e}")
-                result["errors"]["post_exception"] = str(e)
-
-        # Compute explicit can_post flag and human-readable reason for the client
-        can_post = False
-        reason = None
-
-        if result["bot_member"]:
-            # If a test message was requested, require that it succeeded; otherwise membership implies posting allowed
-            can_post = True if not send_test_message else bool(result["message_sent"])
-            if send_test_message and not result["message_sent"]:
-                reason = result["errors"].get("post_failed") or result["errors"].get("post_exception") or "Bot could not send a test message."
-        else:
-            # Not a member; provide reason depending on what happened
-            if auto_join:
-                if result.get("joined"):
-                    # Joined but membership flag not set for some reason (edge case)
-                    can_post = True
-                else:
-                    reason = result["errors"].get("join_failed") or result["errors"].get("join_exception") or "Bot could not join this channel."
-            else:
-                reason = "Bot is not a member of this channel."
-
-        result["can_post"] = bool(can_post)
-        if not result["can_post"] and reason:
-            result["reason"] = reason
-
-        log.info(f"can_post_to_channel result: channel={result.get('channel_name') or result.get('channel_id')} can_post={result['can_post']} bot_member={result['bot_member']} joined={result['joined']} errors={bool(result['errors'])}")
-        return result
+        return service_result
 
     except HTTPException:
         raise
