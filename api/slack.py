@@ -578,7 +578,7 @@ async def can_post_to_channel(
     Returns booleans and details about the checks performed.
     """
     log = new_logger("can_post_to_channel")
-    log.info(f"Checking channel permissions for channel_id={channel_id}, name={name}")
+    log.info(f"Checking channel permissions for channel_id={channel_id}, name={name} (send_test_message={send_test_message}, auto_join={auto_join})")
     try:
         if not channel_id and not name:
             raise HTTPException(status_code=400, detail="Provide either channel_id or name")
