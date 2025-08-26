@@ -534,6 +534,21 @@ class JoinTeamRequest(BaseModel):
     slack_user_id: Optional[str] = None
     slack_name: Optional[str] = None
 
+class SlackChannelData(BaseModel):
+    id: str
+    name: Optional[str] = None
+    team_id: Optional[str] = None
+
+class UpdateSlackSettingsRequest(BaseModel):
+    auto_invite_users: Optional[bool] = None
+    publish_channel: Optional[SlackChannelData] = None
+
+class UpdateSlackSettingsResponse(BaseModel):
+    success: bool
+    message: str
+    auto_invite_users: Optional[bool] = None
+    publish_channel: Optional[SlackChannelData] = None
+
 
 @router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
 async def join_team(
