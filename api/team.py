@@ -530,27 +530,15 @@ class JoinTeamResponse(BaseModel):
     team_public_id: str
     user_public_id: str
 
-
-class SlackChannelData(BaseModel):
-    id: str  # Channel ID like C0123ABCDEF or G0123ABCDEF
-    name: str  # Channel name like "general"
-
-
-class UpdateSlackSettingsRequest(BaseModel):
-    auto_invite_users: Optional[bool] = None
-    publish_channel: Optional[SlackChannelData] = None  # Only accept channel object with id and name
-
-
-class UpdateSlackSettingsResponse(BaseModel):
-    success: bool
-    message: str
-    auto_invite_users: Optional[bool] = None
-    publish_channel: Optional[SlackChannelData] = None
+class JoinTeamRequest(BaseModel):
+    slack_user_id: Optional[str] = None
+    slack_name: Optional[str] = None
 
 
 @router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
 async def join_team(
     public_id: str, 
+    request: Optional[JoinTeamRequest] = None,
     db: Session = Depends(get_db), 
     current_user=Depends(require_roles("USER", "ADMIN"))
 ):
@@ -594,6 +582,20 @@ async def join_team(
         )
     
     try:
+        # Optionally update slack_user_id if provided in request body
+        incoming_slack_id = (request.slack_user_id.strip() if request and request.slack_user_id else None)
+        if incoming_slack_id:
+            # Only update if different or not set
+            if user.slack_user_id != incoming_slack_id:
+                log.info(f"Updating slack_user_id for user {user_public_id} -> {incoming_slack_id}")
+                user.slack_user_id = incoming_slack_id
+        
+        # Optionally set default name from slack_name if user's name is empty
+        incoming_slack_name = (request.slack_name.strip() if request and request.slack_name else None)
+        if incoming_slack_name and (not user.name or user.name.strip() == ""):
+            log.info(f"Setting default name for user {user_public_id} from slack_name -> '{incoming_slack_name}'")
+            user.name = incoming_slack_name
+        
         # Update user's team membership
         old_team_id = user.team_id
         user.team_id = target_team.id
