@@ -1,8 +1,8 @@
-select slack_user_id, team_id, auth_email, * from welcomepage_users where auth_email like 'charles.barton+w%'
+select slack_user_id, team_id, auth_email, * from welcomepage_users where auth_email like 'charles.barton+w%'  
 
-select team_id, slack_user_id, auth_email, * from welcomepage_users  order by team_id
+select team_id, slack_user_id, auth_email, * from welcomepage_users  order by id desc
 
-select * from welcomepage_users where public_id = 'sbl6ckotdw'
+select * from welcomepage_users where public_id = 'cl83yk2e92'
 
 select  * from welcomepage_users order by id desc where public_id = 'vd71ukv0q2'
 
@@ -33,4 +33,11 @@ select * from alembic_version
 select slack_settings, * from teams where public_id = 'ied3vv24li' 
 
 -- 'c2b52ea3-bcdf-47fa-a16c-9ef04f31c949'
+
+
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'slack_pending_installs';
+
+select * from slack_pending_installs
 

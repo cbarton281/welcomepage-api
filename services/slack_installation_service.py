@@ -16,6 +16,7 @@ import logging
 from models.team import Team
 from models.slack_state_store import SlackStateStore
 from models.welcomepage_user import WelcomepageUser
+from models.slack_pending_install import SlackPendingInstall
 from schemas.slack import SlackOAuthStartResponse, SlackInstallationResponse, SlackInstallationData
 from utils.slack_state_manager import SlackStateManager
 from utils.logger_factory import new_logger
@@ -67,6 +68,151 @@ class SlackInstallationService:
             
         except Exception as e:
             log.error(f"Failed to start OAuth flow for team {team_public_id}: {str(e)}")
+            raise
+
+    def exchange_code_without_state(self, code: str) -> SlackInstallationData:
+        """Exchange OAuth code for installation data when no state is provided (marketplace installs)."""
+        log = new_logger("exchange_code_without_state")
+        try:
+            client = WebClient()
+            oauth_response = client.oauth_v2_access(
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                code=code
+            )
+
+            log.info(f"OAuth (no-state) response: {json.dumps(oauth_response.data, indent=2)}")
+
+            installation_data = self._extract_installation_data(oauth_response)
+
+            # Get bot_id if we have a bot token
+            if installation_data.bot_token:
+                try:
+                    auth_test = client.auth_test(token=installation_data.bot_token)
+                    installation_data.bot_id = auth_test.get("bot_id")
+                except SlackApiError as e:
+                    log.warning(f"Failed to get bot_id (no-state): {e}")
+
+            return installation_data
+        except Exception as e:
+            log.error(f"Failed to exchange code without state: {str(e)}")
+            raise
+
+    def create_pending_install(self, installation_data: SlackInstallationData) -> str:
+        """Create a short-lived pending install and return its nonce."""
+        log = new_logger("create_pending_install")
+        try:
+            payload = installation_data.model_dump()
+            if payload.get("installed_at") and hasattr(payload["installed_at"], "isoformat"):
+                payload["installed_at"] = payload["installed_at"].isoformat()
+
+            pending = SlackPendingInstall(
+                installation_json=payload,
+                slack_team_id=installation_data.team_id,
+                slack_team_name=installation_data.team_name,
+                slack_user_id=installation_data.user_id,
+                expiration_seconds=600,
+            )
+            self.db.add(pending)
+            self.db.commit()
+            log.info(f"Created pending Slack install nonce={pending.nonce} for slack_team_id={installation_data.team_id}")
+            return pending.nonce
+        except Exception as e:
+            self.db.rollback()
+            log.error(f"Failed to create pending install: {str(e)}")
+            raise
+
+    def get_pending_install(self, nonce: str) -> Optional[SlackPendingInstall]:
+        """Fetch a pending install by nonce (must be valid and not consumed)."""
+        try:
+            pending = self.db.query(SlackPendingInstall).filter_by(nonce=nonce).first()
+            if pending and pending.is_valid():
+                return pending
+            return None
+        except Exception:
+            return None
+
+    def consume_pending_install(self, nonce: str) -> bool:
+        """Mark a pending install as consumed."""
+        log = new_logger("consume_pending_install")
+        try:
+            pending = self.db.query(SlackPendingInstall).filter_by(nonce=nonce).first()
+            if not pending or not pending.is_valid():
+                return False
+            pending.consume()
+            self.db.commit()
+            log.info(f"Consumed pending install nonce={nonce}")
+            return True
+        except Exception as e:
+            self.db.rollback()
+            log.error(f"Failed to consume pending install: {str(e)}")
+            return False
+
+    def apply_installation_to_team(self, team_public_id: str, installation_data: SlackInstallationData) -> None:
+        """Apply an installation to an existing team and update installer user if possible."""
+        log = new_logger("apply_installation_to_team")
+        self._save_installation_to_team(team_public_id, installation_data)
+        try:
+            if installation_data.user_id:
+                self._update_user_slack_id(team_public_id, installation_data.user_id)
+        except Exception as e:
+            # Non-critical if user update fails; installation is primary
+            log.warning(f"Failed to update user slack id during apply: {e}")
+
+    def create_team_from_install(self, installation_data: SlackInstallationData) -> Team:
+        """Create a new team from a Slack installation (Scenario 4)."""
+        log = new_logger("create_team_from_install")
+        try:
+            from utils.short_id import generate_short_id
+
+            team = Team(
+                public_id=generate_short_id(),
+                organization_name=installation_data.team_name or "New Slack Workspace",
+                color_scheme="blue",
+                color_scheme_data=None,
+                slack_settings=None,
+                is_draft=True,
+            )
+            self.db.add(team)
+            self.db.commit()
+
+            # Save installation under this team
+            self._save_installation_to_team(team.public_id, installation_data)
+
+            # Optionally create a draft user to associate installer
+            try:
+                user = WelcomepageUser(
+                    public_id=generate_short_id(),
+                    name="New Teammate",
+                    role="Member",
+                    location="",
+                    nickname=None,
+                    greeting="",
+                    hi_yall_text=None,
+                    handwave_emoji=None,
+                    handwave_emoji_url=None,
+                    profile_photo_url=None,
+                    wave_gif_url=None,
+                    pronunciation_text=None,
+                    pronunciation_recording_url=None,
+                    selected_prompts=[],
+                    answers={},
+                    team_id=team.id,
+                    is_draft=True,
+                    auth_role="PRE_SIGNUP",
+                    auth_email=None,
+                    slack_user_id=installation_data.user_id,
+                )
+                self.db.add(user)
+                self.db.commit()
+            except Exception as e:
+                self.db.rollback()
+                log.warning(f"Failed to create default user for new team: {e}")
+
+            return team
+        except Exception as e:
+            self.db.rollback()
+            log.error(f"Failed to create team from install: {str(e)}")
             raise
     
     def handle_oauth_callback(self, code: str, state: str) -> SlackInstallationResponse:

@@ -8,6 +8,7 @@ import logging
 
 from database import get_db
 from services.slack_installation_service import SlackInstallationService
+from models.slack_pending_install import SlackPendingInstall
 from models.slack_state_store import SlackStateStore
 from models.team import Team
 from models.welcomepage_user import WelcomepageUser
@@ -80,22 +81,30 @@ async def slack_oauth_callback(
             )
         
         # Validate required parameters
-        if not code or not state:
-            log.error("Missing required OAuth parameters")
+        if not code:
+            log.error("Missing required OAuth 'code' parameter")
             return RedirectResponse(
                 url=os.getenv("WEBAPP_URL") + "/integration/slack/installerror",
                 status_code=302
             )
-        
+
         service = SlackInstallationService(db)
-        # Team ID is now extracted from the state parameter
-        result = service.handle_oauth_callback(code, state)
-        
-        log.info(f"Slack installation completed (Slack team: {result.team_id})")
-        
-        # Redirect to team settings page with success parameter
+
+        # If state exists, this is our app-initiated flow (Scenario 1)
+        if state:
+            result = service.handle_oauth_callback(code, state)
+            log.info(f"Slack installation completed (Slack team: {result.team_id})")
+            return RedirectResponse(
+                url=f"{os.getenv('WEBAPP_URL')}/team-settings?slack_success=true",
+                status_code=302
+            )
+
+        # No state: marketplace install (Scenarios 2–4). Create pending and redirect with nonce
+        installation_data = service.exchange_code_without_state(code)
+        nonce = service.create_pending_install(installation_data)
+        log.info(f"Created pending Slack installation, nonce={nonce}")
         return RedirectResponse(
-            url=f"{os.getenv('WEBAPP_URL')}/team-settings?slack_success=true",
+            url=f"{os.getenv('WEBAPP_URL')}/integration/slack/link?nonce={nonce}",
             status_code=302
         )
         
@@ -111,6 +120,84 @@ async def slack_oauth_callback(
             url=os.getenv("WEBAPP_URL") + "/integration/slack/installerror",
             status_code=302
         )
+
+
+@router.get("/oauth/pending/{nonce}")
+async def get_pending_install(nonce: str, db: Session = Depends(get_db)):
+    """Public endpoint to fetch safe info about a pending Slack installation."""
+    log = new_logger("get_pending_install")
+    try:
+        service = SlackInstallationService(db)
+        pending = service.get_pending_install(nonce)
+        if not pending:
+            raise HTTPException(status_code=404, detail="Pending installation not found or expired")
+        return {
+            "nonce": pending.nonce,
+            "slack_team_id": pending.slack_team_id,
+            "slack_team_name": pending.slack_team_name,
+            "expires_at": pending.expires_at.isoformat() if pending.expires_at else None,
+            "consumed": pending.consumed,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to fetch pending install: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch pending installation")
+
+
+@router.post("/oauth/complete-link")
+async def complete_link_from_pending(
+    nonce: str = Body(..., embed=True),
+    current_user: dict = Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db),
+):
+    """ADMIN-only: Apply a pending Slack installation to the current user's team."""
+    log = new_logger("complete_link_from_pending")
+    try:
+        service = SlackInstallationService(db)
+        pending = service.get_pending_install(nonce)
+        if not pending:
+            raise HTTPException(status_code=404, detail="Pending installation not found or expired")
+
+        # Build model and apply
+        install_data = SlackInstallationData(**(pending.installation_json or {}))
+        team_public_id = current_user.get("team_id")
+        if not team_public_id:
+            raise HTTPException(status_code=400, detail="User team not found")
+        service.apply_installation_to_team(team_public_id, install_data)
+        service.consume_pending_install(nonce)
+
+        return {"success": True, "team_public_id": team_public_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to complete link from pending: {e}")
+        raise HTTPException(status_code=500, detail="Failed to complete Slack linking")
+
+
+@router.post("/oauth/create-team-from-pending")
+async def create_team_from_pending(
+    nonce: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+):
+    """Create a brand-new team from a pending Slack installation (Scenario 4). Public endpoint; will create a draft team."""
+    log = new_logger("create_team_from_pending")
+    try:
+        service = SlackInstallationService(db)
+        pending = service.get_pending_install(nonce)
+        if not pending:
+            raise HTTPException(status_code=404, detail="Pending installation not found or expired")
+
+        install_data = SlackInstallationData(**(pending.installation_json or {}))
+        team = service.create_team_from_install(install_data)
+        service.consume_pending_install(nonce)
+
+        return {"success": True, "team_public_id": team.public_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to create team from pending: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create team from pending installation")
 
 
 @router.get("/installation/{team_public_id}")
