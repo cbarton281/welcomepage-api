@@ -42,12 +42,12 @@ class SlackInstallationService:
         if not self.client_id or not self.client_secret:
             raise ValueError("SLACK_CLIENT_ID and SLACK_CLIENT_SECRET environment variables must be set")
     
-    def start_oauth_flow(self, team_public_id: str) -> SlackOAuthStartResponse:
+    def start_oauth_flow(self, team_public_id: str, initiator_public_user_id: Optional[str] = None) -> SlackOAuthStartResponse:
         """Start the Slack OAuth flow by generating authorization URL"""
         log = new_logger("start_oauth_flow")
         try:
             # Generate and store state with team_public_id encoded
-            state = self.state_manager.issue_state(team_public_id=team_public_id)
+            state = self.state_manager.issue_state(team_public_id=team_public_id, initiator_public_user_id=initiator_public_user_id)
             
             # Build OAuth parameters
             params = {
@@ -148,13 +148,13 @@ class SlackInstallationService:
             log.error(f"Failed to consume pending install: {str(e)}")
             return False
 
-    def apply_installation_to_team(self, team_public_id: str, installation_data: SlackInstallationData) -> None:
+    def apply_installation_to_team(self, team_public_id: str, installation_data: SlackInstallationData, initiator_public_user_id: Optional[str] = None) -> None:
         """Apply an installation to an existing team and update installer user if possible."""
         log = new_logger("apply_installation_to_team")
         self._save_installation_to_team(team_public_id, installation_data)
         try:
             if installation_data.user_id:
-                self._update_user_slack_id(team_public_id, installation_data.user_id)
+                self._update_user_slack_id(team_public_id, installation_data.user_id, target_user_public_id=initiator_public_user_id)
         except Exception as e:
             # Non-critical if user update fails; installation is primary
             log.warning(f"Failed to update user slack id during apply: {e}")
@@ -223,6 +223,8 @@ class SlackInstallationService:
             team_public_id = self.state_manager.get_team_public_id_from_state(state)
             if not team_public_id:
                 raise ValueError("Invalid or expired OAuth state - could not retrieve team ID")
+            # Retrieve initiator who started the OAuth from within the app
+            initiator_public_user_id = self.state_manager.get_initiator_public_user_id_from_state(state)
             
             # Validate and consume state
             if not self.state_manager.consume_state(state):
@@ -253,7 +255,7 @@ class SlackInstallationService:
             self._save_installation_to_team(team_public_id, installation_data)
             
             # Update installer user's Slack user ID
-            self._update_user_slack_id(team_public_id, installation_data.user_id)
+            self._update_user_slack_id(team_public_id, installation_data.user_id, target_user_public_id=initiator_public_user_id)
             
             return SlackInstallationResponse(
                 success=True,
@@ -372,8 +374,8 @@ class SlackInstallationService:
         retry=retry_if_exception_type(OperationalError),
         before_sleep=before_sleep_log(user_update_retry_logger, logging.WARNING)
     )
-    def _update_user_slack_id(self, team_identifier: str, slack_user_id: str):
-        """Update user's Slack ID"""
+    def _update_user_slack_id(self, team_identifier: str, slack_user_id: str, target_user_public_id: Optional[str] = None):
+        """Update Slack ID for the initiating user if provided; otherwise no-op or minimal fallback."""
         log = new_logger("update_user_slack_id")
         try:
             # Try to find team by ID first (for hardcoded team_id=1), then by public_id
@@ -382,41 +384,29 @@ class SlackInstallationService:
                 team = self.db.query(Team).filter_by(id=int(team_identifier)).first()
             else:
                 team = self.db.query(Team).filter_by(public_id=team_identifier).first()
-            
             if not team:
                 raise ValueError(f"Team not found: {team_identifier}")
-            
-            log.info(f"Found team {team.public_id} for Slack team {team_identifier}")
-            
-            # Update user's Slack ID
-            user = self.db.query(WelcomepageUser).filter_by(team_id=team.id).first()
-            if user:
+
+            # Only update the initiating user if provided
+            if not target_user_public_id:
+                log.info("No initiator provided for Slack user update; skipping to avoid incorrect assignment")
+                return
+
+            user = self.db.query(WelcomepageUser).filter_by(public_id=target_user_public_id, team_id=team.id).first()
+            if not user:
+                log.warning(f"Initiator user not found in team. public_id={target_user_public_id}, team_public_id={team.public_id}")
+                return
+
+            if user.slack_user_id != slack_user_id:
                 user.slack_user_id = slack_user_id
                 self.db.commit()
-                log.info(f"Updated user's Slack ID for team {team_identifier}")
+                log.info(f"Updated slack_user_id for user {user.public_id} in team {team.public_id}")
             else:
-                log.warning(f"No user found for team {team_identifier}")
-                
+                log.info(f"slack_user_id already set for user {user.public_id}; no change")
         except Exception as e:
             log.error(f"Failed to update user's Slack ID for team {team_identifier}: {str(e)}")
             self.db.rollback()
             raise
-    
-    def _revoke_tokens(self, oauth_response):
-        """Revoke tokens if installation fails"""
-        log = new_logger("revoke_tokens")
-        try:
-            bot_token = oauth_response.get("access_token")
-            user_token = oauth_response.get("authed_user", {}).get("access_token")
-            
-            if bot_token:
-                self._revoke_token(bot_token)
-            
-            if user_token:
-                self._revoke_token(user_token)
-                
-        except Exception as e:
-            log.error(f"Failed to revoke tokens: {str(e)}")
     
     def _revoke_token(self, token: str):
         """Revoke a specific token"""

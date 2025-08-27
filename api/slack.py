@@ -45,7 +45,8 @@ async def start_slack_oauth(
             raise HTTPException(status_code=400, detail="Team ID not found in user context")
         
         service = SlackInstallationService(db)
-        result = service.start_oauth_flow(team_public_id)
+        initiator_public_user_id = current_user.get("public_id")
+        result = service.start_oauth_flow(team_public_id, initiator_public_user_id=initiator_public_user_id)
         
         log.info(f"Started Slack OAuth flow for team {team_public_id} with state: {result.state} authorize url: {result.authorize_url}")
         return result
@@ -164,7 +165,8 @@ async def complete_link_from_pending(
         team_public_id = current_user.get("team_id")
         if not team_public_id:
             raise HTTPException(status_code=400, detail="User team not found")
-        service.apply_installation_to_team(team_public_id, install_data)
+        initiator_public_user_id = current_user.get("public_id")
+        service.apply_installation_to_team(team_public_id, install_data, initiator_public_user_id=initiator_public_user_id)
         service.consume_pending_install(nonce)
 
         return {"success": True, "team_public_id": team_public_id}

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from models.slack_state_store import SlackStateStore
 from datetime import datetime
 from utils.logger_factory import new_logger
+from typing import Optional
 
 class SlackStateManager:
     """Manages OAuth state for Slack installations"""
@@ -10,11 +11,15 @@ class SlackStateManager:
         self.db = db
         self.expiration_seconds = expiration_seconds
     
-    def issue_state(self, team_public_id: str) -> str:
-        """Generate and store a new OAuth state"""
+    def issue_state(self, team_public_id: str, initiator_public_user_id: Optional[str] = None) -> str:
+        """Generate and store a new OAuth state, including the initiating user's public_id"""
         log = new_logger("issue_state")
         try:
-            state_record = SlackStateStore(team_public_id=team_public_id, expiration_seconds=self.expiration_seconds)
+            state_record = SlackStateStore(
+                team_public_id=team_public_id,
+                initiator_public_user_id=initiator_public_user_id,
+                expiration_seconds=self.expiration_seconds,
+            )
             self.db.add(state_record)
             self.db.commit()
             self.db.refresh(state_record)
@@ -71,6 +76,22 @@ class SlackStateManager:
             
         except Exception as e:
             log.error(f"Failed to get team_public_id for state {state}: {str(e)}")
+            return None
+
+    def get_initiator_public_user_id_from_state(self, state: str) -> Optional[str]:
+        """Get the initiator_public_user_id associated with a state"""
+        log = new_logger("get_initiator_public_user_id_from_state")
+        try:
+            state_record = self.db.query(SlackStateStore).filter_by(state=state).first()
+            if not state_record:
+                log.warning(f"OAuth state not found: {state}")
+                return None
+            if not state_record.is_valid():
+                log.warning(f"OAuth state invalid (expired or consumed): {state}")
+                return None
+            return state_record.initiator_public_user_id
+        except Exception as e:
+            log.error(f"Failed to get initiator_public_user_id for state {state}: {str(e)}")
             return None
     
     def cleanup_expired_states(self):
