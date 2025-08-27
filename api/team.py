@@ -562,7 +562,7 @@ async def join_team(
     Only authenticated users (USER or ADMIN) can join teams.
     """
     log = new_logger("join_team")
-    log.info(f"User attempting to join team: {public_id}")
+    log.info(f"User attempting to join team: {public_id}. Request parameters: {request}, {current_user}")
     
     # Get current user info
     user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
@@ -585,6 +585,7 @@ async def join_team(
     if not user:
         log.error(f"User not found in database: {user_public_id}")
         raise HTTPException(status_code=404, detail="User not found")
+    log.info(f"User {user_public_id} found in database")
     
     # Check if user is already in the target team
     if user.team_id == target_team.id:
@@ -599,6 +600,7 @@ async def join_team(
     try:
         # Optionally update slack_user_id if provided in request body
         incoming_slack_id = (request.slack_user_id.strip() if request and request.slack_user_id else None)
+        log.info(f"Incoming slack_user_id: {incoming_slack_id}")
         if incoming_slack_id:
             # Only update if different or not set
             if user.slack_user_id != incoming_slack_id:
@@ -607,6 +609,7 @@ async def join_team(
         
         # Optionally set default name from slack_name if user's name is empty
         incoming_slack_name = (request.slack_name.strip() if request and request.slack_name else None)
+        log.info(f"Incoming slack_name: {incoming_slack_name}")
         if incoming_slack_name and (not user.name or user.name.strip() == ""):
             log.info(f"Setting default name for user {user_public_id} from slack_name -> '{incoming_slack_name}'")
             user.name = incoming_slack_name
