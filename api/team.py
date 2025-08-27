@@ -557,84 +557,11 @@ async def join_team(
     db: Session = Depends(get_db), 
     current_user=Depends(require_roles("USER", "ADMIN"))
 ):
-    """
-    Allow an authenticated user to join a team via invitation.
-    Only authenticated users (USER or ADMIN) can join teams.
-    """
-    log = new_logger("join_team")
-    log.info(f"User attempting to join team: {public_id}. Request parameters: {request}, {current_user}")
-    
-    # Get current user info
-    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
-    user_role = current_user.get('role') if isinstance(current_user, dict) else None
-    
-    if not user_public_id:
-        log.error("No user public_id found in current_user")
-        raise HTTPException(status_code=401, detail="User authentication required")
-    
-    log.info(f"User {user_public_id} (role: {user_role}) attempting to join team {public_id}")
-    
-    # Verify target team exists
-    target_team = fetch_team_by_public_id(db, public_id)
-    if not target_team:
-        log.warning(f"Target team not found: {public_id}")
-        raise HTTPException(status_code=404, detail="Team not found")
-    
-    # Get the user from database
-    user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
-    if not user:
-        log.error(f"User not found in database: {user_public_id}")
-        raise HTTPException(status_code=404, detail="User not found")
-    log.info(f"User {user_public_id} found in database")
-    
-    # Check if user is already in the target team
-    if user.team_id == target_team.id:
-        log.info(f"User {user_public_id} is already a member of team {public_id}")
-        return JoinTeamResponse(
-            success=True,
-            message="You are already a member of this team",
-            team_public_id=target_team.public_id,
-            user_public_id=user_public_id
-        )
-    
-    try:
-        # Optionally update slack_user_id if provided in request body
-        incoming_slack_id = (request.slack_user_id.strip() if request and request.slack_user_id else None)
-        log.info(f"Incoming slack_user_id: {incoming_slack_id}")
-        if incoming_slack_id:
-            # Only update if different or not set
-            if user.slack_user_id != incoming_slack_id:
-                log.info(f"Updating slack_user_id for user {user_public_id} -> {incoming_slack_id}")
-                user.slack_user_id = incoming_slack_id
-        
-        # Optionally set default name from slack_name if user's name is empty
-        incoming_slack_name = (request.slack_name.strip() if request and request.slack_name else None)
-        log.info(f"Incoming slack_name: {incoming_slack_name}")
-        if incoming_slack_name and (not user.name or user.name.strip() == ""):
-            log.info(f"Setting default name for user {user_public_id} from slack_name -> '{incoming_slack_name}'")
-            user.name = incoming_slack_name
-        
-        # Update user's team membership
-        old_team_id = user.team_id
-        user.team_id = target_team.id
-        user.auth_role = 'USER'  # New team members start as USER role
-        
-        db.commit()
-        db.refresh(user)
-        
-        log.info(f"User {user_public_id} successfully joined team {public_id} (moved from team_id {old_team_id} to {target_team.id})")
-        
-        return JoinTeamResponse(
-            success=True,
-            message=f"Successfully joined {target_team.organization_name}",
-            team_public_id=target_team.public_id,
-            user_public_id=user_public_id
-        )
-        
-    except Exception as e:
-        db.rollback()
-        log.error(f"Failed to join team: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to join team")
+    # Deprecated: Invitation user flow assigns users to teams directly; join is no longer required.
+    return JSONResponse(
+        {"detail": "This endpoint has been removed. The Slack join flow creates the invitation user directly and no longer requires a separate join call."},
+        status_code=status.HTTP_410_GONE,
+    )
 
 
 @router.get("/teams/{public_id}/slack-settings")
