@@ -24,11 +24,14 @@ class SlackStateManager:
             self.db.commit()
             self.db.refresh(state_record)
             
-            log.info(f"Generated new OAuth state: {state_record.state} for team: {team_public_id}")
+            log.info(
+                f"Issued OAuth state={state_record.state} for team_public_id={team_public_id} "
+                f"initiator_public_user_id={initiator_public_user_id}"
+            )
             return state_record.state
             
         except Exception as e:
-            log.error(f"Failed to issue OAuth state for team {team_public_id}: {str(e)}")
+            log.error(f"Failed to issue OAuth state: {str(e)}")
             self.db.rollback()
             raise
     
@@ -89,6 +92,10 @@ class SlackStateManager:
             if not state_record.is_valid():
                 log.warning(f"OAuth state invalid (expired or consumed): {state}")
                 return None
+            log.info(
+                f"Resolved initiator_public_user_id={state_record.initiator_public_user_id} "
+                f"for state {state}"
+            )
             return state_record.initiator_public_user_id
         except Exception as e:
             log.error(f"Failed to get initiator_public_user_id for state {state}: {str(e)}")

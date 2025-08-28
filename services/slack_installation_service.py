@@ -254,6 +254,13 @@ class SlackInstallationService:
             # Save installation to team
             self._save_installation_to_team(team_public_id, installation_data)
             
+            # Trace which initiator and Slack user ID we will apply
+            log.info(
+                f"Initiator from state: {initiator_public_user_id}; applying Slack authed_user.id={installation_data.user_id} to team {team_public_id}"
+            )
+            if not initiator_public_user_id:
+                log.warning("No initiator_public_user_id from state; will skip updating any user's slack_user_id to avoid misassignment")
+
             # Update installer user's Slack user ID
             self._update_user_slack_id(team_public_id, installation_data.user_id, target_user_public_id=initiator_public_user_id)
             
@@ -377,6 +384,10 @@ class SlackInstallationService:
     def _update_user_slack_id(self, team_identifier: str, slack_user_id: str, target_user_public_id: Optional[str] = None):
         """Update Slack ID for the initiating user if provided; otherwise no-op or minimal fallback."""
         log = new_logger("update_user_slack_id")
+        log.info(
+            f"Attempting slack_user_id update: team_identifier={team_identifier}, "
+            f"target_user_public_id={target_user_public_id}, slack_user_id={slack_user_id}"
+        )
         try:
             # Try to find team by ID first (for hardcoded team_id=1), then by public_id
             team = None
