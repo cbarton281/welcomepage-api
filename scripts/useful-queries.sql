@@ -1,10 +1,13 @@
-select slack_user_id, team_id, auth_email, * from welcomepage_users where auth_email like 'charles.barton+w%'  
+select slack_user_id, team_id, auth_email, * from welcomepage_users where public_id = '0bmntxfqao'
+
+
+-- update welcomepage_users set slack_user_id = null
 
 select team_id, slack_user_id, auth_email, * from welcomepage_users  order by id desc
 
-select * from welcomepage_users where public_id = 'cl83yk2e92'
+select * from welcomepage_users where public_id = '0bmntxfqao'
 
-select  * from welcomepage_users order by id desc where public_id = 'vd71ukv0q2'
+select  * from welcomepage_users where public_id = '0bmntxfqao'  order by id desc
 
 select auth_email, auth_role, * from welcomepage_users 
 where team_id = 1 

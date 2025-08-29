@@ -37,16 +37,26 @@ async def add_reaction(
              f"emoji={request.emoji}, poster_role={current_user.get('role')}")
     
     try:
-        # Get the target user whose page is being reacted to
-        target_user = db.query(WelcomepageUser).filter(
-            WelcomepageUser.public_id == request.target_user_id
-        ).first()
+        # Get the target user whose page is being reacted to, and lock the row for update
+        target_user = (
+            db.query(WelcomepageUser)
+            .filter(WelcomepageUser.public_id == request.target_user_id)
+            .with_for_update()
+            .first()
+        )
         
         if not target_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+        # Enforce team access: user can only react within their own team
+        cu_team_public_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+        target_team_public_id = target_user.team.public_id if target_user.team else None
+        if cu_team_public_id != target_team_public_id:
+            log.warning(f"Team access denied: actor_team={cu_team_public_id} target_team={target_team_public_id}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         
         # Parse existing answers
         answers = target_user.answers or {}
@@ -145,17 +155,26 @@ async def remove_reaction(
 ):
     log = new_logger("remove_reaction")
     try:
-        # Get the target user whose page is being reacted to
-        target_user = db.query(WelcomepageUser).filter(
-            WelcomepageUser.public_id == request.target_user_id
-        ).first()
+        # Get and lock the target user row to prevent lost updates
+        target_user = (
+            db.query(WelcomepageUser)
+            .filter(WelcomepageUser.public_id == request.target_user_id)
+            .with_for_update()
+            .first()
+        )
         
         if not target_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+        # Enforce team access: user can only modify within their own team
+        cu_team_public_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+        target_team_public_id = target_user.team.public_id if target_user.team else None
+        if cu_team_public_id != target_team_public_id:
+            log.warning(f"Team access denied: actor_team={cu_team_public_id} target_team={target_team_public_id}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         # Parse existing answers
         answers = target_user.answers or {}
         

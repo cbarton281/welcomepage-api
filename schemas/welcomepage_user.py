@@ -73,6 +73,8 @@ class WelcomepageUserDTO(BaseModel):
     pronunciation_recording_url: Optional[str] = Field(None, alias="pronunciationRecordingUrl")
     selected_prompts: Optional[List[str]] = Field(None, alias="selectedPrompts")
     answers: Optional[Dict[str, Answer]] = None
+    # Include page-level comments so clients don't need a separate fetch
+    page_comments: Optional[List[Dict[str, Any]]] = Field(None, alias="pageComments")
     team_public_id: Optional[str] = Field(None, alias="teamPublicId")
 
     created_at: Optional[str] = Field(None, alias="createdAt")

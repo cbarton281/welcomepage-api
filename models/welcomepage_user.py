@@ -25,6 +25,8 @@ class WelcomepageUser(Base):
     pronunciation_recording_url = Column(String)
     selected_prompts = Column(JSON, nullable=False)  # list of strings
     answers = Column(JSON, nullable=False)  # dict
+    # New: page-level comments stored as JSON array
+    page_comments = Column(JSON, nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now(), onupdate=func.now())
@@ -67,6 +69,7 @@ class WelcomepageUser(Base):
             'pronunciationRecordingUrl': self.pronunciation_recording_url,
             'selectedPrompts': self.selected_prompts,
             'answers': self.answers,
+            'pageComments': self.page_comments,
             'team_id': self.team_id,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
