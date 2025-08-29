@@ -57,7 +57,7 @@ from api.user import router as users_router
 from api.team import router as team_router
 from api.verification_code import router as verification_code_router
 from api.reactions import router as reactions_router
-from api.comments import router as comments_router
+from api.page_comments import router as comments_router
 from api.id_check import router as id_check_router
 from api.visits import router as visits_router
 from api.healthcheck import router as health_router
