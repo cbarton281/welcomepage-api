@@ -67,6 +67,7 @@ from api.deployment import router as deployment_router
 from api.public_join import router as public_join_router
 from api.slack_redirect import router as slack_redirect_router
 from api.spotify import router as spotify_router
+from api.google import router as google_router
 
 app.include_router(users_router, prefix="/api")
 app.include_router(team_router, prefix="/api")
@@ -82,3 +83,4 @@ app.include_router(deployment_router, prefix="/api")
 app.include_router(public_join_router, prefix="/api")
 app.include_router(slack_redirect_router, prefix="/api")
 app.include_router(spotify_router, prefix="/api")
+app.include_router(google_router, prefix="/api")
