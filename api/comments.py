@@ -25,6 +25,9 @@ class CommentResponse(BaseModel):
     author_public_id: str
     timestamp: str
     prompt_index: Optional[int] = None
+    # Added to align with reactions payload shape for display
+    user: Optional[str] = None
+    userId: Optional[str] = None
 
 @router.post("/")
 async def create_comment(
@@ -36,11 +39,10 @@ async def create_comment(
     log.info(f"create_comment: actor={current_user.get('user_id')} target={request.target_user_id}")
 
     try:
-        # Fetch and lock the target user row to serialize concurrent writes
+        # Fetch the target user (no row lock; keep transaction short)
         target_user = (
             db.query(WelcomepageUser)
             .filter(WelcomepageUser.public_id == request.target_user_id)
-            .with_for_update()
             .first()
         )
         if not target_user:
@@ -63,6 +65,10 @@ async def create_comment(
             "author_public_id": current_user.get("user_id"),
             "timestamp": now.isoformat(),
         }
+        # Store display name fields similar to reactions for consistent frontend consumption
+        display_name = current_user.get("name", "Unknown") if isinstance(current_user, dict) else "Unknown"
+        new_comment["user"] = display_name
+        new_comment["userId"] = current_user.get("user_id") if isinstance(current_user, dict) else None
         if request.prompt_index is not None:
             new_comment["prompt_index"] = request.prompt_index
 

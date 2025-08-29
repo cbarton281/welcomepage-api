@@ -37,11 +37,10 @@ async def add_reaction(
              f"emoji={request.emoji}, poster_role={current_user.get('role')}")
     
     try:
-        # Get the target user whose page is being reacted to, and lock the row for update
+        # Get the target user whose page is being reacted to (no row lock; keep transactions short)
         target_user = (
             db.query(WelcomepageUser)
             .filter(WelcomepageUser.public_id == request.target_user_id)
-            .with_for_update()
             .first()
         )
         
@@ -91,12 +90,8 @@ async def add_reaction(
                 detail="User has already reacted with this emoji"
             )
         
-        # Get the reacting user's name from database
-        reacting_user = db.query(WelcomepageUser).filter(
-            WelcomepageUser.public_id == current_user.get('user_id')
-        ).first()
-        
-        reacting_user_name = reacting_user.name if reacting_user else 'Anonymous User'
+        # Use JWT-provided name to avoid extra DB query/load
+        reacting_user_name = current_user.get('name', 'Anonymous User') if isinstance(current_user, dict) else 'Anonymous User'
         log.info(f"Reacting user name: {reacting_user_name}")
         
         # Create new reaction
@@ -155,11 +150,10 @@ async def remove_reaction(
 ):
     log = new_logger("remove_reaction")
     try:
-        # Get and lock the target user row to prevent lost updates
+        # Get the target user (no row lock)
         target_user = (
             db.query(WelcomepageUser)
             .filter(WelcomepageUser.public_id == request.target_user_id)
-            .with_for_update()
             .first()
         )
         
