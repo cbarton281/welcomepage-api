@@ -52,7 +52,7 @@ class SlackInstallationService:
             # Build OAuth parameters
             params = {
                 "client_id": self.client_id,
-                "scope": "channels:join,channels:manage,channels:read,chat:write,commands,im:write,users.profile:read,users:read",
+                "scope": "channels:manage,channels:read,chat:write,chat:write.public,commands,im:write,users.profile:read,users:read",
                 "user_scope": "users.profile:write,users:read",
                 "state": state
             }

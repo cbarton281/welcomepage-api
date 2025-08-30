@@ -615,7 +615,24 @@ async def create_slack_channel(
                 raise HTTPException(status_code=500, detail=f"Slack error: {err}")
             ch = resp["channel"]
             log.info(f"Channel created: id={ch.get('id')} name={ch.get('name')}")
-            return {"id": ch["id"], "name": ch["name"]}
+
+            # Invite the installing user to the newly created channel, if we know their Slack user id
+            invited_installer = False
+            try:
+                installer_slack_user_id = user.slack_user_id
+                if installer_slack_user_id:
+                    log.info(f"Inviting installer slack_user_id={installer_slack_user_id} to channel {ch.get('id')}")
+                    invite_resp = slack_client.conversations_invite(channel=ch["id"], users=installer_slack_user_id)
+                    if invite_resp.get("ok"):
+                        invited_installer = True
+                    else:
+                        log.warning(f"conversations_invite not ok: {invite_resp.get('error', 'unknown_error')}")
+                else:
+                    log.info("Installer does not have a slack_user_id; skipping invite")
+            except Exception as ie:
+                log.warning(f"Failed to invite installer to new channel: {ie}")
+
+            return {"id": ch["id"], "name": ch["name"], "invited_installer": invited_installer}
         except Exception as e:
             # Import here to avoid module-level dependency if unused in other flows
             try:
@@ -634,7 +651,8 @@ async def create_slack_channel(
                         for ch in channels:
                             if ch.get('name', '').lower() == channel_name and not ch.get('is_archived', False):
                                 log.info(f"Found existing channel: id={ch.get('id')}")
-                                return {"id": ch["id"], "name": ch["name"]}
+                                # Do not auto-invite for existing channels in name_taken path
+                                return {"id": ch["id"], "name": ch["name"], "invited_installer": False}
                         log.error("Channel reported as taken but not found in list")
                         raise HTTPException(status_code=409, detail="Channel name already taken")
                     except Exception as le:

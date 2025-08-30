@@ -255,6 +255,7 @@ class SlackPublishService:
         Returns a normalized result dict with fields compatible with the API layer.
         """
         log = new_logger(f"test_channel_connection_{team_public_id}")
+        log.info(f"Testing channel connection for team {team_public_id}, channel {channel_id}")
 
         if not db:
             db = next(get_db())
@@ -277,6 +278,10 @@ class SlackPublishService:
             if not bot_token:
                 return {"success": False, "error": "Invalid Slack integration", "message": "Slack integration is incomplete"}
 
+            # Determine if bot has chat:write.public allowing posts to public channels without membership
+            bot_scopes = (slack_app_data.get("bot_scopes") or "")
+            has_chat_write_public = "chat:write.public" in [s.strip() for s in bot_scopes.split(",") if s]
+
             client = WebClient(token=bot_token)
 
             result: Dict[str, Any] = {
@@ -285,7 +290,10 @@ class SlackPublishService:
                 "bot_member": False,
                 "joined": False,
                 "message_sent": False,
+                "is_private": None,
+                "has_chat_write_public": has_chat_write_public,
                 "errors": {},
+                "creator": None,
             }
 
             # Resolve channel name for nicer messaging (best-effort)
@@ -294,6 +302,8 @@ class SlackPublishService:
                 if info.get("ok"):
                     ch = info.get("channel", {})
                     result["channel_name"] = ch.get("name")
+                    result["is_private"] = ch.get("is_private", False)
+                    result["creator"] = ch.get("creator")
             except Exception as e:
                 log.info(f"conversations_info failed (non-fatal): {e}")
                 result["errors"]["info_failed"] = str(e)
@@ -320,28 +330,34 @@ class SlackPublishService:
                     log.error(f"conversations_members failed: {e}")
                     result["errors"]["members_failed"] = str(e)
 
-            # Attempt join if not member and allowed
+            # Attempt join only if not a member, auto_join requested, and channel was created by this bot
             if not result["bot_member"] and auto_join:
-                try:
-                    join_resp = client.conversations_join(channel=channel_id)
-                    if join_resp.get("ok"):
-                        result["joined"] = True
-                        # Re-check membership after join
-                        try:
-                            members_resp = client.conversations_members(channel=channel_id, limit=1000)
-                            members = members_resp.get("members", [])
-                            result["bot_member"] = bot_user_id in members if bot_user_id else False
-                        except Exception as e:
-                            log.error(f"post-join conversations_members failed: {e}")
-                            result["errors"]["members_after_join_failed"] = str(e)
-                    else:
-                        result["errors"]["join_failed"] = join_resp.get("error", "unknown_error")
-                except Exception as e:
-                    log.error(f"conversations_join failed: {e}")
-                    result["errors"]["join_exception"] = str(e)
+                if bot_user_id and result.get("creator") == bot_user_id:
+                    try:
+                        join_resp = client.conversations_join(channel=channel_id)
+                        if join_resp.get("ok"):
+                            result["joined"] = True
+                            # Re-check membership after join
+                            try:
+                                members_resp = client.conversations_members(channel=channel_id, limit=1000)
+                                members = members_resp.get("members", [])
+                                result["bot_member"] = bot_user_id in members if bot_user_id else False
+                            except Exception as e:
+                                log.error(f"post-join conversations_members failed: {e}")
+                                result["errors"]["members_after_join_failed"] = str(e)
+                        else:
+                            result["errors"]["join_failed"] = join_resp.get("error", "unknown_error")
+                    except Exception as e:
+                        log.error(f"conversations_join failed: {e}")
+                        result["errors"]["join_exception"] = str(e)
+                else:
+                    result["errors"]["join_skipped_non_intrusive"] = "Skipping join: channel not created by bot (non-intrusive policy)"
+            else:
+                result["errors"]["join_skipped_non_intrusive"] = "Skipping join: channel not created by bot (non-intrusive policy)"
 
             # Optional test message
-            if send_test_message and result["bot_member"]:
+            can_post_without_membership = bool(result.get("has_chat_write_public")) and (result.get("is_private") is False)
+            if send_test_message and (result["bot_member"] or can_post_without_membership):
                 try:
                     channel_name_for_blocks = result.get("channel_name") or "this channel"
                     blocks = SlackBlocksService.channel_test_message(channel_name_for_blocks)
@@ -357,7 +373,7 @@ class SlackPublishService:
             # Compute can_post and reason
             can_post = False
             reason: Optional[str] = None
-            if result["bot_member"]:
+            if result["bot_member"] or can_post_without_membership:
                 if send_test_message:
                     can_post = result["message_sent"]
                     if not can_post:
@@ -365,6 +381,7 @@ class SlackPublishService:
                 else:
                     can_post = True
             else:
+                # If it's a private channel or the bot lacks chat:write.public, membership is required
                 reason = "Bot is not a member of the channel"
 
             result["can_post"] = can_post
@@ -386,7 +403,7 @@ class SlackPublishService:
             if error_msg == 'channel_not_found':
                 user_message = "Channel not found. Please check the channel name."
             elif error_msg == 'not_in_channel':
-                user_message = "The Welcomepage bot is not in this channel. Please invite the bot first."
+                user_message = "Bot is not in this channel. For private channels, invite the bot. For public channels, ensure the app has chat:write.public."
             elif error_msg == 'access_denied':
                 user_message = "Access denied. The bot may not have permission to post in this channel."
             else:
