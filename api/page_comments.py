@@ -66,7 +66,19 @@ async def create_comment(
             "timestamp": now.isoformat(),
         }
         # Store display name fields similar to reactions for consistent frontend consumption
-        display_name = current_user.get("name", "Unknown") if isinstance(current_user, dict) else "Unknown"
+        # Prefer authoritative DB name for authenticated users; PRE_SIGNUP may not exist in DB.
+        display_name = "Unknown"
+        if isinstance(current_user, dict):
+            user_role = current_user.get("role")
+            author_public_id = current_user.get("user_id")
+            if user_role and user_role != "PRE_SIGNUP" and author_public_id:
+                author_user = (
+                    db.query(WelcomepageUser)
+                    .filter(WelcomepageUser.public_id == author_public_id)
+                    .first()
+                )
+                if author_user and getattr(author_user, "name", None):
+                    display_name = author_user.name
         new_comment["user"] = display_name
         new_comment["userId"] = current_user.get("user_id") if isinstance(current_user, dict) else None
         if request.prompt_index is not None:
