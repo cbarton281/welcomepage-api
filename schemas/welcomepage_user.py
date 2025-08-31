@@ -76,6 +76,7 @@ class WelcomepageUserDTO(BaseModel):
     # Include page-level comments so clients don't need a separate fetch
     page_comments: Optional[List[Dict[str, Any]]] = Field(None, alias="pageComments")
     team_public_id: Optional[str] = Field(None, alias="teamPublicId")
+    invite_banner_dismissed: Optional[bool] = Field(None, alias="inviteBannerDismissed")
 
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")

@@ -34,6 +34,9 @@ class GoogleAuthRequest(BaseModel):
     public_id: str = None  # Optional - from anonymous user cookies
     team_public_id: str = None  # Optional - from anonymous user cookies
 
+class InviteBannerDismissRequest(BaseModel):
+    dismissed: bool
+
 user_retry_logger = new_logger("fetch_user_by_id_retry")
 
 @router.post("/users/update_auth_fields", response_model=WelcomepageUserDTO)
@@ -68,6 +71,45 @@ def update_auth_fields(
         db.rollback()
         log.exception("Non-retryable database error in update_auth_fields.")
         raise HTTPException(status_code=500, detail="Database error. Please try again later.")
+
+@router.patch("/users/me/invite_banner", response_model=WelcomepageUserDTO)
+def update_invite_banner(
+    payload: InviteBannerDismissRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Update the current authenticated user's invite banner dismissed flag.
+    Only authenticated users (USER/ADMIN) are allowed to persist this change.
+    """
+    log = new_logger("update_invite_banner")
+    user_public_id = current_user.get('user_id')
+    log.info(f"Updating invite_banner_dismissed for user [{user_public_id}] to [{payload.dismissed}]")
+
+    try:
+        user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
+        if not user:
+            log.info(f"User not found for public_id [{user_public_id}]")
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user.invite_banner_dismissed = payload.dismissed
+        user.updated_at = datetime.now(timezone.utc)
+
+        try:
+            db.commit()
+            db.refresh(user)
+        except OperationalError:
+            db.rollback()
+            raise
+        except Exception:
+            db.rollback()
+            log.exception("Non-retryable database error in update_invite_banner.")
+            raise HTTPException(status_code=500, detail="Database error. Please try again later.")
+
+        return WelcomepageUserDTO.model_validate(user)
+    except OperationalError:
+        # These exceptions are handled by the retry decorator if applied; here we just propagate
+        raise
     log.info(f"Updated user [{user.public_id}] with auth_email [{user.auth_email}] and auth_role [{user.auth_role}]")
     return WelcomepageUserDTO.model_validate(user)
 

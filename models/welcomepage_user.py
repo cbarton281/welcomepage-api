@@ -27,6 +27,8 @@ class WelcomepageUser(Base):
     answers = Column(JSON, nullable=False)  # dict
     # New: page-level comments stored as JSON array
     page_comments = Column(JSON, nullable=True)
+    # UI preferences/flags
+    invite_banner_dismissed = Column(Boolean, nullable=False, default=False, server_default='0')
 
     created_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now(), onupdate=func.now())
@@ -70,6 +72,7 @@ class WelcomepageUser(Base):
             'selectedPrompts': self.selected_prompts,
             'answers': self.answers,
             'pageComments': self.page_comments,
+            'inviteBannerDismissed': self.invite_banner_dismissed,
             'team_id': self.team_id,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,

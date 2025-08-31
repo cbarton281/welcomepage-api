@@ -1,4 +1,4 @@
-select slack_user_id, team_id, auth_email, * from welcomepage_users where public_id = '0bmntxfqao'
+select slack_user_id, team_id, auth_email, * from welcomepage_users order by id desc where public_id = '0bmntxfqao'
 
 
 -- update welcomepage_users set slack_user_id = null
@@ -43,4 +43,5 @@ FROM pg_indexes
 WHERE tablename = 'slack_pending_installs';
 
 select * from slack_pending_installs
+
 
