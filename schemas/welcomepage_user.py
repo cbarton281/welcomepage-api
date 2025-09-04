@@ -75,6 +75,8 @@ class WelcomepageUserDTO(BaseModel):
     answers: Optional[Dict[str, Answer]] = None
     # Include page-level comments so clients don't need a separate fetch
     page_comments: Optional[List[Dict[str, Any]]] = Field(None, alias="pageComments")
+    # Bento widgets configuration as arbitrary JSON list
+    bento_widgets: Optional[List[Dict[str, Any]]] = Field(None, alias="bentoWidgets")
     team_public_id: Optional[str] = Field(None, alias="teamPublicId")
     invite_banner_dismissed: Optional[bool] = Field(None, alias="inviteBannerDismissed")
 

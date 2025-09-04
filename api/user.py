@@ -236,6 +236,7 @@ async def upsert_user(
     handwave_emoji_url: str = Form(None),
     selected_prompts: str = Form(None),
     answers: str = Form(None),
+    bento_widgets: str = Form(None),
     team_id: int = Form(None),
     team_public_id: str = Form(None),  # Support team assignment by public ID
     slack_user_id: str = Form(None),  # Preserve Slack user ID
@@ -300,6 +301,13 @@ async def upsert_user(
     except Exception as e:
         log.warning(f"Invalid answers JSON: {answers!r}. Using empty dict. Error: {e}")
         answers_dict = {}
+
+    # Parse bento widgets JSON string if provided
+    try:
+        bento_widgets_list = json.loads(bento_widgets or "[]")
+    except Exception as e:
+        log.warning(f"Invalid bentoWidgets JSON: {bento_widgets!r}. Using empty list. Error: {e}")
+        bento_widgets_list = []
     
     # Parse handwave_emoji JSON string if provided
     parsed_handwave_emoji = None
@@ -378,7 +386,7 @@ async def upsert_user(
     
     # Step 4: Save complete user record with all URLs in one database operation
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id, current_user
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), json.dumps(bento_widgets_list), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id, current_user
     )
 
     return WelcomepageUserDTO.model_validate(db_user)
@@ -390,7 +398,7 @@ async def upsert_user(
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
-    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None, current_user=None
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, bento_widgets, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None, current_user=None
 ):
     # All arguments are plain values, no FastAPI Form/File/Depends here
     # All business logic remains unchanged
@@ -426,6 +434,12 @@ def upsert_user_db_logic(
         except Exception as e:
             log.warning(f"Invalid answers: {answers!r}. Using empty dict. Error: {e}")
             answers_dict = {}
+        # Parse bento widgets
+        try:
+            bento_widgets_list = json.loads(bento_widgets or "[]")
+        except Exception as e:
+            log.warning(f"Invalid bento_widgets: {bento_widgets!r}. Using empty list. Error: {e}")
+            bento_widgets_list = []
         
         # Ensure answers_dict includes all selected prompts with proper structure
         for prompt in selected_prompts_list:
@@ -468,6 +482,7 @@ def upsert_user_db_logic(
             db_user.handwave_emoji_url = handwave_emoji_url
             db_user.selected_prompts = selected_prompts_list
             db_user.answers = answers_dict
+            db_user.bento_widgets = bento_widgets_list
             db_user.team_id = team_id
             # Preserve existing slack_user_id if none provided in request
             if slack_user_id is not None:
@@ -519,6 +534,7 @@ def upsert_user_db_logic(
                 handwave_emoji_url=handwave_emoji_url,
                 selected_prompts=selected_prompts_list,
                 answers=answers_dict,
+                bento_widgets=bento_widgets_list,
                 team_id=team_id,
                 slack_user_id=slack_user_id,
                 is_draft=True,
