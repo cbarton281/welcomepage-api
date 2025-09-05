@@ -309,6 +309,45 @@ async def upsert_user(
         log.warning(f"Invalid bentoWidgets JSON: {bento_widgets!r}. Using empty list. Error: {e}")
         bento_widgets_list = []
     
+    # Process Bento widget image uploads: keys like bento_widget_image_<widgetId>
+    try:
+        for field_name, file_data in form_data.items():
+            if field_name.startswith("bento_widget_image_") and hasattr(file_data, 'filename') and file_data.filename:
+                widget_id = field_name.replace("bento_widget_image_", "")
+                log.info(f"Processing Bento widget image upload for widget id: {widget_id}")
+
+                # Create a stable filename based on the user's public_id and widget id
+                safe_widget_id = widget_id.replace("/", "_").replace("\\", "_").replace(":", "_")
+                image_filename = f"{generate_file_id(public_id)}-bento-{safe_widget_id}"
+
+                # Upload image to Supabase
+                content = await file_data.read()
+                image_url = await upload_to_supabase_storage(
+                    file_content=content,
+                    filename=image_filename,
+                    content_type=file_data.content_type or "image/jpeg"
+                )
+                log.info(f"Uploaded Bento widget image for [{widget_id}]: {image_url}")
+
+                # Inject URL (and file meta) back into the corresponding widget in bento_widgets_list
+                try:
+                    for w in bento_widgets_list:
+                        if isinstance(w, dict) and w.get('id') == widget_id:
+                            content_obj = (w.get('content') or {})
+                            # Optional: include file metadata for client reference
+                            content_obj['file'] = {
+                                'filename': file_data.filename,
+                                'contentType': file_data.content_type or 'image/jpeg',
+                                'size': len(content),
+                            }
+                            content_obj['url'] = image_url
+                            w['content'] = content_obj
+                            break
+                except Exception:
+                    log.exception(f"Failed to inject Bento widget URL back into JSON for widget {widget_id}")
+    except Exception:
+        log.exception("Error while processing Bento widget image uploads")
+
     # Parse handwave_emoji JSON string if provided
     parsed_handwave_emoji = None
     if handwave_emoji:
