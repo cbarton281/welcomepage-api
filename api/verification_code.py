@@ -87,6 +87,64 @@ def generate_verification_email(
 ):
     log = new_logger("generate_verification_email")
     log.info(f"Generating verification code for {payload.email}")
+    # Domain enforcement: prevent sending codes to disallowed domains
+    try:
+        def _normalize_email_domain(email: str) -> str:
+            parts = (email or "").split("@")
+            return parts[-1].strip().lower() if len(parts) == 2 else ""
+
+        def _normalize_domain(d: str) -> str:
+            d = (d or "").strip().lower()
+            if d.startswith("@"): d = d[1:]
+            return d
+
+        def _domain_allowed(domain: str, allowed: list[str]) -> bool:
+            if not allowed:
+                return True
+            for rule in allowed:
+                rule = _normalize_domain(rule)
+                if not rule:
+                    continue
+                if rule.startswith("*."):
+                    base = rule[2:]
+                    if domain == base or domain.endswith("." + base):
+                        return True
+                else:
+                    if domain == rule:
+                        return True
+            return False
+
+        # Determine team for enforcement
+        target_team = None
+        # 1) If user already exists by email, use that user's team
+        existing_user_by_email = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
+        if existing_user_by_email and existing_user_by_email.team_id:
+            target_team = db.query(Team).filter_by(id=existing_user_by_email.team_id).first()
+        # 2) Else try current_user token's team_id (public id)
+        if target_team is None:
+            jwt_team_public_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+            if jwt_team_public_id:
+                target_team = db.query(Team).filter_by(public_id=jwt_team_public_id).first()
+        # 3) Else try payload.public_id
+        if target_team is None and payload.public_id:
+            cookie_user = db.query(WelcomepageUser).filter_by(public_id=payload.public_id).first()
+            if cookie_user and cookie_user.team_id:
+                target_team = db.query(Team).filter_by(id=cookie_user.team_id).first()
+
+        if target_team and target_team.security_settings:
+            settings = target_team.security_settings or {}
+            if bool(settings.get('domain_check_enabled')):
+                domain = _normalize_email_domain(payload.email)
+                allowed_list = settings.get('allowed_domains') or []
+                if not _domain_allowed(domain, allowed_list):
+                    log.warning(f"Blocked verification email due to domain policy. domain={domain}, team={target_team.public_id}")
+                    raise HTTPException(status_code=403, detail="Email domain is not allowed for this team.")
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Error during domain policy check in generate_verification_email")
+        # Fail closed? Prefer safe default: if we cannot validate, block to avoid bypassing policy
+        raise HTTPException(status_code=500, detail="Unable to process verification request.")
     verification_code, expires_at, code = generate_code_with_retry(payload, db, log)
     # Send the verification email
     from api.send_email import send_verification_email
@@ -152,6 +210,45 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
         log.info(f"User not found for this verification code [{verification_code.to_dict()}]")
         raise HTTPException(status_code=404, detail="User not found for this verification code.")
     log.info(f"User found [{user.public_id}, {user.role}, {user.name}, {user.auth_email}, {user.auth_role}]")
+    
+    # Domain enforcement at verification stage (defense in depth)
+    try:
+        def _normalize_email_domain(email: str) -> str:
+            parts = (email or "").split("@")
+            return parts[-1].strip().lower() if len(parts) == 2 else ""
+
+        def _normalize_domain(d: str) -> str:
+            d = (d or "").strip().lower()
+            if d.startswith("@"): d = d[1:]
+            return d
+
+        def _domain_allowed(domain: str, allowed: list[str]) -> bool:
+            if not allowed:
+                return True
+            for rule in allowed:
+                rule = _normalize_domain(rule)
+                if not rule:
+                    continue
+                if rule.startswith("*."):
+                    base = rule[2:]
+                    if domain == base or domain.endswith("." + base):
+                        return True
+                else:
+                    if domain == rule:
+                        return True
+            return False
+
+        team = db.query(Team).filter_by(id=user.team_id).first() if user.team_id else None
+        if team and team.security_settings and bool(team.security_settings.get('domain_check_enabled')):
+            domain = _normalize_email_domain(verification_code.email)
+            if not _domain_allowed(domain, team.security_settings.get('allowed_domains') or []):
+                log.warning(f"Blocked code verification due to domain policy. domain={domain}, team={team.public_id}")
+                raise HTTPException(status_code=403, detail="Email domain is not allowed for this team.")
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Error during domain policy check in verify_code_with_retry")
+        raise HTTPException(status_code=500, detail="Unable to verify code at this time.")
     
     team_public_id = None
     if user.team_id:

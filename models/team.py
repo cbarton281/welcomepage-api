@@ -14,6 +14,7 @@ class Team(Base):
     color_scheme = Column(String, nullable=False)
     color_scheme_data = Column(JSON, nullable=True)  # Store the full color scheme object
     slack_settings = Column(JSON, nullable=True)  # Store Slack integration settings (workspace ID, etc.)
+    security_settings = Column(JSON, nullable=True)  # Store security-related settings (e.g., allowed email domains)
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
 
     users = relationship("WelcomepageUser", back_populates="team")
@@ -28,4 +29,5 @@ class Team(Base):
             "color_scheme": self.color_scheme,
             "color_scheme_data": self.color_scheme_data,
             "slack_settings": self.slack_settings,
+            "security_settings": self.security_settings,
         }

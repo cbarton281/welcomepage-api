@@ -679,3 +679,107 @@ async def update_slack_settings(
         db.rollback()
         log.error(f"Failed to update Slack settings for team {public_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update Slack settings")
+
+
+# =====================
+# Allowed Email Domains
+# =====================
+
+class DomainSecuritySettings(BaseModel):
+    domain_check_enabled: bool = False
+    allowed_domains: List[str] = []
+
+
+@router.get("/teams/{public_id}/security-settings")
+async def get_security_settings(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Get security settings for a team (allowed email domains).
+    Only ADMIN users can access security settings.
+    """
+    log = new_logger("get_security_settings")
+    log.info(f"Getting security settings for team: {public_id}")
+
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to access security settings for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only access settings for your own team")
+
+    settings = team.security_settings or {}
+    # Normalize response
+    response = {
+        "domain_check_enabled": bool(settings.get("domain_check_enabled", False)),
+        "allowed_domains": settings.get("allowed_domains") or []
+    }
+    log.info(f"Retrieved security settings for team {public_id}: {response}")
+    return response
+
+
+@router.patch("/teams/{public_id}/security-settings")
+async def update_security_settings(
+    public_id: str,
+    request: DomainSecuritySettings,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Update security settings for a team (allowed email domains).
+    Only ADMIN users can update security settings.
+    """
+    log = new_logger("update_security_settings")
+    log.info(f"Updating security settings for team: {public_id}")
+
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to update security settings for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only update settings for your own team")
+
+    try:
+        # Normalize incoming domains: trim, lowercase, strip leading '@'
+        def _normalize_domain(s: str) -> str:
+            s = (s or "").strip().lower()
+            if s.startswith("@"): s = s[1:]
+            return s
+
+        normalized_domains = []
+        for d in (request.allowed_domains or []):
+            nd = _normalize_domain(d)
+            if nd: normalized_domains.append(nd)
+
+        existing = team.security_settings or {}
+        existing["domain_check_enabled"] = bool(request.domain_check_enabled)
+        existing["allowed_domains"] = normalized_domains
+
+        team.security_settings = dict(existing)
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'security_settings')
+        db.commit()
+        db.refresh(team)
+
+        response = {
+            "domain_check_enabled": existing["domain_check_enabled"],
+            "allowed_domains": existing["allowed_domains"],
+        }
+        log.info(f"Updated security settings for team {public_id}: {response}")
+        return response
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to update security settings for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update security settings")

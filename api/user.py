@@ -130,6 +130,59 @@ def google_auth(
     log.info(f"Cookie data - public_id [{payload.public_id}], team_public_id [{payload.team_public_id}]")
     
     try:
+        # Domain security helpers
+        def _normalize_email_domain(email: str) -> str:
+            parts = (email or "").split("@")
+            return parts[-1].strip().lower() if len(parts) == 2 else ""
+
+        def _normalize_domain(d: str) -> str:
+            d = (d or "").strip().lower()
+            if d.startswith("@"): d = d[1:]
+            return d
+
+        def _domain_allowed(domain: str, allowed: list[str]) -> bool:
+            if not allowed:
+                return True
+            for rule in allowed:
+                rule = _normalize_domain(rule)
+                if not rule:
+                    continue
+                if rule.startswith("*."):
+                    base = rule[2:]
+                    if domain == base or domain.endswith("." + base):
+                        return True
+                else:
+                    if domain == rule:
+                        return True
+            return False
+
+        # Resolve team context for enforcement (no grandfathering, enforce all roles)
+        team_for_policy = None
+        # If existing user by email, use that user's team
+        existing_user = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
+        if existing_user and existing_user.team_id:
+            team_for_policy = db.query(Team).filter_by(id=existing_user.team_id).first()
+        # Else try cookie public_id
+        if team_for_policy is None and payload.public_id:
+            cookie_user = db.query(WelcomepageUser).filter_by(public_id=payload.public_id).first()
+            if cookie_user and cookie_user.team_id:
+                team_for_policy = db.query(Team).filter_by(id=cookie_user.team_id).first()
+        # Else try team_public_id param
+        if team_for_policy is None and payload.team_public_id:
+            team_for_policy = db.query(Team).filter_by(public_id=payload.team_public_id).first()
+
+        # If we have a team context and policy is enabled, enforce it. If no team context,
+        # this is a new user + new team scenario; domain policy is team-specific and doesn't apply yet.
+        if team_for_policy is not None:
+            settings = (team_for_policy.security_settings or {})
+            if bool(settings.get('domain_check_enabled')):
+                domain = _normalize_email_domain(payload.email)
+                allowed_list = settings.get('allowed_domains') or []
+                if not _domain_allowed(domain, allowed_list):
+                    log.warning(f"Blocked Google auth due to domain policy. domain={domain}, team={team_for_policy.public_id}")
+                    raise HTTPException(status_code=403, detail="Authentication is not allowed for this email.")
+
+        # Domain enforcement passed; proceed with normal flow
         # Step 1: Try to find user by email (existing authenticated user)
         existing_user = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
         if existing_user:
@@ -168,15 +221,15 @@ def google_auth(
                     "message": "Anonymous user converted to authenticated"
                 }
         
-        # Step 3: Create new user and potentially team
+        # Step 3: Create new user and team (no team context to enforce yet)
         log.info("No existing user found - creating new user and team")
         
         # Create new team first
         team_public_id = generate_short_id_with_collision_check(db, Team, "team")
         new_team = Team(
             public_id=team_public_id,
-            name=f"{payload.name}'s Team",  # Default team name
-            created_at=datetime.now(timezone.utc)
+            organization_name=f"{payload.name}'s Team",  # Default team name
+            color_scheme="corporate-blue",
         )
         db.add(new_team)
         db.flush()  # Get the team ID
@@ -186,7 +239,7 @@ def google_auth(
         new_user = WelcomepageUser(
             public_id=user_public_id,
             name=payload.name,
-            role="",  
+            role="",
             auth_role="ADMIN",
             auth_email=payload.email,
             team_id=new_team.id,
