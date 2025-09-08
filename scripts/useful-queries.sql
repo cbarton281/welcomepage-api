@@ -1,4 +1,4 @@
-select slack_user_id, team_id, auth_email, * from welcomepage_users   where public_id = 'y0h9gyek8d'
+select slack_user_id, team_id, auth_email, * from welcomepage_users   where public_id = '0bmntxfqao'
 
 
 -- update welcomepage_users set slack_user_id = null
@@ -33,7 +33,7 @@ select * from verification_codes order by id desc
 
 select * from alembic_version
 
-select slack_settings, * from teams where public_id = 'ied3vv24li' 
+select * from teams where public_id = 'gs3jumcp8t' 
 
 -- 'c2b52ea3-bcdf-47fa-a16c-9ef04f31c949'
 
