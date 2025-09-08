@@ -37,6 +37,20 @@ class GoogleAuthRequest(BaseModel):
 class InviteBannerDismissRequest(BaseModel):
     dismissed: bool
 
+# Minimal preview response
+class UserPreviewResponse(BaseModel):
+    public_id: str
+    display_name: str
+    team_public_id: str
+
+class EnsureInTeamRequest(BaseModel):
+    target_user_public_id: str
+
+class EnsureInTeamResponse(BaseModel):
+    success: bool
+    team_public_id: str
+    user_public_id: str
+
 user_retry_logger = new_logger("fetch_user_by_id_retry")
 
 @router.post("/users/update_auth_fields", response_model=WelcomepageUserDTO)
@@ -263,6 +277,126 @@ def google_auth(
         db.rollback()
         log.exception("Error in google_auth endpoint")
         raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
+# ================================
+# Public minimal preview endpoint
+# ================================
+
+@router.get("/public/users/{public_id}/preview", response_model=UserPreviewResponse)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(user_retry_logger, logging.WARNING)
+)
+def get_user_preview(public_id: str, db: Session = Depends(get_db)):
+    """
+    Public endpoint returning minimal, non-sensitive data for rendering a blurred preview.
+    Does not expose full answers, bento widgets, emails, or images.
+    """
+    log = new_logger("get_user_preview")
+    log.info(f"Fetching public preview for user: {public_id}")
+    try:
+        user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+        if not user:
+            log.info(f"Target user not found for preview: {public_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+
+        team = user.team
+        if not team:
+            log.warning(f"User has no team for preview: {public_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Minimal display name: First name + last initial (if available)
+        name = user.name or ""
+        first, last = (name.split(" ", 1) + [""])[:2]
+        display_name = f"{first} {last[:1] + '.' if last else ''}".strip()
+
+        return UserPreviewResponse(
+            public_id=user.public_id,
+            display_name=display_name or "Welcomepage User",
+            team_public_id=team.public_id,
+        )
+    except OperationalError:
+        db.rollback()
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Non-retryable error in get_user_preview: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
+
+# ==============================================
+# Ensure authenticated user exists in target team
+# ==============================================
+
+@router.post("/view/ensure-in-team", response_model=EnsureInTeamResponse)
+def ensure_in_team(
+    payload: EnsureInTeamRequest = Body(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Ensure the authenticated user has a Welcomepage user record in the same team
+    as the target user being viewed. This is called AFTER full authentication.
+
+    Rules:
+    - If an authenticated user record already exists, do nothing and return success
+      (we do not migrate cross-team users here).
+    - If no record exists, create a new user in the target user's team using the
+      authenticated identity (auth_email/role from JWT context is not persisted here;
+      persistence should already be handled by auth flows). We create a minimal
+      record with is_draft=True.
+    """
+    log = new_logger("ensure_in_team")
+    requester_public_id = current_user.get('user_id') if isinstance(current_user, dict) else None
+    requester_role = current_user.get('role') if isinstance(current_user, dict) else None
+    log.info(f"Ensuring in-team for requester={requester_public_id} viewing target={payload.target_user_public_id}")
+
+    try:
+        # Lookup target user and their team
+        target = db.query(WelcomepageUser).filter_by(public_id=payload.target_user_public_id).first()
+        if not target:
+            log.info(f"Target user not found: {payload.target_user_public_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+
+        team = target.team
+        if not team:
+            log.warning(f"Target user has no team: {payload.target_user_public_id}")
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Check if requester has an existing record
+        existing = db.query(WelcomepageUser).filter_by(public_id=requester_public_id).first()
+        if existing:
+            log.info(f"Requester already has a user record [{existing.public_id}] in team_id={existing.team_id}; no action")
+            return EnsureInTeamResponse(success=True, team_public_id=team.public_id, user_public_id=existing.public_id)
+
+        # Create a minimal user record in the target team
+        new_user = WelcomepageUser(
+            public_id=requester_public_id,
+            name="",
+            role="",
+            auth_role=requester_role,
+            team_id=team.id,
+            is_draft=True,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        log.info(f"Created new user for requester in team {team.public_id}: {new_user.public_id}")
+        return EnsureInTeamResponse(success=True, team_public_id=team.public_id, user_public_id=new_user.public_id)
+    except OperationalError:
+        db.rollback()
+        raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log.error(f"Non-retryable error in ensure_in_team: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from sqlalchemy.exc import OperationalError

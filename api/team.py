@@ -524,6 +524,41 @@ async def get_team_info(public_id: str, db: Session = Depends(get_db)):
     return team_info
 
 
+# Public minimal branding for previews
+class TeamBrandingResponse(BaseModel):
+    public_id: str
+    organization_name: str
+    logo_url: Optional[str]
+    color_scheme: Optional[str]
+    color_scheme_data: Optional[dict]
+
+@router.get("/public/teams/{public_id}/branding", response_model=TeamBrandingResponse)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(team_retry_logger, logging.WARNING)
+)
+async def get_team_branding(public_id: str, db: Session = Depends(get_db)):
+    """
+    Public endpoint to fetch minimal branding for preview purposes.
+    Contains only non-sensitive fields: organization_name, logo_url, color scheme info.
+    """
+    log = new_logger("get_team_branding")
+    log.info(f"Fetching public branding for team: {public_id}")
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found for branding: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    return TeamBrandingResponse(
+        public_id=team.public_id,
+        organization_name=team.organization_name,
+        logo_url=team.company_logo_url,
+        color_scheme=team.color_scheme,
+        color_scheme_data=team.color_scheme_data or None,
+    )
+
+
 class JoinTeamResponse(BaseModel):
     success: bool
     message: str
