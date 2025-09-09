@@ -361,6 +361,7 @@ async def upsert_team(
     color_scheme_data: Optional[str] = Form(None),
     slack_settings: Optional[str] = Form(None),
     company_logo: Optional[UploadFile] = File(None),
+    remove_logo: Optional[bool] = Form(False),
     public_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("ADMIN", "PRE_SIGNUP"))
@@ -377,7 +378,7 @@ async def upsert_team(
     user_role = current_user.get('role') if isinstance(current_user, dict) else None
     team = await run_in_threadpool(
         upsert_team_db_logic,
-        organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, public_id, db, log, user_role
+        organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role
     )
     return TeamRead.model_validate(team)
 
@@ -391,7 +392,7 @@ from sqlalchemy.exc import OperationalError
     before_sleep=before_sleep_log(team_upsert_retry_logger, logging.WARNING)
 )
 def upsert_team_db_logic(
-    organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, public_id, db, log, user_role
+    organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role
 ):
     log.info(f"endpoint invoked [{organization_name}] [{public_id}] ")    
     # Upsert team record (update if exists, else create)
@@ -444,6 +445,9 @@ def upsert_team_db_logic(
                 team.color_scheme = color_scheme
             if logo_blob_url is not None:
                 team.company_logo_url = logo_blob_url
+            elif remove_logo:
+                # Explicitly clear the existing logo if requested and no new logo uploaded
+                team.company_logo_url = None
             if color_scheme_data is not None:
                 team.color_scheme_data = color_scheme_obj
             if slack_settings is not None:
