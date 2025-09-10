@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import os
 import requests
 
@@ -18,8 +18,8 @@ class PlacesSearchRequest(BaseModel):
 
 class PlaceResult(BaseModel):
     placeId: str
-    name: Optional[str]
-    address: Optional[str]
+    name: Optional[str] = None
+    address: Optional[str] = None
     lat: float
     lng: float
 
@@ -80,3 +80,99 @@ def google_places_search(payload: PlacesSearchRequest):
     except Exception:
         log.exception("Unexpected error during Google Places search")
         raise HTTPException(status_code=500, detail="Failed to search locations")
+
+
+class GeoSuggestResponse(BaseModel):
+    suggestion: str
+    city: Optional[str] = None
+    region: Optional[str] = None
+    country: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+def _extract_client_ip(request: Request) -> Optional[str]:
+    """Best-effort extraction of the client IP, accounting for proxies.
+    Priority: X-Forwarded-For (first), CF-Connecting-IP, X-Real-IP, request.client.host
+    """
+    xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[0]
+    cf = request.headers.get("cf-connecting-ip") or request.headers.get("CF-Connecting-IP")
+    if cf:
+        return cf.strip()
+    xr = request.headers.get("x-real-ip") or request.headers.get("X-Real-IP")
+    if xr:
+        return xr.strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return None
+
+
+@router.get(
+    "/google/geo/suggest-location",
+    response_model=GeoSuggestResponse,
+    dependencies=[Depends(require_roles('USER', 'ADMIN', 'PRE_SIGNUP'))],
+)
+async def suggest_location_from_ip(request: Request) -> GeoSuggestResponse:
+    """Suggest a human-friendly location string based on requester IP.
+    Uses ipapi.co (HTTPS, no key) to resolve an approximate city/region/country and coordinates.
+    Returns a suggestion suitable as an initial Google Maps search string.
+    """
+    log = new_logger("google.geo.suggest")
+    ip = _extract_client_ip(request)
+
+    default = GeoSuggestResponse(
+        suggestion="Toronto, ON, Canada",
+        city="Toronto",
+        region="Ontario",
+        country="Canada",
+        lat=43.6532,
+        lng=-79.3832,
+    )
+
+    if not ip or ip in ("127.0.0.1", "::1"):
+        log.info(f"No resolvable client IP (ip={ip}). Returning default: Toronto")
+        return default
+
+    try:
+        url = f"https://ipapi.co/{ip}/json/"
+        r = requests.get(url, timeout=5)
+        if not r.ok:
+            log.warning(f"ipapi.co HTTP {r.status_code} for ip={ip}: {r.text[:300]}")
+            return default
+        data: Dict[str, Any] = r.json() or {}
+        if data.get("error"):
+            log.warning(f"ipapi.co error for ip={ip}: {data.get('reason')}")
+            return default
+
+        city = (data.get("city") or "").strip() or None
+        region = (data.get("region") or "").strip() or None
+        country = (data.get("country_name") or "").strip() or None
+        lat = data.get("latitude")
+        lon = data.get("longitude")
+
+        parts = [p for p in [city, region, country] if p]
+        suggestion = ", ".join(parts) if parts else None
+        if not suggestion:
+            log.info(f"ipapi.co returned no usable location fields for ip={ip}. Falling back to default")
+            return default
+
+        lat_f = float(lat) if lat is not None else None
+        lon_f = float(lon) if lon is not None else None
+
+        log.info(f"Geo suggestion for ip={ip}: {suggestion} (lat={lat_f}, lon={lon_f})")
+        return GeoSuggestResponse(
+            suggestion=suggestion,
+            city=city,
+            region=region,
+            country=country,
+            lat=lat_f,
+            lng=lon_f,
+        )
+
+    except Exception:
+        log.exception(f"Unexpected error during IP geolocation for ip={ip}")
+        return default
