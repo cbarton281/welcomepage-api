@@ -493,26 +493,34 @@ async def search_slack_channels(
     log.info(f"Current user: {current_user}")
     
     try:
-        # Get user's team
+        # Resolve team context
         user_public_id = current_user.get('public_id')
-        log.info(f"Looking up user with public_id: {user_public_id}")
+        user_role = current_user.get('role')
+        user_team_public_id = current_user.get('team_id')
+        log.info(f"Resolving team for Slack channel search. requester public_id={user_public_id} role={user_role} team_public_id={user_team_public_id}")
+
+        team = None
+        if user_role == 'PRE_SIGNUP':
+            # Anonymous/temporary users are not in DB; use team_id from JWT
+            from models.team import Team
+            team = db.query(Team).filter_by(public_id=user_team_public_id).first()
+            if not team:
+                log.error(f"Team not found for public_id: {user_team_public_id}")
+                raise HTTPException(status_code=404, detail="Team not found")
+        else:
+            # Authenticated users should exist in DB
+            user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
+            if not user:
+                log.error(f"User not found for public_id: {user_public_id}")
+                raise HTTPException(status_code=404, detail="User not found")
+            if not user.team:
+                log.error(f"User {user_public_id} has no team associated")
+                raise HTTPException(status_code=404, detail="User has no team")
+            team = user.team
         
-        user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
-        if not user:
-            log.error(f"User not found for public_id: {user_public_id}")
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        log.info(f"Found user: {user.public_id}, team_id: {user.team_id}")
-        
-        # Check if user has a team
-        if not user.team:
-            log.error(f"User {user_public_id} has no team associated")
-            raise HTTPException(status_code=404, detail="User has no team")
-        
-        log.info(f"User team public_id: {user.team.public_id}")
+        log.info(f"Using team public_id: {team.public_id}")
         
         # Get team's Slack installation from team settings
-        team = user.team
         if not team.slack_settings or not isinstance(team.slack_settings, dict):
             log.error(f"No Slack settings found for team: {team.public_id}")
             raise HTTPException(status_code=404, detail="No Slack integration found for this team")
@@ -605,18 +613,26 @@ async def create_slack_channel(
         if not channel_name:
             raise HTTPException(status_code=400, detail="Invalid channel name")
 
-        # Get user's team
+        # Resolve team context similar to search endpoint
         user_public_id = current_user.get('public_id')
-        user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
-        if not user:
-            log.error(f"User not found for public_id: {user_public_id}")
-            raise HTTPException(status_code=404, detail="User not found")
+        user_role = current_user.get('role')
+        user_team_public_id = current_user.get('team_id')
 
-        if not user.team:
-            log.error(f"User {user_public_id} has no team associated")
-            raise HTTPException(status_code=404, detail="User has no team")
-
-        team = user.team
+        from models.team import Team
+        if user_role == 'PRE_SIGNUP':
+            team = db.query(Team).filter_by(public_id=user_team_public_id).first()
+            if not team:
+                log.error(f"Team not found for public_id: {user_team_public_id}")
+                raise HTTPException(status_code=404, detail="Team not found")
+        else:
+            user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
+            if not user:
+                log.error(f"User not found for public_id: {user_public_id}")
+                raise HTTPException(status_code=404, detail="User not found")
+            if not user.team:
+                log.error(f"User {user_public_id} has no team associated")
+                raise HTTPException(status_code=404, detail="User has no team")
+            team = user.team
         if not team.slack_settings or not isinstance(team.slack_settings, dict):
             log.error(f"No Slack settings found for team: {team.public_id}")
             raise HTTPException(status_code=404, detail="No Slack integration found for this team")
@@ -646,7 +662,10 @@ async def create_slack_channel(
             # Invite the installing user to the newly created channel, if we know their Slack user id
             invited_installer = False
             try:
-                installer_slack_user_id = user.slack_user_id
+                installer_slack_user_id = None
+                # Only attempt invite for authenticated users we can resolve
+                if user_role != 'PRE_SIGNUP':
+                    installer_slack_user_id = user.slack_user_id if 'user' in locals() and user else None
                 if installer_slack_user_id:
                     log.info(f"Inviting installer slack_user_id={installer_slack_user_id} to channel {ch.get('id')}")
                     invite_resp = slack_client.conversations_invite(channel=ch["id"], users=installer_slack_user_id)
