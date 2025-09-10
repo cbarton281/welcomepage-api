@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime
+from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from database import Base
 from sqlalchemy.orm import relationship
 from sqlalchemy import ForeignKey
@@ -17,18 +18,18 @@ class WelcomepageUser(Base):
     nickname = Column(String)
     greeting = Column(String, nullable=False)
     hi_yall_text = Column(String)
-    handwave_emoji = Column(JSON)
+    handwave_emoji = Column(JSONB)
     handwave_emoji_url = Column(String)
     profile_photo_url = Column(String)
     wave_gif_url = Column(String)
     pronunciation_text = Column(String)
     pronunciation_recording_url = Column(String)
-    selected_prompts = Column(JSON, nullable=False)  # list of strings
-    answers = Column(JSON, nullable=False)  # dict
+    selected_prompts = Column(JSONB, nullable=False)  # list of strings
+    answers = Column(JSONB, nullable=False)  # dict
     # New: page-level comments stored as JSON array
-    page_comments = Column(JSON, nullable=True)
+    page_comments = Column(JSONB, nullable=True)
     # New: Bento widgets configuration stored as JSON array
-    bento_widgets = Column(JSON, nullable=True)
+    bento_widgets = Column(JSONB, nullable=True)
     # UI preferences/flags
     invite_banner_dismissed = Column(Boolean, nullable=False, default=False, server_default='0')
 

@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, JSON, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from database import Base
 from sqlalchemy import Boolean
@@ -12,9 +13,9 @@ class Team(Base):
     organization_name = Column(String, nullable=False)
     company_logo_url = Column(String, nullable=True)  # Path or URL to the uploaded logo
     color_scheme = Column(String, nullable=False)
-    color_scheme_data = Column(JSON, nullable=True)  # Store the full color scheme object
-    slack_settings = Column(JSON, nullable=True)  # Store Slack integration settings (workspace ID, etc.)
-    security_settings = Column(JSON, nullable=True)  # Store security-related settings (e.g., allowed email domains)
+    color_scheme_data = Column(JSONB, nullable=True)  # Store the full color scheme object
+    slack_settings = Column(JSONB, nullable=True)  # Store Slack integration settings (workspace ID, etc.)
+    security_settings = Column(JSONB, nullable=True)  # Store security-related settings (e.g., allowed email domains)
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
 
     users = relationship("WelcomepageUser", back_populates="team")

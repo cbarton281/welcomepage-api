@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from database import Base
 import uuid
@@ -14,7 +15,7 @@ class SlackPendingInstall(Base):
     slack_team_id = Column(String(32), nullable=True)
     slack_team_name = Column(String(255), nullable=True)
     slack_user_id = Column(String(32), nullable=True)
-    installation_json = Column(JSON, nullable=False)
+    installation_json = Column(JSONB, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     consumed = Column(Boolean, default=False, nullable=False)
