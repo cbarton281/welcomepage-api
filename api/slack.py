@@ -29,7 +29,9 @@ router = APIRouter()
 @router.get("/oauth/start", response_model=SlackOAuthStartResponse)
 async def start_slack_oauth(
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("ADMIN"))
+    current_user=Depends(require_roles("ADMIN")),
+    context: Optional[str] = Query(None),
+    return_path: Optional[str] = Query(None),
 ):
     """
     Start Slack OAuth flow
@@ -46,7 +48,12 @@ async def start_slack_oauth(
         
         service = SlackInstallationService(db)
         initiator_public_user_id = current_user.get("public_id")
-        result = service.start_oauth_flow(team_public_id, initiator_public_user_id=initiator_public_user_id)
+        result = service.start_oauth_flow(
+            team_public_id,
+            initiator_public_user_id=initiator_public_user_id,
+            context=context,
+            return_path=return_path,
+        )
         
         log.info(f"Started Slack OAuth flow for team {team_public_id} with state: {result.state} authorize url: {result.authorize_url}")
         return result
@@ -91,14 +98,36 @@ async def slack_oauth_callback(
 
         service = SlackInstallationService(db)
 
+        # Helper: parse decorated state into base/ctx/ret
+        def parse_state(s: str):
+            base = s or ""
+            ctx = None
+            ret = None
+            if "__ctx=" in base:
+                parts = base.split("__ctx=", 1)
+                base = parts[0]
+                tail = parts[1]
+                if "__ret=" in tail:
+                    ctx, ret = tail.split("__ret=", 1)
+                else:
+                    ctx = tail
+            return base, ctx, ret
+
         # If state exists, this is our app-initiated flow (Scenario 1)
         if state:
-            result = service.handle_oauth_callback(code, state)
-            log.info(f"Slack installation completed (Slack team: {result.team_id})")
-            return RedirectResponse(
-                url=f"{os.getenv('WEBAPP_URL')}/team-settings?slack_success=true",
-                status_code=302
-            )
+            base_state, ctx, ret = parse_state(state)
+            result = service.handle_oauth_callback(code, base_state)
+            log.info(f"Slack installation completed (Slack team: {result.team_id}) ctx={ctx} ret={ret}")
+            # Return JSON with flow metadata; frontend decides final redirect
+            return {
+                "success": True,
+                "team_id": result.team_id,
+                "team_name": result.team_name,
+                "enterprise_id": result.enterprise_id,
+                "enterprise_name": result.enterprise_name,
+                "context": ctx,
+                "return_path": ret,
+            }
 
         # No state: marketplace install (Scenarios 2–4). Create pending and redirect with nonce
         installation_data = service.exchange_code_without_state(code)

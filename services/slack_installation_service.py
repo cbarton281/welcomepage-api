@@ -42,28 +42,37 @@ class SlackInstallationService:
         if not self.client_id or not self.client_secret:
             raise ValueError("SLACK_CLIENT_ID and SLACK_CLIENT_SECRET environment variables must be set")
     
-    def start_oauth_flow(self, team_public_id: str, initiator_public_user_id: Optional[str] = None) -> SlackOAuthStartResponse:
+    def start_oauth_flow(self, team_public_id: str, initiator_public_user_id: Optional[str] = None, context: Optional[str] = None, return_path: Optional[str] = None) -> SlackOAuthStartResponse:
         """Start the Slack OAuth flow by generating authorization URL"""
         log = new_logger("start_oauth_flow")
         try:
             # Generate and store state with team_public_id encoded
-            state = self.state_manager.issue_state(team_public_id=team_public_id, initiator_public_user_id=initiator_public_user_id)
+            base_state = self.state_manager.issue_state(team_public_id=team_public_id, initiator_public_user_id=initiator_public_user_id)
+
+            # Compose a decorated state string that includes optional context and return_path
+            # Format: "<base_state>__ctx=<context>__ret=<urlencoded>"
+            decorated_state = base_state
+            if context:
+                decorated_state += f"__ctx={context}"
+                if return_path:
+                    # return_path may contain '?' so keep raw; we'll not URL-encode here to preserve it
+                    decorated_state += f"__ret={return_path}"
             
             # Build OAuth parameters
             params = {
                 "client_id": self.client_id,
                 "scope": "channels:manage,channels:read,chat:write,chat:write.public,commands,im:write,users.profile:read,users:read",
                 "user_scope": "users.profile:write,users:read",
-                "state": state
+                "state": decorated_state
             }
             
             authorize_url = f"https://slack.com/oauth/v2/authorize?{urlencode(params)}"
             
-            log.info(f"Generated OAuth URL for team {team_public_id}, state: {state}")
+            log.info(f"Generated OAuth URL for team {team_public_id}, base_state: {base_state}, decorated: {decorated_state}")
             
             return SlackOAuthStartResponse(
                 authorize_url=authorize_url,
-                state=state
+                state=base_state
             )
             
         except Exception as e:

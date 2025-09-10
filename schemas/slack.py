@@ -49,6 +49,9 @@ class SlackInstallationResponse(BaseModel):
     team_name: Optional[str] = None
     enterprise_id: Optional[str] = None
     enterprise_name: Optional[str] = None
+    # Optional flow metadata propagated via OAuth state decoration
+    context: Optional[str] = None
+    return_path: Optional[str] = None
 
 
 class SlackStateStoreResponse(BaseModel):
