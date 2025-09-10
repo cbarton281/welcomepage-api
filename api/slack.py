@@ -118,16 +118,14 @@ async def slack_oauth_callback(
             base_state, ctx, ret = parse_state(state)
             result = service.handle_oauth_callback(code, base_state)
             log.info(f"Slack installation completed (Slack team: {result.team_id}) ctx={ctx} ret={ret}")
-            # Return JSON with flow metadata; frontend decides final redirect
-            return {
-                "success": True,
-                "team_id": result.team_id,
-                "team_name": result.team_name,
-                "enterprise_id": result.enterprise_id,
-                "enterprise_name": result.enterprise_name,
-                "context": ctx,
-                "return_path": ret,
-            }
+            # Perform browser redirect directly from backend callback so Slack lands users correctly
+            if ctx == "publish_flow":
+                target = ret or "/create?afterSlack=1"
+                return RedirectResponse(url=f"{os.getenv('WEBAPP_URL')}{target}", status_code=302)
+            return RedirectResponse(
+                url=f"{os.getenv('WEBAPP_URL')}/team-settings?slack_success=true",
+                status_code=302
+            )
 
         # No state: marketplace install (Scenarios 2–4). Create pending and redirect with nonce
         installation_data = service.exchange_code_without_state(code)
