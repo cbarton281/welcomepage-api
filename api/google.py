@@ -115,8 +115,13 @@ def _extract_client_ip(request: Request) -> Optional[str]:
         return not any(ip.startswith(p) for p in prefixes)
 
     chosen: Optional[str] = None
-    if xff:
-        # Take the first public IP in the chain; if none, take the first
+    # Prefer explicit client IP headers first
+    if tci and is_public_ip(tci.strip()):
+        chosen = tci.strip()
+    elif cf and is_public_ip(cf.strip()):
+        chosen = cf.strip()
+    # Then try X-Forwarded-For list (first public IP, else first entry)
+    if not chosen and xff:
         parts = [p.strip() for p in xff.split(",") if p.strip()]
         for part in parts:
             if is_public_ip(part):
@@ -124,10 +129,6 @@ def _extract_client_ip(request: Request) -> Optional[str]:
                 break
         if not chosen and parts:
             chosen = parts[0]
-    if not chosen and tci:
-        chosen = tci.strip()
-    if not chosen and cf:
-        chosen = cf.strip()
     if not chosen and xr:
         chosen = xr.strip()
     if not chosen and xv:
