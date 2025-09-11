@@ -60,7 +60,7 @@ async def publish_welcomepage_to_slack(
         # For server errors, return 500
         if result.get("error") in ["User not found", "Team not found"]:
             status_code = 404
-        elif result.get("error") in ["No Slack integration", "No publish channel"]:
+        elif result.get("error") in ["No Slack integration", "No publish channel", "Already published"]:
             status_code = 400
         else:
             status_code = 500

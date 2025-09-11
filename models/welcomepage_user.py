@@ -80,4 +80,5 @@ class WelcomepageUser(Base):
             'team_id': self.team_id,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
+            'isDraft': self.is_draft,
         }

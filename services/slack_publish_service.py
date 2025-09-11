@@ -62,6 +62,19 @@ class SlackPublishService:
                 }
             log.info(f"user: {user.to_dict()}")
 
+            # Prevent duplicate publishing: only allow once
+            try:
+                if user.is_draft is False:
+                    log.warning(f"Attempted re-publish for already published user: {user_public_id}")
+                    return {
+                        "success": False,
+                        "error": "Already published",
+                        "message": "This welcomepage has already been published"
+                    }
+            except Exception:
+                # If field missing on legacy rows, continue; default to allowing publish
+                log.info("is_draft field not available; proceeding with publish")
+
             team = user.team
             if not team:
                 log.error(f"Team not found for user: {user_public_id}")
@@ -182,6 +195,15 @@ class SlackPublishService:
                 if team_domain:
                     message_url = f"https://{team_domain}.slack.com/archives/{response['channel']}/p{response['ts'].replace('.', '')}"
                 
+                # Mark as published
+                try:
+                    user.is_draft = False
+                    db.commit()
+                    db.refresh(user)
+                except Exception as e:
+                    db.rollback()
+                    log.error(f"Failed to update is_draft after publish for user {user_public_id}: {e}")
+
                 return {
                     "success": True,
                     "message": "Successfully posted to Slack",

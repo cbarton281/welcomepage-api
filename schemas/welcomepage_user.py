@@ -79,6 +79,7 @@ class WelcomepageUserDTO(BaseModel):
     bento_widgets: Optional[List[Dict[str, Any]]] = Field(None, alias="bentoWidgets")
     team_public_id: Optional[str] = Field(None, alias="teamPublicId")
     invite_banner_dismissed: Optional[bool] = Field(None, alias="inviteBannerDismissed")
+    is_draft: Optional[bool] = Field(None, alias="isDraft")
 
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")
