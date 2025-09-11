@@ -93,22 +93,55 @@ class GeoSuggestResponse(BaseModel):
 
 def _extract_client_ip(request: Request) -> Optional[str]:
     """Best-effort extraction of the client IP, accounting for proxies.
-    Priority: X-Forwarded-For (first), CF-Connecting-IP, X-Real-IP, request.client.host
+    Priority: X-Forwarded-For (first public IP), True-Client-IP, CF-Connecting-IP,
+    X-Real-IP, X-Vercel-Forwarded-For, request.client.host
     """
+    log = new_logger("google.geo.ip")
+
     xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
-    if xff:
-        parts = [p.strip() for p in xff.split(",") if p.strip()]
-        if parts:
-            return parts[0]
+    tci = request.headers.get("true-client-ip") or request.headers.get("True-Client-IP")
     cf = request.headers.get("cf-connecting-ip") or request.headers.get("CF-Connecting-IP")
-    if cf:
-        return cf.strip()
     xr = request.headers.get("x-real-ip") or request.headers.get("X-Real-IP")
-    if xr:
-        return xr.strip()
-    if request.client and request.client.host:
-        return request.client.host
-    return None
+    xv = request.headers.get("x-vercel-forwarded-for") or request.headers.get("X-Vercel-Forwarded-For")
+
+    def is_public_ip(ip: str) -> bool:
+        if not ip:
+            return False
+        prefixes = (
+            "10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.",
+            "172.22.", "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
+            "172.30.", "172.31.", "127.", "::1", "fc", "fd", "169.254.",
+        )
+        return not any(ip.startswith(p) for p in prefixes)
+
+    chosen: Optional[str] = None
+    if xff:
+        # Take the first public IP in the chain; if none, take the first
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        for part in parts:
+            if is_public_ip(part):
+                chosen = part
+                break
+        if not chosen and parts:
+            chosen = parts[0]
+    if not chosen and tci:
+        chosen = tci.strip()
+    if not chosen and cf:
+        chosen = cf.strip()
+    if not chosen and xr:
+        chosen = xr.strip()
+    if not chosen and xv:
+        chosen = xv.strip()
+    if not chosen and request.client and request.client.host:
+        chosen = request.client.host
+
+    try:
+        log.info(
+            f"ip_headers xff={xff!r} tci={tci!r} cf={cf!r} xri={xr!r} xv={xv!r} -> chosen={chosen!r}"
+        )
+    except Exception:
+        pass
+    return chosen
 
 
 @router.get(
