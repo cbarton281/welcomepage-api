@@ -49,10 +49,10 @@ If you didn't request this, you can safely ignore this email.
           <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"480\" style=\"width:480px; max-width:480px; background-color:#ffffff; border:1px solid #eeeeee; border-radius:16px;\">
             <tr>
               <td align=\"center\" style=\"background-color:#d6edfc; padding:20px 16px; border-top-left-radius:16px; border-top-right-radius:16px;\">
-                <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"96\" style=\"width:96px; max-width:96px;\">
+                <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" width=\"128\" style=\"width:128px; max-width:128px;\">
                   <tr>
-                    <td align=\"center\" width=\"96\" style=\"width:96px;\">
-                      <img src=\"{logo_src}\" alt=\"Welcomepage\" width=\"96\" height=\"29\" style=\"display:block; border:0; outline:none; text-decoration:none; width:96px !important; max-width:96px !important; height:auto;\" />
+                    <td align=\"center\" width=\"128\" style=\"width:128px;\">
+                      <img src=\"{logo_src}\" alt=\"Welcomepage\" width=\"128\" height=\"38\" style=\"display:block; border:0; outline:none; text-decoration:none; width:128px !important; max-width:128px !important; height:auto;\" />
                     </td>
                   </tr>
                 </table>
