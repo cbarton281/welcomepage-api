@@ -193,11 +193,41 @@ class SlackEventService:
             }
             signup_url = f"{wp_webapp_url}/join/{team.public_id}?{urlencode(slack_params)}"
             
+            # Determine if we should include a secondary "See some examples" button
+            examples_url: Optional[str] = None
+            try:
+                # Count registered members in this team (auth_email present and role USER/ADMIN)
+                registered_count = self.db.query(WelcomepageUser).filter(
+                    WelcomepageUser.team_id == team.id,
+                    WelcomepageUser.auth_email.isnot(None),
+                    WelcomepageUser.auth_email != '',
+                    WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
+                ).count()
+
+                log.info(f"Registered team member count for team {team.public_id}: {registered_count}")
+
+                # Build Slack deep link if publish channel configured and at least one member exists
+                settings = team.slack_settings or {}
+                publish_channel = settings.get('publish_channel') if isinstance(settings, dict) else None
+                slack_app_data = settings.get('slack_app') if isinstance(settings, dict) else None
+                slack_team_id = (slack_app_data or {}).get('team_id') or (slack_app_data or {}).get('enterprise_id')
+                channel_id = (publish_channel or {}).get('id')
+
+                if registered_count >= 1 and slack_team_id and channel_id:
+                    examples_url = f"slack://channel?team={slack_team_id}&id={channel_id}"
+                    log.info(f"Including examples_url for team {team.public_id}")
+                else:
+                    log.info("Not including examples_url: either no registered members or channel not configured")
+            except Exception as ex:
+                log.error(f"Failed to compute examples_url: {str(ex)}")
+                examples_url = None
+
             # Generate message blocks
             blocks = SlackBlocksService.new_user_blocks(
                 user_name=user_name,
                 company_name=company_name,
-                signup_url=signup_url
+                signup_url=signup_url,
+                examples_url=examples_url
             )
             
             log.info(f"Generated welcome message blocks for user {user_id} {blocks}")

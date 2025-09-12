@@ -122,7 +122,7 @@ class SlackBlocksService:
         return blocks
     
     @staticmethod
-    def new_user_blocks(user_name: str, company_name: str, signup_url: str) -> List[Dict[str, Any]]:
+    def new_user_blocks(user_name: str, company_name: str, signup_url: str, examples_url: Optional[str] = None) -> List[Dict[str, Any]]:
         """Generate blocks for welcoming a new user"""
         log = new_logger("new_user_blocks")
         log.info(f"Generating new user blocks for {user_name} at {company_name}")
@@ -135,8 +135,7 @@ class SlackBlocksService:
         
         # Section text
         section_template = Template(
-            "At $companyName, *we ask every new starter to create a Welcomepage*, "
-            "which is like a short blog post to tell us a little bit about yourself."
+            "At $companyName, we ask every new starter to create a Welcomepage to help introduce yourself to the team."
         )
         section_str = section_template.substitute(companyName=company_name)
         
@@ -181,6 +180,26 @@ class SlackBlocksService:
                 ]
             }
         ]
+        # Optionally append a secondary button to the actions block
+        try:
+            if examples_url:
+                # Add secondary button to the right of the primary button
+                actions_block = next((b for b in blocks if b.get("type") == "actions"), None)
+                if actions_block and isinstance(actions_block.get("elements"), list):
+                    actions_block["elements"].append({
+                        "type": "button",
+                        "url": examples_url,
+                        "text": {
+                            "type": "plain_text",
+                            "text": "See some examples",
+                            "emoji": True
+                        },
+                        "value": "see_examples_click",
+                        "action_id": "see_examples_button"
+                    })
+        except Exception as e:
+            # Do not fail message generation if secondary button can't be added
+            log.error(f"Failed to append examples button: {str(e)}")
         return blocks
     
     @staticmethod
