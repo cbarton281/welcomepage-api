@@ -1,0 +1,62 @@
+---
+description: Database model patterns and SQLAlchemy best practices
+globs: ['**/models/*.py', '**/database.py']
+alwaysApply: true
+---
+
+# Database Model Guidelines
+
+## SQLAlchemy Model Structure
+- Inherit from `Base` class from database module
+- Use proper column types and constraints
+- Include `__tablename__` for all models
+- Use descriptive column names in snake_case
+- Include proper indexes for frequently queried fields
+
+## Column Definitions
+- Use appropriate SQLAlchemy column types
+- Include nullable constraints explicitly
+- Use default values where appropriate
+- Use server_default for database-level defaults
+- Use JSONB for flexible JSON data storage
+
+## Relationships
+- Define foreign key relationships properly
+- Use relationship() for SQLAlchemy relationships
+- Include proper cascade options for related data
+- Use back_populates for bidirectional relationships
+- Consider lazy loading vs eager loading strategies
+
+## Timestamps and Audit Fields
+- Include created_at and updated_at columns
+- Use func.now() for timestamp defaults
+- Set onupdate=func.now() for updated_at
+- Use server_default for database-level timestamp handling
+
+## Data Validation
+- Use proper column constraints (unique, index, nullable)
+- Validate data at the model level when possible
+- Use proper data types for different kinds of data
+- Consider data length limits for string fields
+- Use appropriate precision for numeric fields
+
+## Migration Management
+- Use Alembic for database migrations
+- Include descriptive migration names
+- Test migrations on development data
+- Include both upgrade and downgrade operations
+- Use proper migration dependencies
+
+## Query Patterns
+- Use SQLAlchemy ORM for most queries
+- Implement proper session management
+- Use query optimization techniques
+- Include proper error handling for database operations
+- Use transactions for complex operations
+
+## Security Considerations
+- Use parameterized queries to prevent SQL injection
+- Validate input data before database operations
+- Use proper access controls for sensitive data
+- Log database operations for audit trails
+- Handle database errors gracefully

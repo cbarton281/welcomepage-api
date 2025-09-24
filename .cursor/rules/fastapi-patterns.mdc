@@ -1,0 +1,41 @@
+---
+description: FastAPI development patterns and best practices for the Welcomepage API
+globs: ['**/*.py']
+alwaysApply: true
+---
+
+# FastAPI Development Patterns
+
+## API Endpoint Structure
+- Use dependency injection for database sessions: `db: Session = Depends(get_db)`
+- Implement proper authentication with role-based access: `current_user=Depends(require_roles("USER", "ADMIN"))`
+- Always include proper error handling with HTTPException and appropriate status codes
+- Use Pydantic models for request/response validation
+- Include comprehensive logging using the logger factory: `log = new_logger("endpoint_name")`
+
+## Request/Response Patterns
+- Use Form data for file uploads with multipart/form-data
+- Use JSON for structured data with Pydantic models
+- Always validate input data and return meaningful error messages
+- Include proper CORS handling for cross-origin requests
+- Log request details (excluding sensitive data like file content)
+
+## Error Handling
+- Use specific HTTP status codes (400, 401, 403, 404, 500)
+- Provide clear error messages in response details
+- Log errors with appropriate log levels (info, warning, error)
+- Use retry mechanisms for database operations with tenacity
+
+## File Upload Handling
+- Process file uploads asynchronously
+- Validate file types and sizes
+- Use Supabase storage for file persistence
+- Generate unique filenames using the short_id utility
+- Handle both image and video file processing
+
+## Database Operations
+- Use SQLAlchemy ORM with proper session management
+- Implement upsert operations for user data
+- Use database transactions for complex operations
+- Include proper error handling for database exceptions
+- Use retry mechanisms for transient database errors

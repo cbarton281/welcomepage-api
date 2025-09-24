@@ -1,0 +1,63 @@
+---
+description: Deployment and operational guidelines for the Welcomepage API
+globs: ['**/vercel.json', '**/requirements.txt', '**/db-migrations/**']
+alwaysApply: true
+---
+
+# Deployment and Operations Guidelines
+
+## Vercel Deployment
+- Use vercel.json for deployment configuration
+- Configure proper API route rewrites
+- Set up environment variables securely
+- Use Vercel's serverless functions appropriately
+- Monitor deployment logs and performance
+
+## Database Management
+- Use Alembic for database migrations
+- Test migrations on development environment first
+- Include both upgrade and downgrade operations
+- Use proper migration naming conventions
+- Document database schema changes
+
+## Environment Configuration
+- Use environment variables for configuration
+- Separate development, staging, and production configs
+- Never commit sensitive data to version control
+- Use .env files for local development
+- Validate required environment variables at startup
+
+## Dependencies Management
+- Keep requirements.txt up to date
+- Pin specific versions for production stability
+- Regularly update dependencies for security
+- Use virtual environments for development
+- Document any special dependency requirements
+
+## Monitoring and Logging
+- Implement comprehensive logging throughout the application
+- Use structured logging for better analysis
+- Monitor API performance and error rates
+- Set up alerts for critical failures
+- Log all external service interactions
+
+## Error Handling
+- Implement graceful error handling
+- Use appropriate HTTP status codes
+- Provide meaningful error messages to clients
+- Log errors with sufficient context
+- Implement retry mechanisms for transient failures
+
+## Performance Optimization
+- Use database connection pooling
+- Implement caching where appropriate
+- Optimize database queries
+- Use async operations for I/O-bound tasks
+- Monitor and optimize memory usage
+
+## Security in Production
+- Use HTTPS for all communications
+- Implement proper CORS policies
+- Validate all input data
+- Use secure headers
+- Regular security audits and updates

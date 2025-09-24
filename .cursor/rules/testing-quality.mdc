@@ -1,0 +1,63 @@
+---
+description: Testing patterns and code quality guidelines
+globs: ['**/test*.py', '**/tests/**/*.py']
+alwaysApply: true
+---
+
+# Testing and Quality Guidelines
+
+## Test Structure
+- Use pytest as the testing framework
+- Organize tests in the tests/ directory
+- Use descriptive test function names
+- Group related tests in classes when appropriate
+- Use fixtures for common test setup
+
+## Test Coverage
+- Write tests for all API endpoints
+- Test both success and error scenarios
+- Include integration tests for database operations
+- Test authentication and authorization
+- Test file upload and processing functionality
+
+## Test Data Management
+- Use test fixtures for consistent test data
+- Create test data factories when needed
+- Clean up test data after tests
+- Use database transactions for test isolation
+- Mock external services appropriately
+
+## API Testing Patterns
+- Use httpx for API testing
+- Test request validation and error handling
+- Verify response models and status codes
+- Test authentication and authorization flows
+- Include edge cases and boundary conditions
+
+## Database Testing
+- Use test database for integration tests
+- Test model relationships and constraints
+- Verify migration scripts work correctly
+- Test complex queries and operations
+- Ensure proper cleanup after tests
+
+## Code Quality Standards
+- Use type hints throughout the codebase
+- Follow PEP 8 style guidelines
+- Include comprehensive docstrings
+- Use meaningful variable and function names
+- Keep functions focused and single-purpose
+
+## Error Handling Testing
+- Test all error scenarios
+- Verify proper HTTP status codes
+- Test error message clarity
+- Ensure proper logging of errors
+- Test retry mechanisms and timeouts
+
+## Performance Testing
+- Test database query performance
+- Monitor memory usage for file operations
+- Test concurrent request handling
+- Verify proper resource cleanup
+- Test with realistic data volumes

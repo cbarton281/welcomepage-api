@@ -1,0 +1,49 @@
+---
+description: Slack integration patterns and best practices
+globs: ['**/slack*.py', '**/services/slack*.py']
+alwaysApply: true
+---
+
+# Slack Integration Guidelines
+
+## OAuth Flow Management
+- Use SlackStateStore for secure OAuth state management
+- Implement proper state validation and expiration
+- Handle OAuth callbacks with error checking
+- Store installation data in team.slack_settings JSON field
+- Clean up expired OAuth states regularly
+
+## Slack API Patterns
+- Use Slack SDK for API interactions
+- Implement proper error handling for Slack API calls
+- Handle rate limiting and retry logic
+- Validate Slack signatures for security
+- Use appropriate Slack scopes for permissions
+
+## Event Handling
+- Process Slack events asynchronously
+- Validate event signatures using Slack signature verifier
+- Handle different event types appropriately
+- Log all Slack interactions for debugging
+- Implement proper error responses for Slack
+
+## Block Kit and UI
+- Use SlackBlocksService for consistent UI components
+- Follow Slack's Block Kit guidelines
+- Implement interactive components properly
+- Handle user interactions and callbacks
+- Use appropriate block types for different content
+
+## Security Considerations
+- Always validate Slack signatures
+- Use secure state tokens for OAuth
+- Implement proper role-based access control
+- Log security-related events
+- Handle sensitive data appropriately
+
+## Service Architecture
+- Separate Slack services by functionality
+- Use dependency injection for service dependencies
+- Implement proper error handling and logging
+- Keep business logic separate from API endpoints
+- Use proper configuration management for Slack settings

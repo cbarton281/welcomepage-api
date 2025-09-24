@@ -1,0 +1,52 @@
+---
+description: Project structure and organization guidelines for the Welcomepage API
+globs: ['**/*.py']
+alwaysApply: true
+---
+
+# Project Structure Guidelines
+
+## Directory Organization
+- **api/**: Contains all FastAPI route handlers and endpoints
+- **models/**: SQLAlchemy database models with proper relationships
+- **schemas/**: Pydantic models for request/response validation
+- **services/**: Business logic and external service integrations
+- **utils/**: Utility functions and helper modules
+- **db-migrations/**: Alembic database migration files
+
+## File Naming Conventions
+- Use snake_case for all Python files
+- API route files should match their functionality (e.g., `user.py`, `team.py`)
+- Model files should match table names (e.g., `welcomepage_user.py`)
+- Service files should end with `_service.py`
+- Utility files should be descriptive (e.g., `jwt_auth.py`, `logger_factory.py`)
+
+## Import Organization
+- Standard library imports first
+- Third-party imports second
+- Local imports last
+- Use absolute imports for local modules
+- Group related imports together
+
+## Code Organization Within Files
+- Class definitions before function definitions
+- Public methods before private methods
+- Use type hints for all function parameters and return values
+- Include docstrings for all public functions and classes
+- Keep functions focused and single-purpose
+
+## Database Model Guidelines
+- Inherit from `Base` class
+- Use proper column types and constraints
+- Include created_at and updated_at timestamps
+- Use foreign keys for relationships
+- Include proper indexes for frequently queried fields
+- Use JSONB for flexible JSON data storage
+
+## API Route Guidelines
+- Group related endpoints in the same router file
+- Use descriptive endpoint names and paths
+- Include proper HTTP methods (GET, POST, PUT, DELETE)
+- Use path parameters for resource identification
+- Use query parameters for filtering and pagination
+- Include proper response models for all endpoints

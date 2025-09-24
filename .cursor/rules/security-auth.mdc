@@ -1,0 +1,63 @@
+---
+description: Security and authentication patterns for the Welcomepage API
+globs: ['**/utils/jwt_auth.py', '**/api/*.py']
+alwaysApply: true
+---
+
+# Security and Authentication Guidelines
+
+## JWT Authentication
+- Use python-jose for JWT token handling
+- Implement proper token validation and expiration
+- Use secure secret keys for token signing
+- Include proper claims in JWT tokens (sub, role, exp)
+- Handle token refresh and renewal appropriately
+
+## Role-Based Access Control
+- Implement require_roles() dependency for endpoint protection
+- Support multiple roles per endpoint when needed
+- Validate user roles before processing requests
+- Log access attempts and authorization failures
+- Use consistent role naming conventions
+
+## Input Validation
+- Validate all input data using Pydantic models
+- Sanitize user input to prevent injection attacks
+- Validate file uploads (type, size, content)
+- Use proper data types and constraints
+- Implement rate limiting for sensitive endpoints
+
+## Data Protection
+- Never log sensitive data (passwords, tokens, file content)
+- Use environment variables for sensitive configuration
+- Encrypt sensitive data at rest when necessary
+- Implement proper data retention policies
+- Handle personal data according to privacy requirements
+
+## API Security
+- Use HTTPS for all API communications
+- Implement proper CORS policies
+- Validate request signatures for external services
+- Use secure headers and response policies
+- Implement proper error handling without information leakage
+
+## File Upload Security
+- Validate file types and sizes
+- Scan uploaded files for malware when possible
+- Use secure file storage (Supabase)
+- Generate unique filenames to prevent conflicts
+- Implement proper access controls for uploaded files
+
+## Logging and Monitoring
+- Log all authentication attempts
+- Monitor for suspicious activity patterns
+- Include security events in audit logs
+- Use appropriate log levels for security events
+- Implement proper log rotation and retention
+
+## External Service Security
+- Validate signatures from external services (Slack)
+- Use secure communication channels
+- Implement proper error handling for service failures
+- Store sensitive configuration securely
+- Monitor external service interactions

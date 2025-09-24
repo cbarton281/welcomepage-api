@@ -87,6 +87,7 @@ def generate_verification_email(
 ):
     log = new_logger("generate_verification_email")
     log.info(f"Generating verification code for {payload.email}")
+    
     # Domain enforcement: prevent sending codes to disallowed domains
     try:
         def _normalize_email_domain(email: str) -> str:
@@ -146,14 +147,23 @@ def generate_verification_email(
         # Fail closed? Prefer safe default: if we cannot validate, block to avoid bypassing policy
         raise HTTPException(status_code=500, detail="Unable to process verification request.")
     verification_code, expires_at, code = generate_code_with_retry(payload, db, log)
-    # Send the verification email
-    from api.send_email import send_verification_email
-    try:
-        send_verification_email(payload.email, code)
-        log.info(f"Verification email sent to {payload.email}")
-    except Exception as e:
-        log.error(f"Failed to send verification email: {e}")
-        raise HTTPException(status_code=500, detail="Failed to send verification email.")
+    
+    # Check if user exists by email - only send email to registered users
+    existing_user_by_email = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
+    
+    if existing_user_by_email:
+        # Send the verification email only to registered users
+        from api.send_email import send_verification_email
+        try:
+            send_verification_email(payload.email, code)
+            log.info(f"Verification email sent to registered user {payload.email}")
+        except Exception as e:
+            log.error(f"Failed to send verification email: {e}")
+            raise HTTPException(status_code=500, detail="Failed to send verification email.")
+    else:
+        log.info(f"No registered user found for {payload.email} - verification code generated but no email sent")
+    
+    # Always return 200 with same response regardless of user registration status
     return {"email": payload.email, "expires_at": expires_at.isoformat(), "message": "Verification email sent."}
 
 
