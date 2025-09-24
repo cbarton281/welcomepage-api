@@ -162,6 +162,10 @@ def generate_verification_email(
             raise HTTPException(status_code=500, detail="Failed to send verification email.")
     else:
         log.info(f"No registered user found for {payload.email} - verification code generated but no email sent")
+        # Add artificial delay to match email sending time for registered users
+        # This prevents timing attacks and makes behavior indistinguishable
+        import time
+        time.sleep(2)  # 2 second delay to match typical email sending time
     
     # Always return 200 with same response regardless of user registration status
     return {"email": payload.email, "expires_at": expires_at.isoformat(), "message": "Verification email sent."}
