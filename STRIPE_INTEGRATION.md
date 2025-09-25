@@ -26,14 +26,17 @@ Add these to your `.env` file:
 STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
 STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
-STRIPE_PRO_PRICE_ID=price_your_pro_price_id_here
+STRIPE_WELCOMEPAGE_PRICE_ID=price_your_welcomepage_price_id_here
+STRIPE_HOSTING_PRICE_ID=price_your_hosting_price_id_here
 ```
 
 ## API Endpoints
 
 ### FastAPI Backend
 - `GET /api/teams/{team_id}/billing/status` - Get billing status
-- `POST /api/teams/{team_id}/billing/upgrade` - Upgrade to Pro
+- `POST /api/teams/{team_id}/billing/upgrade` - Capture payment method (no charge)
+- `POST /api/teams/{team_id}/billing/confirm-payment-method` - Confirm captured payment method
+- `POST /api/teams/{team_id}/billing/charge-welcomepage` - Charge $7.99 for new welcomepage
 - `POST /api/teams/{team_id}/billing/downgrade` - Downgrade to Free
 - `GET /api/teams/{team_id}/billing/history` - Get billing history
 - `GET /api/teams/{team_id}/billing/payment-methods` - Get payment methods
@@ -55,9 +58,9 @@ STRIPE_PRO_PRICE_ID=price_your_pro_price_id_here
 1. **Create Stripe Account**: Sign up at stripe.com
 2. **Get API Keys**: From Stripe Dashboard > Developers > API keys
 3. **Create Products & Prices**: 
-   - Create a "Pro Plan" product
-   - Set price to $7.99 per welcomepage, billed monthly
-   - Copy the price ID to `STRIPE_PRO_PRICE_ID`
+   - Create a "Welcomepage Creation" product with $7.99 one-time price
+   - Create a "Hosting Plan" product with $25.00 monthly recurring price
+   - Copy the price IDs to `STRIPE_WELCOMEPAGE_PRICE_ID` and `STRIPE_HOSTING_PRICE_ID`
 4. **Set up Webhooks**:
    - Add endpoint: `https://yourdomain.com/api/stripe/webhooks`
    - Select events: `customer.subscription.*`, `invoice.payment_*`

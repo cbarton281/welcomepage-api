@@ -16,7 +16,8 @@ log = new_logger("stripe_billing")
 router = APIRouter()
 
 # Stripe price IDs - these should be set in environment variables
-STRIPE_PRO_PRICE_ID = "price_1234567890"  # Replace with actual price ID
+STRIPE_WELCOMEPAGE_PRICE_ID = "price_1234567890"  # Per-page price ID
+STRIPE_HOSTING_PRICE_ID = "price_0987654321"  # Monthly hosting price ID
 
 @router.get("/teams/{team_public_id}/billing/status")
 async def get_billing_status(
@@ -88,13 +89,13 @@ async def get_billing_status(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/teams/{team_public_id}/billing/upgrade")
-async def upgrade_subscription(
+async def upgrade_to_pro(
     team_public_id: str,
     request_data: Dict[str, Any],
     current_user=Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db)
 ):
-    """Upgrade team to Pro subscription"""
+    """Upgrade team to Pro - capture payment method only, no immediate charge"""
     try:
         # Get team from database
         team = db.query(Team).filter(Team.public_id == team_public_id).first()
@@ -116,31 +117,34 @@ async def upgrade_subscription(
         else:
             customer = await StripeService.get_customer(team.stripe_customer_id)
         
-        # Create subscription
-        subscription = await StripeService.create_subscription(
-            customer_id=team.stripe_customer_id,
-            price_id=STRIPE_PRO_PRICE_ID,
-            team_public_id=team_public_id
+        # Create a Setup Intent to capture payment method without charging
+        setup_intent = stripe.SetupIntent.create(
+            customer=customer.id,
+            payment_method_types=['card'],
+            usage='off_session',  # For future payments
+            metadata={
+                "team_public_id": team_public_id,
+                "source": "welcomepage_upgrade"
+            }
         )
         
-        # Update team with subscription info
-        team.stripe_subscription_id = subscription.id
-        team.subscription_status = subscription.status
+        # Update team status to "pro" (no subscription yet)
+        team.subscription_status = "pro"
         
         db.commit()
         
         return {
             "success": True,
-            "subscription_id": subscription.id,
-            "status": subscription.status,
-            "client_secret": subscription.latest_invoice.payment_intent.client_secret
+            "setup_intent_id": setup_intent.id,
+            "client_secret": setup_intent.client_secret,
+            "status": "payment_method_captured"
         }
         
     except stripe.error.StripeError as e:
-        log.error(f"Stripe error upgrading subscription: {e}")
-        raise HTTPException(status_code=500, detail="Error creating subscription")
+        log.error(f"Stripe error upgrading to pro: {e}")
+        raise HTTPException(status_code=500, detail="Error capturing payment method")
     except Exception as e:
-        log.error(f"Error upgrading subscription: {e}")
+        log.error(f"Error upgrading to pro: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/teams/{team_public_id}/billing/downgrade")
@@ -348,6 +352,124 @@ async def remove_payment_method(
     except stripe.error.StripeError as e:
         log.error(f"Stripe error removing payment method: {e}")
         raise HTTPException(status_code=500, detail="Error removing payment method")
+
+@router.post("/teams/{team_public_id}/billing/charge-welcomepage")
+async def charge_for_welcomepage(
+    team_public_id: str,
+    current_user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db)
+):
+    """Charge $7.99 for creating a new welcomepage"""
+    try:
+        # Get team from database
+        team = db.query(Team).filter(Team.public_id == team_public_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        if not team.stripe_customer_id:
+            raise HTTPException(status_code=400, detail="No payment method on file")
+        
+        # Get customer's default payment method
+        customer = await StripeService.get_customer(team.stripe_customer_id)
+        if not customer.invoice_settings.default_payment_method:
+            raise HTTPException(status_code=400, detail="No payment method on file")
+        
+        # Create a PaymentIntent for the welcomepage charge
+        payment_intent = stripe.PaymentIntent.create(
+            amount=799,  # $7.99 in cents
+            currency='usd',
+            customer=team.stripe_customer_id,
+            payment_method=customer.invoice_settings.default_payment_method,
+            confirmation_method='automatic',
+            confirm=True,
+            off_session=True,  # This is an off-session payment
+            metadata={
+                "team_public_id": team_public_id,
+                "type": "welcomepage_creation",
+                "source": "welcomepage"
+            }
+        )
+        
+        # Check if payment succeeded
+        if payment_intent.status == 'succeeded':
+            # Check if we need to start hosting subscription (11+ pages)
+            welcomepage_count = len(team.users)
+            if welcomepage_count >= 11 and not team.stripe_subscription_id:
+                # Start hosting subscription
+                hosting_subscription = await StripeService.create_subscription(
+                    customer_id=team.stripe_customer_id,
+                    price_id=STRIPE_HOSTING_PRICE_ID,
+                    team_public_id=team_public_id
+                )
+                team.stripe_subscription_id = hosting_subscription.id
+                team.subscription_status = "active"
+                db.commit()
+            
+            return {
+                "success": True,
+                "payment_intent_id": payment_intent.id,
+                "amount": 799,
+                "status": "succeeded",
+                "hosting_subscription_started": welcomepage_count >= 11 and not team.stripe_subscription_id
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Payment failed: {payment_intent.status}")
+        
+    except stripe.error.CardError as e:
+        log.error(f"Card error charging for welcomepage: {e}")
+        raise HTTPException(status_code=400, detail="Payment method declined")
+    except stripe.error.StripeError as e:
+        log.error(f"Stripe error charging for welcomepage: {e}")
+        raise HTTPException(status_code=500, detail="Error processing payment")
     except Exception as e:
-        log.error(f"Error removing payment method: {e}")
+        log.error(f"Error charging for welcomepage: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/teams/{team_public_id}/billing/confirm-payment-method")
+async def confirm_payment_method(
+    team_public_id: str,
+    request_data: Dict[str, Any],
+    current_user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db)
+):
+    """Confirm and attach a payment method after Setup Intent"""
+    try:
+        # Get team from database
+        team = db.query(Team).filter(Team.public_id == team_public_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        setup_intent_id = request_data.get("setup_intent_id")
+        if not setup_intent_id:
+            raise HTTPException(status_code=400, detail="Setup intent ID is required")
+        
+        # Retrieve the setup intent
+        setup_intent = stripe.SetupIntent.retrieve(setup_intent_id)
+        
+        if setup_intent.status != 'succeeded':
+            raise HTTPException(status_code=400, detail="Setup intent not completed")
+        
+        # Attach the payment method to the customer
+        payment_method = await StripeService.create_payment_method(
+            customer_id=team.stripe_customer_id,
+            payment_method_id=setup_intent.payment_method
+        )
+        
+        # Set as default payment method
+        await StripeService.set_default_payment_method(
+            customer_id=team.stripe_customer_id,
+            payment_method_id=setup_intent.payment_method
+        )
+        
+        return {
+            "success": True,
+            "payment_method_id": setup_intent.payment_method,
+            "status": "payment_method_confirmed"
+        }
+        
+    except stripe.error.StripeError as e:
+        log.error(f"Stripe error confirming payment method: {e}")
+        raise HTTPException(status_code=500, detail="Error confirming payment method")
+    except Exception as e:
+        log.error(f"Error confirming payment method: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

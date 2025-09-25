@@ -2,7 +2,7 @@
 Add Stripe integration fields to teams table
 """
 revision = '20250841'
-down_revision = '20250837'
+down_revision = '20250839'
 branch_labels = None
 depends_on = None
 

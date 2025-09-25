@@ -1,7 +1,7 @@
 select slack_user_id, team_id, auth_email, * from welcomepage_users   where public_id = 'wdcxj2n4wn'
-select auth_email, * from welcomepage_users where auth_email like 'charles.barton+1%@gmail.com' order by auth_email
+select auth_email, * from welcomepage_users where auth_email like 'charles%' order by auth_email
 
-select is_draft, * from welcomepage_users where auth_email like 'charles.barton+1%@gmail.com' order by auth_email
+select is_draft, * from welcomepage_users where public_id = '0bmntxfqao'
 
 -- update welcomepage_users set slack_user_id = null
 
