@@ -17,6 +17,11 @@ class Team(Base):
     slack_settings = Column(JSONB, nullable=True)  # Store Slack integration settings (workspace ID, etc.)
     security_settings = Column(JSONB, nullable=True)  # Store security-related settings (e.g., allowed email domains)
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
+    
+    # Stripe integration fields
+    stripe_customer_id = Column(String(255), nullable=True, unique=True, index=True)  # Stripe customer ID
+    stripe_subscription_id = Column(String(255), nullable=True, unique=True, index=True)  # Active subscription ID
+    subscription_status = Column(String(50), nullable=True)  # 'active', 'canceled', 'past_due', etc.
 
     users = relationship("WelcomepageUser", back_populates="team")
 
@@ -31,4 +36,7 @@ class Team(Base):
             "color_scheme_data": self.color_scheme_data,
             "slack_settings": self.slack_settings,
             "security_settings": self.security_settings,
+            "stripe_customer_id": self.stripe_customer_id,
+            "stripe_subscription_id": self.stripe_subscription_id,
+            "subscription_status": self.subscription_status,
         }
