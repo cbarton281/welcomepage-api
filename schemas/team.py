@@ -15,6 +15,12 @@ class TeamRead(TeamCreate):
     company_logo_url: Optional[str]
     color_scheme_data: Optional[Dict[str, Any]] = None
     slack_settings: Optional[Dict[str, Any]] = None
+    security_settings: Optional[Dict[str, Any]] = None
+    is_draft: bool
+    # Stripe integration fields
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    subscription_status: Optional[str] = None
 
     class Config:
         from_attributes = True

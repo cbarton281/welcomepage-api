@@ -128,16 +128,14 @@ async def upgrade_to_pro(
             }
         )
         
-        # Update team status to "pro" (no subscription yet)
-        team.subscription_status = "pro"
-        
-        db.commit()
+        # Don't update team status yet - wait for payment method confirmation
+        # The frontend needs to call /confirm-payment-method after the Setup Intent succeeds
         
         return {
             "success": True,
             "setup_intent_id": setup_intent.id,
             "client_secret": setup_intent.client_secret,
-            "status": "payment_method_captured"
+            "status": "payment_method_required"
         }
         
     except stripe.error.StripeError as e:
@@ -460,6 +458,10 @@ async def confirm_payment_method(
             customer_id=team.stripe_customer_id,
             payment_method_id=setup_intent.payment_method
         )
+        
+        # Now update team status to "pro" since payment method is confirmed
+        team.subscription_status = "pro"
+        db.commit()
         
         return {
             "success": True,
