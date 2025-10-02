@@ -148,21 +148,45 @@ def generate_verification_email(
         raise HTTPException(status_code=500, detail="Unable to process verification request.")
     verification_code, expires_at, code = generate_code_with_retry(payload, db, log)
     
-    # Check if user exists by email - only send email to registered users
+    should_send_email = False
+    user_type = "unknown"
+    
+    # Check if user exists by email (returning user)
     existing_user_by_email = db.query(WelcomepageUser).filter_by(auth_email=payload.email).first()
     
     if existing_user_by_email:
-        # Send the verification email only to registered users
+        # Returning user who already has auth_email set
+        should_send_email = True
+        user_type = "returning_user"
+        log.info(f"Found returning user with auth_email: {payload.email}")
+    elif payload.public_id:
+        # Check if this is a legitimate new user (has public_id but no auth_email yet)
+        potential_new_user = db.query(WelcomepageUser).filter_by(public_id=payload.public_id).first()
+        if potential_new_user and not potential_new_user.auth_email:
+            # This is a legitimate new user going through signup
+            should_send_email = True
+            user_type = "new_user"
+            log.info(f"Found new user for signup: {payload.email} (public_id: {payload.public_id})")
+        else:
+            if potential_new_user:
+                log.info(f"User exists but already has auth_email: {potential_new_user.auth_email}")
+            else:
+                log.info(f"No user found for public_id: {payload.public_id}")
+    else:
+        log.info(f"No public_id provided for email: {payload.email}")
+    
+    if should_send_email:
+        # Send the verification email
         from api.send_email import send_verification_email
         try:
             send_verification_email(payload.email, code)
-            log.info(f"Verification email sent to registered user {payload.email}")
+            log.info(f"Verification email sent to {user_type}: {payload.email}")
         except Exception as e:
             log.error(f"Failed to send verification email: {e}")
             raise HTTPException(status_code=500, detail="Failed to send verification email.")
     else:
-        log.info(f"No registered user found for {payload.email} - verification code generated but no email sent")
-        # Add artificial delay to match email sending time for registered users
+        log.info(f"No legitimate user found for {payload.email} - verification code generated but no email sent")
+        # Add artificial delay to match email sending time for legitimate users
         # This prevents timing attacks and makes behavior indistinguishable
         import time
         time.sleep(2)  # 2 second delay to match typical email sending time
