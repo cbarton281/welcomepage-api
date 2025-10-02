@@ -19,18 +19,48 @@ class StripeService:
     """Service for handling Stripe operations"""
     
     @staticmethod
-    async def create_customer(email: str, name: str, team_public_id: str) -> Dict[str, Any]:
-        """Create a new Stripe customer"""
+    async def find_customer_by_team_id(team_public_id: str) -> Optional[Dict[str, Any]]:
+        """Find existing Stripe customer by team public ID"""
         try:
+            customers = stripe.Customer.list(
+                limit=100,  # Should be enough for most cases
+                expand=['data']
+            )
+            
+            # Look for customer with matching team_public_id in metadata
+            for customer in customers.data:
+                if (customer.metadata and 
+                    customer.metadata.get("team_public_id") == team_public_id):
+                    log.info(f"Found existing Stripe customer {customer.id} for team {team_public_id}")
+                    log.info(f"Customer metadata: {customer.metadata}")
+                    return customer
+            
+            return None
+        except stripe.error.StripeError as e:
+            log.error(f"Error searching for existing customer: {e}")
+            return None
+
+    @staticmethod
+    async def create_customer(email: str, name: str, team_public_id: str) -> Dict[str, Any]:
+        """Create a new Stripe customer or return existing one"""
+        try:
+            # First, check if customer already exists for this team
+            existing_customer = await StripeService.find_customer_by_team_id(team_public_id)
+            if existing_customer:
+                log.info(f"Using existing Stripe customer {existing_customer.id} for team {team_public_id}")
+                return existing_customer
+            
+            # Create new customer with idempotency key to prevent duplicates
             customer = stripe.Customer.create(
                 email=email,
                 name=name,
                 metadata={
                     "team_public_id": team_public_id,
                     "source": "welcomepage"
-                }
+                },
+                idempotency_key=f"customer_create_{team_public_id}"
             )
-            log.info(f"Created Stripe customer {customer.id} for team {team_public_id}")
+            log.info(f"Created new Stripe customer {customer.id} for team {team_public_id}")
             return customer
         except stripe.error.StripeError as e:
             log.error(f"Error creating Stripe customer: {e}")

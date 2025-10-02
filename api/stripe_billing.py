@@ -108,12 +108,15 @@ async def upgrade_to_pro(
         
         # Create or get Stripe customer
         if not team.stripe_customer_id:
+            # This will either create a new customer or return an existing one
             customer = await StripeService.create_customer(
                 email=email,
                 name=team.organization_name,
                 team_public_id=team_public_id
             )
             team.stripe_customer_id = customer.id
+            # Save the customer ID to the database
+            db.commit()
         else:
             customer = await StripeService.get_customer(team.stripe_customer_id)
         
@@ -158,22 +161,25 @@ async def downgrade_subscription(
         if not team:
             raise HTTPException(status_code=404, detail="Team not found")
         
-        if not team.stripe_subscription_id:
-            raise HTTPException(status_code=400, detail="No active subscription to cancel")
+        # Check if team is already on free plan
+        if team.subscription_status in ["free", "canceled"]:
+            raise HTTPException(status_code=400, detail="Team is already on free plan")
         
-        # Cancel subscription
-        subscription = await StripeService.cancel_subscription(team.stripe_subscription_id)
+        # If there's an active Stripe subscription, cancel it
+        if team.stripe_subscription_id:
+            subscription = await StripeService.cancel_subscription(team.stripe_subscription_id)
+            team.stripe_subscription_id = None
+            log.info(f"Canceled Stripe subscription for team {team_public_id}")
         
-        # Update team
-        team.stripe_subscription_id = None
-        team.subscription_status = "canceled"
+        # Update team status to free (whether there was a subscription or not)
+        team.subscription_status = "free"
         
         db.commit()
         
         return {
             "success": True,
-            "status": "canceled",
-            "message": "Subscription canceled successfully"
+            "status": "free",
+            "message": "Team downgraded to free plan successfully"
         }
         
     except stripe.error.StripeError as e:

@@ -37,7 +37,8 @@ select * from alembic_version
 
 
 select * from teams order by id
-select * from teams where public_id = 'bfibbmd5bj' 
+select * from teams where public_id = 'ied3vv24li' 
+-- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
 
 SELECT *
 FROM public.teams
