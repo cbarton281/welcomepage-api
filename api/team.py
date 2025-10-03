@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, asc, desc
+from sqlalchemy import func, asc, desc, and_
 from sqlalchemy.exc import OperationalError, IntegrityError, DataError, DatabaseError
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
@@ -202,6 +202,128 @@ async def get_team_members(
     log.info(f"Returning {len(member_responses)} members out of {total_count} total")
     
     return TeamMembersListResponse(
+        members=member_responses,
+        total_count=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_next=has_next,
+        has_previous=has_previous
+    )
+
+class TeamMemberViewResponse(BaseModel):
+    id: int
+    public_id: str
+    first_name: str
+    last_name: str
+    profile_image: Optional[str]
+    wave_gif_url: Optional[str]
+    unique_visits: int
+
+class TeamMembersViewListResponse(BaseModel):
+    members: List[TeamMemberViewResponse]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_previous: bool
+
+@router.get("/teams/{public_id}/members-view", response_model=TeamMembersViewListResponse)
+async def get_team_members_view(
+    public_id: str,
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(20, ge=1, le=100, description="Number of members per page"),
+    sort_by: str = Query("name", description="Sort field: name, date_created"),
+    sort_order: str = Query("asc", description="Sort order: asc or desc"),
+    search: Optional[str] = Query(None, description="Search by name or email"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get paginated list of team members for viewing (USER role access).
+    Returns minimal information needed for team member display.
+    """
+    log = new_logger("get_team_members_view")
+    log.info(f"Fetching team members view for team: {public_id}, page: {page}, page_size: {page_size}")
+    
+    # First verify the team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    current_user_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    current_user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if current_user_team_id != team.public_id:
+        log.warning(f"User {current_user_id} attempted to access team {public_id} members view")
+        raise HTTPException(status_code=403, detail="Access denied: You can only view members of your own team")
+    
+    # Build base query - only include registered users (with auth_email and USER/ADMIN roles)
+    query = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.auth_email.isnot(None),
+        WelcomepageUser.auth_email != '',
+        WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
+    )
+    
+    # Apply search filter if provided
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.filter(
+            (WelcomepageUser.name.ilike(search_term)) |
+            (WelcomepageUser.auth_email.ilike(search_term))
+        )
+    
+    # Apply sorting
+    sort_column = None
+    if sort_by == "name":
+        sort_column = WelcomepageUser.name
+    elif sort_by == "date_created":
+        sort_column = WelcomepageUser.created_at
+    else:
+        sort_column = WelcomepageUser.name  # default
+    
+    if sort_order.lower() == "asc":
+        query = query.order_by(asc(sort_column))
+    else:
+        query = query.order_by(desc(sort_column))
+    
+    # Get total count before pagination
+    total_count = query.count()
+    
+    # Apply pagination
+    offset = (page - 1) * page_size
+    members = query.offset(offset).limit(page_size).all()
+    
+    # Calculate pagination metadata
+    total_pages = (total_count + page_size - 1) // page_size  # Ceiling division
+    has_next = page < total_pages
+    has_previous = page > 1
+    
+    # Build response objects with minimal data
+    member_responses = []
+    for member in members:
+        # Extract first and last name from full name
+        name_parts = member.name.split(' ', 1) if member.name else ['', '']
+        first_name = name_parts[0] if name_parts else ''
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
+        
+        member_responses.append(TeamMemberViewResponse(
+            id=member.id,
+            public_id=member.public_id,
+            first_name=first_name,
+            last_name=last_name,
+            profile_image=member.profile_photo_url,
+            wave_gif_url=member.wave_gif_url,
+            unique_visits=0  # Simplified - no visit counting for team view
+        ))
+    
+    log.info(f"Returning {len(member_responses)} members view out of {total_count} total")
+    
+    return TeamMembersViewListResponse(
         members=member_responses,
         total_count=total_count,
         page=page,

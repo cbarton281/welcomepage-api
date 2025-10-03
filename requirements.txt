@@ -15,4 +15,5 @@ requests
 aiohttp
 imageio-ffmpeg
 stripe
+faker
 
