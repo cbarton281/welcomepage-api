@@ -1,9 +1,9 @@
 select slack_user_id, team_id, auth_email, * from welcomepage_users   where public_id = 'wdcxj2n4wn'
-select auth_email, auth_role, * from welcomepage_users where  auth_email like 'charles.barton+%@gmail.com'  order by auth_email
+select auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+%@gmail.com'  order by auth_email
 
 select auth_email, auth_role, welcomepage_users.* from welcomepage_users
 join teams on teams.id = welcomepage_users.team_id
-where teams.public_id = 'pld98ed6sq'
+where teams.public_id = 'juhg34g2k9'
 
 select * from welcomepage_users where slack_user_id = 'U09KBMDENMN'
 select is_draft, * from welcomepage_users where public_id = '0bmntxfqao'

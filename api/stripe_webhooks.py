@@ -30,7 +30,32 @@ async def handle_stripe_webhook(
         # Verify webhook signature
         event = StripeService.verify_webhook_signature(body, signature)
         
-        log.info(f"Received Stripe webhook: {event['type']}")
+        event_type = event.get("type")
+        event_id = event.get("id")
+        # Top-level metadata for root-cause analysis
+        log.info(
+            f"Received Stripe webhook",
+            extra={
+                "event_id": event_id,
+                "event_type": event_type,
+                "created": event.get("created"),
+                "api_version": event.get("api_version"),
+                "livemode": event.get("livemode"),
+                "request_id": event.get("request", {}).get("id") if isinstance(event.get("request"), dict) else event.get("request"),
+                "object": event.get("object"),
+                "customer": (
+                    event.get("data", {})
+                        .get("object", {})
+                        .get("customer")
+                ),
+                "subscription_id": (
+                    event.get("data", {})
+                        .get("object", {})
+                        .get("id")
+                ) if event_type and "subscription" in event_type else None,
+                "payload_short": str(event.get("data", {}))[:500]  # truncate large objects
+            }
+        )
         
         # Handle different event types
         if event["type"] == "customer.subscription.created":
@@ -39,6 +64,8 @@ async def handle_stripe_webhook(
             await handle_subscription_updated(event, db)
         elif event["type"] == "customer.subscription.deleted":
             await handle_subscription_deleted(event, db)
+        elif event["type"] == "customer.deleted":
+            await handle_customer_deleted(event, db)
         elif event["type"] == "invoice.payment_succeeded":
             await handle_payment_succeeded(event, db)
         elif event["type"] == "invoice.payment_failed":
@@ -118,6 +145,30 @@ async def handle_subscription_deleted(event: dict, db: Session):
         
     except Exception as e:
         log.error(f"Error handling subscription deleted: {e}")
+        db.rollback()
+
+async def handle_customer_deleted(event: dict, db: Session):
+    """Handle customer deleted event"""
+    try:
+        customer = event["data"]["object"]
+        customer_id = customer["id"]
+        
+        # Find team by customer ID
+        team = db.query(Team).filter(Team.stripe_customer_id == customer_id).first()
+        if not team:
+            log.warning(f"No team found for customer {customer_id}")
+            return
+        
+        # Clear customer and subscription info, reset to free plan
+        team.stripe_customer_id = None
+        team.stripe_subscription_id = None
+        team.subscription_status = "free"
+        
+        db.commit()
+        log.info(f"Customer deleted for team {team.public_id}, reset to free plan")
+        
+    except Exception as e:
+        log.error(f"Error handling customer deleted: {e}")
         db.rollback()
 
 async def handle_payment_succeeded(event: dict, db: Session):
