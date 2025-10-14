@@ -250,7 +250,11 @@ async def get_payment_methods(
         if not team.stripe_customer_id:
             return {"payment_methods": []}
         
-        # Get payment methods from Stripe
+        # Get customer to check default payment method
+        customer = await StripeService.get_customer(team.stripe_customer_id)
+        default_payment_method_id = customer.invoice_settings.default_payment_method
+        
+        # Get attached payment methods from Stripe
         payment_methods = await StripeService.get_payment_methods(team.stripe_customer_id)
         
         # Format payment methods for frontend
@@ -266,8 +270,27 @@ async def get_payment_methods(
                         "exp_month": pm.card.exp_month,
                         "exp_year": pm.card.exp_year
                     },
-                    "is_default": pm.id == team.stripe_customer_id  # This would need to be checked against customer's default
+                    "is_default": pm.id == default_payment_method_id
                 })
+        
+        # If no attached payment methods but there's a default, get the default
+        if not formatted_methods and default_payment_method_id:
+            try:
+                default_pm = stripe.PaymentMethod.retrieve(default_payment_method_id)
+                if default_pm.type == "card":
+                    formatted_methods.append({
+                        "id": default_pm.id,
+                        "type": default_pm.type,
+                        "card": {
+                            "brand": default_pm.card.brand,
+                            "last4": default_pm.card.last4,
+                            "exp_month": default_pm.card.exp_month,
+                            "exp_year": default_pm.card.exp_year
+                        },
+                        "is_default": True
+                    })
+            except stripe.error.StripeError as e:
+                log.warning(f"Could not retrieve default payment method {default_payment_method_id}: {e}")
         
         return {"payment_methods": formatted_methods}
         
@@ -480,4 +503,118 @@ async def confirm_payment_method(
         raise HTTPException(status_code=500, detail="Error confirming payment method")
     except Exception as e:
         log.error(f"Error confirming payment method: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/teams/{team_public_id}/billing/update-payment-method")
+async def update_payment_method(
+    team_public_id: str,
+    request_data: Dict[str, Any],
+    current_user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db)
+):
+    """Create a Setup Intent to update the team's payment method"""
+    try:
+        # Get team from database
+        team = db.query(Team).filter(Team.public_id == team_public_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        if not team.stripe_customer_id:
+            raise HTTPException(status_code=400, detail="No Stripe customer found")
+        
+        email = request_data.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="Email is required")
+        
+        # Get the existing customer
+        customer = await StripeService.get_customer(team.stripe_customer_id)
+        
+        # Create a Setup Intent to capture new payment method
+        setup_intent = stripe.SetupIntent.create(
+            customer=customer.id,
+            payment_method_types=['card'],
+            usage='off_session',  # For future payments
+            metadata={
+                "team_public_id": team_public_id,
+                "source": "welcomepage_payment_update"
+            }
+        )
+        
+        log.info(f"Created Setup Intent {setup_intent.id} for payment method update for team {team_public_id}")
+        
+        return {
+            "success": True,
+            "setup_intent_id": setup_intent.id,
+            "client_secret": setup_intent.client_secret,
+            "status": "payment_method_update_required"
+        }
+        
+    except stripe.error.StripeError as e:
+        log.error(f"Stripe error creating setup intent for payment update: {e}")
+        raise HTTPException(status_code=500, detail="Error initiating payment method update")
+    except Exception as e:
+        log.error(f"Error updating payment method: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/teams/{team_public_id}/billing/confirm-payment-update")
+async def confirm_payment_update(
+    team_public_id: str,
+    request_data: Dict[str, Any],
+    current_user=Depends(require_roles("ADMIN")),
+    db: Session = Depends(get_db)
+):
+    """Confirm the payment method update after Setup Intent succeeds"""
+    try:
+        # Get team from database
+        team = db.query(Team).filter(Team.public_id == team_public_id).first()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        if not team.stripe_customer_id:
+            raise HTTPException(status_code=400, detail="No Stripe customer found")
+        
+        setup_intent_id = request_data.get("setup_intent_id")
+        payment_method_id = request_data.get("payment_method_id")
+        
+        if not setup_intent_id or not payment_method_id:
+            raise HTTPException(status_code=400, detail="Setup intent ID and payment method ID are required")
+        
+        # Retrieve the setup intent to verify it succeeded
+        setup_intent = stripe.SetupIntent.retrieve(setup_intent_id)
+        
+        if setup_intent.status != 'succeeded':
+            raise HTTPException(status_code=400, detail="Setup intent not completed")
+        
+        # Get all existing payment methods before updating
+        existing_payment_methods = await StripeService.get_payment_methods(team.stripe_customer_id)
+        
+        # Set the new payment method as the default
+        await StripeService.set_default_payment_method(
+            customer_id=team.stripe_customer_id,
+            payment_method_id=payment_method_id
+        )
+        
+        # Remove all old payment methods (but not the new one we just set as default)
+        for old_pm in existing_payment_methods:
+            if old_pm.id != payment_method_id:  # Don't remove the new payment method
+                try:
+                    await StripeService.detach_payment_method(old_pm.id)
+                    log.info(f"Detached old payment method {old_pm.id} for team {team_public_id}")
+                except stripe.error.StripeError as e:
+                    log.warning(f"Could not detach old payment method {old_pm.id}: {e}")
+                    # Don't fail the whole operation if we can't detach an old method
+        
+        log.info(f"Updated default payment method to {payment_method_id} for team {team_public_id}")
+        
+        return {
+            "success": True,
+            "payment_method_id": payment_method_id,
+            "status": "payment_method_updated"
+        }
+        
+    except stripe.error.StripeError as e:
+        log.error(f"Stripe error confirming payment method update: {e}")
+        raise HTTPException(status_code=500, detail="Error confirming payment method update")
+    except Exception as e:
+        log.error(f"Error confirming payment method update: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
