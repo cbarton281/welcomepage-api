@@ -22,19 +22,18 @@ class StripeService:
     async def find_customer_by_team_id(team_public_id: str) -> Optional[Dict[str, Any]]:
         """Find existing Stripe customer by team public ID"""
         try:
-            customers = stripe.Customer.list(
-                limit=100,  # Should be enough for most cases
-                expand=['data']
-            )
+            # Use Stripe's search API to find customer by metadata
+            search_query = f'metadata["team_public_id"]:"{team_public_id}"'
+            customers = stripe.Customer.search(query=search_query)
             
-            # Look for customer with matching team_public_id in metadata
-            for customer in customers.data:
-                if (customer.metadata and 
-                    customer.metadata.get("team_public_id") == team_public_id):
-                    log.info(f"Found existing Stripe customer {customer.id} for team {team_public_id}")
-                    log.info(f"Customer metadata: {customer.metadata}")
-                    return customer
+            # Return the first matching customer (should be only one)
+            if customers.data:
+                customer = customers.data[0]
+                log.info(f"Found existing Stripe customer {customer.id} for team {team_public_id}")
+                log.info(f"Customer metadata: {customer.metadata}")
+                return customer
             
+            log.info(f"No existing Stripe customer found for team {team_public_id}")
             return None
         except stripe.error.StripeError as e:
             log.error(f"Error searching for existing customer: {e}")

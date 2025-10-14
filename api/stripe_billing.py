@@ -171,6 +171,28 @@ async def downgrade_subscription(
             team.stripe_subscription_id = None
             log.info(f"Canceled Stripe subscription for team {team_public_id}")
         
+        # Clean up payment methods and customer reference for free users
+        if team.stripe_customer_id:
+            try:
+                # Get all existing payment methods and detach them
+                existing_payment_methods = await StripeService.get_payment_methods(team.stripe_customer_id)
+                for payment_method in existing_payment_methods:
+                    try:
+                        await StripeService.detach_payment_method(payment_method.id)
+                        log.info(f"Detached payment method {payment_method.id} for team {team_public_id}")
+                    except stripe.error.StripeError as e:
+                        log.warning(f"Could not detach payment method {payment_method.id}: {e}")
+                        # Don't fail the whole operation if we can't detach a payment method
+                
+                # Clear stripe_customer_id from database (keep customer in Stripe for history)
+                team.stripe_customer_id = None
+                log.info(f"Cleared stripe_customer_id for team {team_public_id} (customer kept in Stripe for history)")
+                
+            except stripe.error.StripeError as e:
+                log.warning(f"Could not clean up payment methods for team {team_public_id}: {e}")
+                # Still proceed with downgrade even if payment method cleanup fails
+                team.stripe_customer_id = None
+        
         # Update team status to free (whether there was a subscription or not)
         team.subscription_status = "free"
         
