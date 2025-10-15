@@ -690,6 +690,17 @@ def upsert_user_db_logic(
                 db_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
                 if not db_user:
                     user_lookup_id = public_id
+            
+            # Defensive lookup: If still no user found, try looking up by slack_user_id
+            # This handles re-registration after Slack uninstall/reinstall where the user
+            # record still exists with the slack_user_id from the previous installation
+            if db_user is None and slack_user_id and team_id:
+                db_user = db.query(WelcomepageUser).filter_by(
+                    slack_user_id=slack_user_id,
+                    team_id=team_id
+                ).first()
+                if db_user:
+                    log.info(f"Found existing user by slack_user_id: {slack_user_id} in team_id {team_id}, will update user {db_user.public_id}")
         except OperationalError as e:
             log.warning(f"Database query failed, will be retried by tenacity: {e}")
             raise  # Let tenacity handle the retry
