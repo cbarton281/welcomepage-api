@@ -93,10 +93,21 @@ async def handle_subscription_created(event: dict, db: Session):
         
         # Update team with subscription info
         team.stripe_subscription_id = subscription["id"]
-        team.subscription_status = subscription["status"]
+        
+        # Store raw Stripe status for debugging and detailed messaging
+        stripe_status = subscription["status"]
+        team.stripe_subscription_status = stripe_status
+        
+        # Map Stripe status to our standardized values: "pro" or "free"
+        # Stripe statuses: "active", "trialing", "past_due" → "pro"
+        # Stripe statuses: "canceled", "incomplete", "incomplete_expired", "unpaid" → "free"
+        if stripe_status in ["active", "trialing", "past_due"]:
+            team.subscription_status = "pro"
+        else:
+            team.subscription_status = "free"
         
         db.commit()
-        log.info(f"Updated team {team.public_id} with new subscription {subscription['id']}")
+        log.info(f"Updated team {team.public_id} with new subscription {subscription['id']}, stripe_status: {stripe_status}, subscription_status: {team.subscription_status}")
         
     except Exception as e:
         log.error(f"Error handling subscription created: {e}")
@@ -115,10 +126,18 @@ async def handle_subscription_updated(event: dict, db: Session):
             return
         
         # Update subscription status
-        team.subscription_status = subscription["status"]
+        # Store raw Stripe status for debugging and detailed messaging
+        stripe_status = subscription["status"]
+        team.stripe_subscription_status = stripe_status
+        
+        # Map Stripe status to our standardized values: "pro" or "free"
+        if stripe_status in ["active", "trialing", "past_due"]:
+            team.subscription_status = "pro"
+        else:
+            team.subscription_status = "free"
         
         db.commit()
-        log.info(f"Updated subscription status for team {team.public_id}: {subscription['status']}")
+        log.info(f"Updated subscription status for team {team.public_id}: stripe_status: {stripe_status}, subscription_status: {team.subscription_status}")
         
     except Exception as e:
         log.error(f"Error handling subscription updated: {e}")
@@ -138,10 +157,11 @@ async def handle_subscription_deleted(event: dict, db: Session):
         
         # Clear subscription info
         team.stripe_subscription_id = None
-        team.subscription_status = "canceled"
+        team.stripe_subscription_status = "canceled"  # Store raw Stripe status
+        team.subscription_status = "free"  # Standardized to "free"
         
         db.commit()
-        log.info(f"Cleared subscription info for team {team.public_id}")
+        log.info(f"Cleared subscription info for team {team.public_id}, stripe_status: canceled, subscription_status: free")
         
     except Exception as e:
         log.error(f"Error handling subscription deleted: {e}")
@@ -162,6 +182,7 @@ async def handle_customer_deleted(event: dict, db: Session):
         # Clear customer and subscription info, reset to free plan
         team.stripe_customer_id = None
         team.stripe_subscription_id = None
+        team.stripe_subscription_status = None  # Clear raw Stripe status
         team.subscription_status = "free"
         
         db.commit()

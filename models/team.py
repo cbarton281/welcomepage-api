@@ -21,7 +21,8 @@ class Team(Base):
     # Stripe integration fields
     stripe_customer_id = Column(String(255), nullable=True, unique=True, index=True)  # Stripe customer ID
     stripe_subscription_id = Column(String(255), nullable=True, unique=True, index=True)  # Active subscription ID
-    subscription_status = Column(String(50), nullable=True)  # 'active', 'canceled', 'past_due', etc.
+    stripe_subscription_status = Column(String(50), nullable=True)  # Raw Stripe status: 'active', 'past_due', 'canceled', etc.
+    subscription_status = Column(String(50), nullable=True)  # Standardized: 'pro' or 'free' only
 
     users = relationship("WelcomepageUser", back_populates="team")
 

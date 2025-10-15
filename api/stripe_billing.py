@@ -194,6 +194,7 @@ async def downgrade_subscription(
                 team.stripe_customer_id = None
         
         # Update team status to free (whether there was a subscription or not)
+        team.stripe_subscription_status = None  # Clear raw Stripe status
         team.subscription_status = "free"
         
         db.commit()
@@ -451,7 +452,8 @@ async def charge_for_welcomepage(
                     team_public_id=team_public_id
                 )
                 team.stripe_subscription_id = hosting_subscription.id
-                team.subscription_status = "active"
+                team.stripe_subscription_status = "active"  # Store raw Stripe status (hosting subscription is active)
+                team.subscription_status = "pro"  # Standardized to "pro"
                 db.commit()
             
             return {
@@ -511,7 +513,9 @@ async def confirm_payment_method(
         )
         
         # Now update team status to "pro" since payment method is confirmed
-        team.subscription_status = "pro"
+        # Note: This is a setup for per-page charges, not a subscription yet
+        team.stripe_subscription_status = None  # No subscription yet, just payment method
+        team.subscription_status = "pro"  # But they have pro access for per-page billing
         db.commit()
         
         return {
