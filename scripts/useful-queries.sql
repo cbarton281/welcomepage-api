@@ -1,4 +1,4 @@
-select slack_user_id, team_id, auth_email, * from welcomepage_users   where public_id = 'wdcxj2n4wn'
+select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users   where public_id = '0bmntxfqao'
 select auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+%@gmail.com'  order by auth_email
 
 select auth_email, auth_role, welcomepage_users.* from welcomepage_users

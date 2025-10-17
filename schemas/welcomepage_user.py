@@ -80,6 +80,10 @@ class WelcomepageUserDTO(BaseModel):
     team_public_id: Optional[str] = Field(None, alias="teamPublicId")
     invite_banner_dismissed: Optional[bool] = Field(None, alias="inviteBannerDismissed")
     is_draft: Optional[bool] = Field(None, alias="isDraft")
+    
+    # Payment queue fields
+    publish_queued: Optional[bool] = Field(None, alias="publishQueued")
+    queued_at: Optional[str] = Field(None, alias="queuedAt")
 
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")
@@ -120,6 +124,14 @@ class WelcomepageUserDTO(BaseModel):
             return v.isoformat()
         return v
 
+    @field_validator('queued_at', mode='before')
+    @classmethod
+    def validate_queued_at(cls, v):
+        # Convert datetime objects to ISO strings
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
     @field_serializer('created_at')
     def serialize_created_at(self, value):
         if isinstance(value, datetime):
@@ -128,6 +140,12 @@ class WelcomepageUserDTO(BaseModel):
 
     @field_serializer('updated_at')
     def serialize_updated_at(self, value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
+    @field_serializer('queued_at')
+    def serialize_queued_at(self, value):
         if isinstance(value, datetime):
             return value.isoformat()
         return value

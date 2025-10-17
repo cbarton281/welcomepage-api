@@ -40,6 +40,10 @@ class WelcomepageUser(Base):
     auth_role = Column(String(32), nullable=True)  # Authorization role (admin, user, pre-signup, etc)
     auth_email = Column(String(256), nullable=True)  # Authorization email, distinct from profile email
     slack_user_id = Column(String(32), nullable=True)  # Slack user ID for integration
+    
+    # Payment queue fields - for pages waiting for payment method to be added
+    publish_queued = Column(Boolean, nullable=False, default=False, server_default='0')  # True if page is queued for payment
+    queued_at = Column(DateTime, nullable=True)  # When the page was queued for payment
 
     team = relationship("Team", back_populates="users")
 
