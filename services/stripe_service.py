@@ -161,6 +161,19 @@ class StripeService:
             raise
     
     @staticmethod
+    async def get_payment_intents(customer_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get customer's payment intents (one-time payments)"""
+        try:
+            payment_intents = stripe.PaymentIntent.list(
+                customer=customer_id,
+                limit=limit
+            )
+            return payment_intents.data
+        except stripe.error.StripeError as e:
+            log.error(f"Error retrieving payment intents for customer {customer_id}: {e}")
+            raise
+    
+    @staticmethod
     async def get_invoice(invoice_id: str) -> Dict[str, Any]:
         """Get specific invoice by ID"""
         try:
@@ -216,6 +229,76 @@ class StripeService:
         except stripe.error.StripeError as e:
             log.error(f"Error detaching payment method {payment_method_id}: {e}")
             raise
+    
+    @staticmethod
+    async def charge_for_welcomepage(team_public_id: str, team_stripe_customer_id: str, user_public_id: str, user_name: str) -> Dict[str, Any]:
+        """Charge $7.99 for creating a new welcomepage"""
+        try:
+            # Get customer's default payment method
+            customer = await StripeService.get_customer(team_stripe_customer_id)
+            if not customer.invoice_settings.default_payment_method:
+                return {
+                    "success": False,
+                    "error": "No payment method on file"
+                }
+            
+            # Create a PaymentIntent for the welcomepage charge
+            payment_intent = stripe.PaymentIntent.create(
+                amount=799,  # $7.99 in cents
+                currency='usd',
+                customer=team_stripe_customer_id,
+                payment_method=customer.invoice_settings.default_payment_method,
+                confirmation_method='automatic',
+                confirm=True,
+                off_session=True,  # This is an off-session payment
+                metadata={
+                    "team_public_id": team_public_id,
+                    "type": "welcomepage_creation",
+                    "source": "welcomepage",
+                    "user_public_id": user_public_id,
+                    "user_name": user_name
+                }
+            )
+            
+            # Check if payment succeeded
+            if payment_intent.status == 'succeeded':
+                log.info(f"Successfully charged $7.99 for welcomepage for team {team_public_id}")
+                log.info(f"PaymentIntent ID: {payment_intent.id}")
+                log.info(f"PaymentIntent metadata: {payment_intent.metadata}")
+                return {
+                    "success": True,
+                    "payment_intent_id": payment_intent.id,
+                    "amount": 799,
+                    "currency": "usd"
+                }
+            else:
+                log.error(f"Payment failed with status: {payment_intent.status}")
+                return {
+                    "success": False,
+                    "error": f"Payment failed with status: {payment_intent.status}",
+                    "payment_intent_id": payment_intent.id
+                }
+                
+        except stripe.error.CardError as e:
+            log.error(f"Card error charging for welcomepage: {e}")
+            return {
+                "success": False,
+                "error": "Your card was declined",
+                "stripe_error": e.code
+            }
+        except stripe.error.StripeError as e:
+            log.error(f"Stripe error charging for welcomepage: {e}")
+            return {
+                "success": False,
+                "error": f"Payment failed: {str(e)}",
+                "stripe_error": e.code if hasattr(e, 'code') else None
+            }
+        except Exception as e:
+            log.error(f"Unexpected error charging for welcomepage: {e}")
+            return {
+                "success": False,
+                "error": f"Payment failed: {str(e)}"
+            }
     
     @staticmethod
     def verify_webhook_signature(payload: bytes, signature: str) -> Dict[str, Any]:

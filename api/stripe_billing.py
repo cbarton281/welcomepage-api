@@ -228,14 +228,16 @@ async def get_billing_history(
         if not team.stripe_customer_id:
             return {"invoices": []}
         
-        # Get invoices from Stripe
-        invoices = await StripeService.get_invoices(team.stripe_customer_id, limit=20)
+        # Get both invoices and payment intents from Stripe
+        invoices = await StripeService.get_invoices(team.stripe_customer_id, limit=10)
+        payment_intents = await StripeService.get_payment_intents(team.stripe_customer_id, limit=20)
         
         # Format invoices for frontend
         formatted_invoices = []
         for invoice in invoices:
             formatted_invoices.append({
                 "id": invoice.id,
+                "type": "invoice",
                 "number": invoice.number,
                 "status": invoice.status,
                 "amount_paid": invoice.amount_paid,
@@ -245,8 +247,40 @@ async def get_billing_history(
                 "period_start": invoice.period_start,
                 "period_end": invoice.period_end,
                 "hosted_invoice_url": invoice.hosted_invoice_url,
-                "invoice_pdf": invoice.invoice_pdf
+                "invoice_pdf": invoice.invoice_pdf,
+                "description": "Subscription payment"
             })
+        
+        # Format payment intents for frontend
+        for payment_intent in payment_intents:
+            # Only include successful payments
+            if payment_intent.status == 'succeeded':
+                # Extract description from metadata
+                metadata = payment_intent.metadata or {}
+                description = "Welcomepage creation"
+                if metadata.get('type') == 'welcomepage_creation':
+                    user_name = metadata.get('user_name', 'Unknown User')
+                    description = f"Welcomepage creation - {user_name}"
+                
+                formatted_invoices.append({
+                    "id": payment_intent.id,
+                    "type": "payment",
+                    "number": f"PI-{payment_intent.id[-8:]}",  # Short ID for display
+                    "status": payment_intent.status,
+                    "amount_paid": payment_intent.amount,
+                    "amount_due": 0,
+                    "currency": payment_intent.currency,
+                    "created": payment_intent.created,
+                    "period_start": None,
+                    "period_end": None,
+                    "hosted_invoice_url": None,
+                    "invoice_pdf": None,
+                    "description": description,
+                    "metadata": metadata
+                })
+        
+        # Sort by created date (newest first)
+        formatted_invoices.sort(key=lambda x: x['created'], reverse=True)
         
         return {"invoices": formatted_invoices}
         
@@ -419,61 +453,51 @@ async def charge_for_welcomepage(
         if not team.stripe_customer_id:
             raise HTTPException(status_code=400, detail="No payment method on file")
         
-        # Get customer's default payment method
-        customer = await StripeService.get_customer(team.stripe_customer_id)
-        if not customer.invoice_settings.default_payment_method:
-            raise HTTPException(status_code=400, detail="No payment method on file")
+        # Use the service function for payment processing
+        # For the endpoint, we'll use the current user's info since we don't have a specific user context
+        user_public_id = current_user.get('public_id', 'unknown')
+        user_name = current_user.get('name', 'Unknown User')
         
-        # Create a PaymentIntent for the welcomepage charge
-        payment_intent = stripe.PaymentIntent.create(
-            amount=799,  # $7.99 in cents
-            currency='usd',
-            customer=team.stripe_customer_id,
-            payment_method=customer.invoice_settings.default_payment_method,
-            confirmation_method='automatic',
-            confirm=True,
-            off_session=True,  # This is an off-session payment
-            metadata={
-                "team_public_id": team_public_id,
-                "type": "welcomepage_creation",
-                "source": "welcomepage"
-            }
+        charge_result = await StripeService.charge_for_welcomepage(
+            team_public_id=team_public_id,
+            team_stripe_customer_id=team.stripe_customer_id,
+            user_public_id=user_public_id,
+            user_name=user_name
         )
         
-        # Check if payment succeeded
-        if payment_intent.status == 'succeeded':
-            # Check if we need to start hosting subscription (11+ pages)
-            welcomepage_count = len(team.users)
-            if welcomepage_count >= 11 and not team.stripe_subscription_id:
-                # Start hosting subscription
-                hosting_subscription = await StripeService.create_subscription(
-                    customer_id=team.stripe_customer_id,
-                    price_id=STRIPE_HOSTING_PRICE_ID,
-                    team_public_id=team_public_id
-                )
-                team.stripe_subscription_id = hosting_subscription.id
-                team.stripe_subscription_status = "active"  # Store raw Stripe status (hosting subscription is active)
-                team.subscription_status = "pro"  # Standardized to "pro"
-                db.commit()
-            
-            return {
-                "success": True,
-                "payment_intent_id": payment_intent.id,
-                "amount": 799,
-                "status": "succeeded",
-                "hosting_subscription_started": welcomepage_count >= 11 and not team.stripe_subscription_id
-            }
-        else:
-            raise HTTPException(status_code=400, detail=f"Payment failed: {payment_intent.status}")
+        if not charge_result.get("success"):
+            error_msg = charge_result.get("error", "Payment failed")
+            raise HTTPException(status_code=402, detail=error_msg)
         
-    except stripe.error.CardError as e:
-        log.error(f"Card error charging for welcomepage: {e}")
-        raise HTTPException(status_code=400, detail="Payment method declined")
-    except stripe.error.StripeError as e:
-        log.error(f"Stripe error charging for welcomepage: {e}")
-        raise HTTPException(status_code=500, detail="Error processing payment")
+        # Payment succeeded, check if we need to start hosting subscription (11+ pages)
+        welcomepage_count = len(team.users)
+        hosting_subscription_started = False
+        
+        if welcomepage_count >= 11 and not team.stripe_subscription_id:
+            # Start hosting subscription
+            hosting_subscription = await StripeService.create_subscription(
+                customer_id=team.stripe_customer_id,
+                price_id=STRIPE_HOSTING_PRICE_ID,
+                team_public_id=team_public_id
+            )
+            team.stripe_subscription_id = hosting_subscription.id
+            team.stripe_subscription_status = "active"  # Store raw Stripe status (hosting subscription is active)
+            team.subscription_status = "pro"  # Standardized to "pro"
+            db.commit()
+            hosting_subscription_started = True
+        
+        return {
+            "success": True,
+            "payment_intent_id": charge_result.get("payment_intent_id"),
+            "amount": 799,
+            "status": "succeeded",
+            "hosting_subscription_started": hosting_subscription_started
+        }
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        log.error(f"Error charging for welcomepage: {e}")
+        log.error(f"Error in charge_for_welcomepage endpoint: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/teams/{team_public_id}/billing/confirm-payment-method")
