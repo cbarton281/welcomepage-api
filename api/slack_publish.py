@@ -51,6 +51,16 @@ async def publish_welcomepage_to_slack(
     
     team = user.team
     
+    # Get team admin's email for receipt
+    admin_user = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.auth_role == "ADMIN"
+    ).first()
+    
+    admin_email = admin_user.auth_email if admin_user else None
+    log.info(f"Admin user found: {admin_user.public_id if admin_user else 'None'}")
+    log.info(f"Admin email for receipt: {admin_email}")
+    
     # Count published pages for this team (is_draft=False)
     published_count = db.query(WelcomepageUser).filter(
         WelcomepageUser.team_id == team.id,
@@ -70,7 +80,8 @@ async def publish_welcomepage_to_slack(
                 team_public_id=team.public_id,
                 team_stripe_customer_id=team.stripe_customer_id,
                 user_public_id=user.public_id,
-                user_name=user.name
+                user_name=user.name,
+                admin_email=admin_email
             )
             
             if not charge_result.get("success"):

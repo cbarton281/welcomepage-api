@@ -16,4 +16,5 @@ aiohttp
 imageio-ffmpeg
 stripe
 faker
+reportlab
 

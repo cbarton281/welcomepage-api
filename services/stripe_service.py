@@ -231,7 +231,7 @@ class StripeService:
             raise
     
     @staticmethod
-    async def charge_for_welcomepage(team_public_id: str, team_stripe_customer_id: str, user_public_id: str, user_name: str) -> Dict[str, Any]:
+    async def charge_for_welcomepage(team_public_id: str, team_stripe_customer_id: str, user_public_id: str, user_name: str, admin_email: str) -> Dict[str, Any]:
         """Charge $7.99 for creating a new welcomepage"""
         try:
             # Get customer's default payment method
@@ -243,6 +243,7 @@ class StripeService:
                 }
             
             # Create a PaymentIntent for the welcomepage charge
+            log.info(f"Creating PaymentIntent with receipt_email: {admin_email}")
             payment_intent = stripe.PaymentIntent.create(
                 amount=799,  # $7.99 in cents
                 currency='usd',
@@ -251,25 +252,36 @@ class StripeService:
                 confirmation_method='automatic',
                 confirm=True,
                 off_session=True,  # This is an off-session payment
+                receipt_email=admin_email,  # Send receipt to team admin
+                description=f"Welcomepage creation - {user_name}",  # Description for receipt
                 metadata={
                     "team_public_id": team_public_id,
                     "type": "welcomepage_creation",
                     "source": "welcomepage",
                     "user_public_id": user_public_id,
-                    "user_name": user_name
+                    "user_name": user_name,
+                    "created_for": user_name,
+                    "created_for_id": user_public_id
                 }
             )
+            log.info(f"PaymentIntent created with ID: {payment_intent.id}")
+            log.info(f"PaymentIntent receipt_email: {payment_intent.receipt_email}")
             
             # Check if payment succeeded
             if payment_intent.status == 'succeeded':
                 log.info(f"Successfully charged $7.99 for welcomepage for team {team_public_id}")
                 log.info(f"PaymentIntent ID: {payment_intent.id}")
                 log.info(f"PaymentIntent metadata: {payment_intent.metadata}")
+                if admin_email:
+                    log.info(f"Receipt email sent to admin: {admin_email}")
+                else:
+                    log.warning(f"No admin email provided for receipt")
                 return {
                     "success": True,
                     "payment_intent_id": payment_intent.id,
                     "amount": 799,
-                    "currency": "usd"
+                    "currency": "usd",
+                    "receipt_email_sent": bool(admin_email)
                 }
             else:
                 log.error(f"Payment failed with status: {payment_intent.status}")
