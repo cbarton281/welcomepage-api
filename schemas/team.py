@@ -22,6 +22,7 @@ class TeamRead(TeamCreate):
     stripe_subscription_id: Optional[str] = None
     stripe_subscription_status: Optional[str] = None  # Raw Stripe status
     subscription_status: Optional[str] = None  # Simplified: "free" or "pro"
+    published_count: Optional[int] = None  # Number of published pages for this team
 
     class Config:
         from_attributes = True

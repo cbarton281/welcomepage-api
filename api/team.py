@@ -71,7 +71,20 @@ async def get_team(public_id: str, db: Session = Depends(get_db), current_user=D
         raise HTTPException(status_code=404, detail="Team not found")
     else:
         log.info(f"Team found [{team.to_dict()}]")
-    return TeamRead.model_validate(team)
+    
+    # Calculate published count for this team
+    published_count = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.is_draft == False
+    ).count()
+    
+    log.info(f"Team {public_id} has {published_count} published pages")
+    
+    # Create team response with published count
+    team_response = TeamRead.model_validate(team)
+    team_response.published_count = published_count
+    
+    return team_response
 
 @router.get("/teams/{public_id}/members", response_model=TeamMembersListResponse)
 async def get_team_members(
