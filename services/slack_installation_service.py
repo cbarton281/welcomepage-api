@@ -190,6 +190,17 @@ class SlackInstallationService:
 
             # Optionally create a draft user to associate installer
             try:
+                # Check team signup limits before creating user
+                from utils.team_limits import check_team_signup_allowed
+                is_allowed, reason = check_team_signup_allowed(self.db, team.id)
+                if not is_allowed:
+                    log.warning(f"Team signup blocked for new team {team.public_id}: {reason}")
+                    # For new teams, we'll still create the user but log the warning
+                    # since this is the first user and they need to be able to set up the team
+                    log.info("Allowing first user creation for new team despite limits check")
+                else:
+                    log.info(f"Team signup allowed for new team {team.public_id}")
+                
                 user = WelcomepageUser(
                     public_id=generate_short_id(),
                     name="New Teammate",

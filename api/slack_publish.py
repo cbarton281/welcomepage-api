@@ -67,10 +67,13 @@ async def publish_welcomepage_to_slack(
         WelcomepageUser.is_draft == False
     ).count()
     
-    log.info(f"Team {team.public_id} has {published_count} published pages")
+    log.info(f"Team {team.public_id} has {published_count} published pages, subscription_status: {team.subscription_status}")
     
+    # UNLIMITED subscription (staff only, set via SQL) bypasses all charges
+    if team.subscription_status == 'unlimited':
+        log.info(f"Team {team.public_id} has unlimited subscription, bypassing charges")
     # If over 3-page free limit and has payment method, charge $7.99
-    if published_count >= 3 and team.stripe_customer_id:
+    elif published_count >= 3 and team.stripe_customer_id:
         log.info(f"Over free limit ({published_count} >= 3) and has payment method, charging $7.99")
         
         from services.stripe_service import StripeService

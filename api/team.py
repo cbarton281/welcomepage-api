@@ -622,6 +622,9 @@ class TeamInfoResponse(BaseModel):
     organization_name: str
     logo_url: Optional[str]
     member_count: int
+    stripe_customer_id: Optional[str] = None
+    published_count: int = 0
+    subscription_status: Optional[str] = None
 
 
 @router.get("/teams/{public_id}/info", response_model=TeamInfoResponse)
@@ -652,11 +655,22 @@ async def get_team_info(public_id: str, db: Session = Depends(get_db)):
         WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
     ).count()
     
+    # Count published pages (non-draft users with auth_email)
+    published_count = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.is_draft == False,
+        WelcomepageUser.auth_email.isnot(None),
+        WelcomepageUser.auth_email != ''
+    ).count()
+    
     team_info = TeamInfoResponse(
         public_id=team.public_id,
         organization_name=team.organization_name,
         logo_url=team.company_logo_url,
-        member_count=member_count
+        member_count=member_count,
+        stripe_customer_id=team.stripe_customer_id,
+        published_count=published_count,
+        subscription_status=team.subscription_status
     )
     
     log.info(f"Team info retrieved: {team_info.dict()}")

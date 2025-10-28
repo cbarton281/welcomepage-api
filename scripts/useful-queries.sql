@@ -1,7 +1,16 @@
-select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users   where public_id = '0bmntxfqao'
+select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users where team_id = 26 order by created_at desc
 
-select auth_email, auth_role, team_id, is_draft,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
+select auth_email, auth_role, team_id, is_draft,  * from welcomepage_users where  auth_email like 'charles.barton+%@gmail.com'  order by auth_email
 select t.* from teams t join welcomepage_users w on t.id = w.team_id where w.auth_email =  'charles.barton+100@gmail.com'
+
+select * from welcomepage_users where slack_user_id = 'U09EX7M3S2F'
+-- delete from welcomepage_users where slack_user_id = 'U09EX7M3S2F'
+
+select count(w.*) from welcomepage_users w  where w.is_draft = false and team_id = 26
+-- update welcomepage_users w set is_draft = true  where w.is_draft = false and team_id = 26
+-- update welcomepage_users w set is_draft = false  where auth_email in ('charles.barton+100@gmail.com', 'charles.barton+200@gmail.com', 'charles.barton+903@gmail.com' ) 
+
+select count(*) from welcomepage_users where team_id = 26 and is_draft = false
 
 select auth_email, auth_role, welcomepage_users.* from welcomepage_users
 join teams on teams.id = welcomepage_users.team_id
@@ -60,7 +69,7 @@ select * from verification_codes order by id desc
 select * from alembic_version
 
 
-select * from teams order by id
+select * from teams order by public_id
 select * from teams where public_id = 'ied3vv24li' 
 select * from teams  order by id 
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
@@ -87,3 +96,5 @@ select organization_name, public_id, id from teams
 UPDATE welcomepage_users
 SET public_id = LEFT(public_id, 10)
 WHERE length(public_id) > 10;
+
+select * from page_visits

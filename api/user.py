@@ -248,6 +248,13 @@ def google_auth(
         db.add(new_team)
         db.flush()  # Get the team ID
         
+        # Check team signup limits before creating user
+        from utils.team_limits import check_team_signup_allowed
+        is_allowed, reason = check_team_signup_allowed(db, new_team.id)
+        if not is_allowed:
+            log.warning(f"Team signup blocked for new team {team_public_id}: {reason}")
+            raise HTTPException(status_code=403, detail=reason)
+        
         # Create new user
         user_public_id = generate_short_id_with_collision_check(db, WelcomepageUser, "user")
         new_user = WelcomepageUser(
@@ -371,6 +378,13 @@ def ensure_in_team(
             log.info(f"Requester already has a user record [{existing.public_id}] in team_id={existing.team_id}; no action")
             return EnsureInTeamResponse(success=True, team_public_id=team.public_id, user_public_id=existing.public_id)
 
+        # Check team signup limits before creating user
+        from utils.team_limits import check_team_signup_allowed
+        is_allowed, reason = check_team_signup_allowed(db, team.id)
+        if not is_allowed:
+            log.warning(f"Team signup blocked for team {team.public_id}: {reason}")
+            raise HTTPException(status_code=403, detail=reason)
+        
         # Create a minimal user record in the target team
         new_user = WelcomepageUser(
             public_id=requester_public_id,
@@ -755,6 +769,13 @@ def upsert_user_db_logic(
                 log.exception("Database commit/refresh failed.")
                 raise HTTPException(status_code=500, detail="Database error. Please try again later.")
         else:
+            # Check team signup limits before creating new user
+            from utils.team_limits import check_team_signup_allowed
+            is_allowed, reason = check_team_signup_allowed(db, team_id)
+            if not is_allowed:
+                log.warning(f"Team signup blocked for team_id {team_id}: {reason}")
+                raise HTTPException(status_code=403, detail=reason)
+            
             # Create new user
             effective_public_id = user_lookup_id if user_lookup_id else generate_short_id_with_collision_check(db, WelcomepageUser, "user")
             db_user = WelcomepageUser(
