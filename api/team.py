@@ -925,10 +925,11 @@ async def get_sharing_settings(
     # Get existing sharing_settings or initialize with defaults
     sharing_settings = team.sharing_settings or {}
     
+    # Return settings (uuid and expires_at will be None if sharing was disabled)
     return SharingSettingsResponse(
         enabled=sharing_settings.get("enabled", False),
-        uuid=sharing_settings.get("uuid"),
-        expires_at=sharing_settings.get("expires_at")
+        uuid=sharing_settings.get("uuid"),  # Will be None if disabled or uninitialized
+        expires_at=sharing_settings.get("expires_at")  # Will be None if disabled or uninitialized
     )
 
 
@@ -970,21 +971,40 @@ async def update_sharing_settings(
         # Get existing sharing_settings or initialize empty dict
         existing_settings = team.sharing_settings or {}
         
+        # Track if we just disabled sharing
+        just_disabled = False
+        
         # Update enabled status
         if request.enabled is not None:
+            previous_enabled = existing_settings.get("enabled", False)
             existing_settings["enabled"] = request.enabled
             
-            # Generate UUID when enabling sharing for the first time
-            if request.enabled and not existing_settings.get("uuid"):
-                from utils.short_id import generate_short_id
-                new_uuid = generate_short_id(25)
-                existing_settings["uuid"] = new_uuid
-                log.info(f"Generated new sharing UUID for team {public_id}: {new_uuid}")
+            if request.enabled:
+                # Generate UUID when enabling sharing (if not already present)
+                if not existing_settings.get("uuid"):
+                    from utils.short_id import generate_short_id
+                    new_uuid = generate_short_id(25)
+                    existing_settings["uuid"] = new_uuid
+                    log.info(f"Generated new sharing UUID for team {public_id}: {new_uuid}")
+            else:
+                # When disabling sharing, clear uuid and expires_at
+                if previous_enabled:  # Only clear if it was previously enabled
+                    existing_settings.pop("uuid", None)
+                    existing_settings.pop("expires_at", None)
+                    just_disabled = True
+                    log.info(f"Cleared UUID and expiry date for team {public_id} when disabling sharing")
         
-        # Update expires_at
-        if request.expires_at is not None:
-            if request.expires_at == "" or request.expires_at.lower() == "null":
+        # Update expires_at only if sharing is enabled (skip if we just disabled it)
+        # This prevents re-setting expires_at when disabling sharing
+        # Note: We need to check if expires_at was provided in the request, even if it's None/null
+        # to allow clearing the expiration date
+        expires_at_provided = hasattr(request, 'expires_at') and 'expires_at' in request.model_dump(exclude_unset=True)
+        
+        if expires_at_provided and not just_disabled and existing_settings.get("enabled", False):
+            if request.expires_at is None or request.expires_at == "" or request.expires_at.lower() == "null":
+                # Explicitly clear the expiration date
                 existing_settings["expires_at"] = None
+                log.info(f"Cleared expiration date for team {public_id}")
             else:
                 # Validate that the date is in the future
                 try:
@@ -993,6 +1013,7 @@ async def update_sharing_settings(
                         raise HTTPException(status_code=400, detail="Expiration date must be in the future")
                     # Store as ISO string
                     existing_settings["expires_at"] = expires_datetime.isoformat()
+                    log.info(f"Set expiration date for team {public_id}: {existing_settings['expires_at']}")
                 except ValueError as e:
                     raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
         
@@ -1024,11 +1045,63 @@ async def update_sharing_settings(
         raise HTTPException(status_code=500, detail="Failed to update sharing settings")
 
 
+@router.get("/teams/{public_id}/sharing-settings/status")
+async def get_sharing_status(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get sharing status for a team (read-only, accessible to all team members).
+    Returns only whether sharing is enabled and active (not expired).
+    Used by create page to determine if share options should be available.
+    """
+    log = new_logger("get_sharing_status")
+    log.info(f"Getting sharing status for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to access sharing status for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only access status for your own team")
+    
+    # Get sharing settings and log what we find
+    sharing_settings = team.sharing_settings or {}
+    log.info(f"Sharing settings for team {public_id}: {sharing_settings}")
+    
+    # Get enabled flag directly from settings
+    enabled_flag = sharing_settings.get("enabled", False)
+    log.info(f"Enabled flag from settings: {enabled_flag}")
+    
+    # Check if sharing is active using the utility function (includes expiry check)
+    is_active = is_sharing_active(team)
+    log.info(f"Is sharing active (after expiry check): {is_active}")
+    
+    return {
+        "enabled": enabled_flag,  # Return the enabled flag directly (shows if admin enabled it)
+        "is_active": is_active    # Also return the active status (includes expiry check)
+    }
+
+
 def is_sharing_active(team: Team) -> bool:
     """
     Check if sharing is currently active for a team.
     
     Returns True if:
+    - sharing_settings is initialized (not null/empty)
     - sharing is enabled
     - expires_at is None (never expires) OR expires_at is in the future
     
@@ -1038,13 +1111,16 @@ def is_sharing_active(team: Team) -> bool:
     Returns:
         bool: True if sharing is active, False otherwise
     """
+    # Check for null/uninitialized state
     if not team.sharing_settings:
         return False
     
+    # Check enabled flag
     enabled = team.sharing_settings.get("enabled", False)
     if not enabled:
         return False
     
+    # Check expiry date if present
     expires_at_str = team.sharing_settings.get("expires_at")
     if expires_at_str is None:
         return True  # No expiration

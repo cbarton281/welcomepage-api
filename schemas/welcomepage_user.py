@@ -80,7 +80,8 @@ class WelcomepageUserDTO(BaseModel):
     team_public_id: Optional[str] = Field(None, alias="teamPublicId")
     invite_banner_dismissed: Optional[bool] = Field(None, alias="inviteBannerDismissed")
     is_draft: Optional[bool] = Field(None, alias="isDraft")
-    
+    is_shareable: Optional[bool] = Field(None, alias="isShareable")
+    share_uuid: Optional[str] = Field(None, alias="shareUuid")
 
     created_at: Optional[str] = Field(None, alias="createdAt")
     updated_at: Optional[str] = Field(None, alias="updatedAt")

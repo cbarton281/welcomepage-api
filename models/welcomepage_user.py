@@ -40,7 +40,9 @@ class WelcomepageUser(Base):
     auth_role = Column(String(32), nullable=True)  # Authorization role (admin, user, pre-signup, etc)
     auth_email = Column(String(256), nullable=True)  # Authorization email, distinct from profile email
     slack_user_id = Column(String(32), nullable=True)  # Slack user ID for integration
-    
+    # Page sharing settings
+    is_shareable = Column(Boolean, nullable=False, default=False, server_default='0')  # Whether page is publicly shareable
+    share_uuid = Column(String(25), nullable=True, unique=True, index=True)  # 25-character UUID for sharing
 
     team = relationship("Team", back_populates="users")
 
@@ -82,4 +84,6 @@ class WelcomepageUser(Base):
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
             'isDraft': self.is_draft,
+            'isShareable': self.is_shareable,
+            'shareUuid': self.share_uuid,
         }

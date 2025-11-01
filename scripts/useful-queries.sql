@@ -1,6 +1,6 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users where team_id = 26 order by created_at desc
 
-select auth_email, auth_role, team_id, is_draft,  * from welcomepage_users where  auth_email like 'charles.barton+%@gmail.com'  order by auth_email
+select auth_email, auth_role, team_id, is_draft,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
 select t.* from teams t join welcomepage_users w on t.id = w.team_id where w.auth_email =  'charles.barton+100@gmail.com'
 
 select * from welcomepage_users where slack_user_id = 'U09EX7M3S2F'
@@ -77,6 +77,10 @@ select * from teams  order by id
 SELECT *
 FROM public.teams
 WHERE slack_settings->'slack_app' IS NOT NULL;
+
+SELECT sharing_settings,*
+FROM public.teams
+WHERE sharing_settings IS NOT NULL;
 
 -- 'c2b52ea3-bcdf-47fa-a16c-9ef04f31c949'
 

@@ -15,7 +15,8 @@ from fastapi import HTTPException
 from utils.supabase_storage import upload_to_supabase_storage
 from datetime import datetime, timezone
 from schemas.peer_data import PeerDataResponse, PeerAnswer
-from utils.short_id import generate_short_id_with_collision_check, generate_file_id
+from utils.short_id import generate_short_id_with_collision_check, generate_file_id, generate_short_id
+from typing import Optional
 
 router = APIRouter()
 
@@ -50,6 +51,13 @@ class EnsureInTeamResponse(BaseModel):
     success: bool
     team_public_id: str
     user_public_id: str
+
+class UpdatePageSharingRequest(BaseModel):
+    is_shareable: bool
+
+class PageSharingResponse(BaseModel):
+    is_shareable: bool
+    share_uuid: Optional[str] = None
 
 user_retry_logger = new_logger("fetch_user_by_id_retry")
 
@@ -1083,3 +1091,132 @@ def get_peer_data(team_public_id: str, db: Session = Depends(get_db), current_us
     #         )
     #     ]
     # }
+
+@router.get("/users/{public_id}/page-sharing", response_model=PageSharingResponse)
+async def get_page_sharing(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get page sharing settings for a user's page.
+    Only the page owner or team members can access this.
+    """
+    log = new_logger("get_page_sharing")
+    log.info(f"Getting page sharing for user: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target user exists
+    target_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+    if not target_user:
+        log.warning(f"User not found: {public_id}")
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify current user is the owner or belongs to the same team
+    if user_public_id != public_id:
+        # Get both users' teams and compare public_ids
+        requesting_user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
+        if not requesting_user:
+            log.warning(f"Requesting user not found: {user_public_id}")
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        requesting_user_team = requesting_user.team
+        target_user_team = target_user.team
+        
+        if not requesting_user_team or not target_user_team:
+            log.warning(f"One or both users have no team")
+            raise HTTPException(status_code=403, detail="Access denied: Both users must belong to a team")
+        
+        if requesting_user_team.public_id != target_user_team.public_id:
+            log.warning(f"User {user_public_id} attempted to access page sharing for user {public_id} but not in same team")
+            raise HTTPException(status_code=403, detail="Access denied: You can only access your own page or pages in your team")
+    
+    return PageSharingResponse(
+        is_shareable=target_user.is_shareable or False,
+        share_uuid=target_user.share_uuid
+    )
+
+
+@router.patch("/users/{public_id}/page-sharing", response_model=PageSharingResponse)
+async def update_page_sharing(
+    public_id: str,
+    request: UpdatePageSharingRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Update page sharing settings for a user's page.
+    Only the page owner can update this.
+    Generates share UUID server-side when sharing is enabled for the first time.
+    """
+    log = new_logger("update_page_sharing")
+    log.info(f"Updating page sharing for user: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target user exists
+    target_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+    if not target_user:
+        log.warning(f"User not found: {public_id}")
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify current user is the owner (only owner can update sharing)
+    if user_public_id != public_id:
+        log.warning(f"User {user_public_id} attempted to update page sharing for user {public_id} but is not the owner")
+        raise HTTPException(status_code=403, detail="Access denied: You can only update sharing for your own page")
+    
+    try:
+        # Update is_shareable
+        target_user.is_shareable = request.is_shareable
+        
+        if request.is_shareable:
+            # Generate UUID when enabling sharing for the first time
+            if not target_user.share_uuid:
+                # Generate 25-character UUID and check for collisions in share_uuid column
+                max_attempts = 10
+                new_uuid = None
+                for attempt in range(max_attempts):
+                    candidate_uuid = generate_short_id(25)
+                    existing = db.query(WelcomepageUser).filter_by(share_uuid=candidate_uuid).first()
+                    if not existing:
+                        new_uuid = candidate_uuid
+                        break
+                    log.warning(f"Share UUID collision detected: {candidate_uuid} (attempt {attempt + 1}/{max_attempts})")
+                
+                if not new_uuid:
+                    raise HTTPException(status_code=500, detail="Failed to generate unique share UUID after multiple attempts")
+                
+                target_user.share_uuid = new_uuid
+                log.info(f"Generated new share UUID for user {public_id}: {new_uuid}")
+        else:
+            # When disabling sharing, clear the UUID
+            if target_user.share_uuid:
+                target_user.share_uuid = None
+                log.info(f"Cleared share UUID for user {public_id} when disabling sharing")
+        
+        db.commit()
+        db.refresh(target_user)
+        
+        log.info(f"Updated page sharing for user {public_id}: is_shareable = {target_user.is_shareable}, share_uuid = {target_user.share_uuid}")
+        
+        return PageSharingResponse(
+            is_shareable=target_user.is_shareable,
+            share_uuid=target_user.share_uuid
+        )
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to update page sharing for user {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update page sharing")
