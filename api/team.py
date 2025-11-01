@@ -738,6 +738,27 @@ class UpdateSlackSettingsResponse(BaseModel):
     publish_channel: Optional[SlackChannelData] = None
 
 
+# =====================
+# Sharing Settings
+# =====================
+
+class UpdateSharingSettingsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    expires_at: Optional[str] = None  # ISO 8601 datetime string or null
+
+class SharingSettingsResponse(BaseModel):
+    enabled: bool
+    uuid: Optional[str] = None
+    expires_at: Optional[str] = None  # ISO 8601 datetime string or null
+
+class UpdateSharingSettingsResponse(BaseModel):
+    success: bool
+    message: str
+    enabled: bool
+    uuid: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
 @router.post("/teams/{public_id}/join", response_model=JoinTeamResponse)
 async def join_team(
     public_id: str, 
@@ -867,6 +888,174 @@ async def update_slack_settings(
         db.rollback()
         log.error(f"Failed to update Slack settings for team {public_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update Slack settings")
+
+
+@router.get("/teams/{public_id}/sharing-settings", response_model=SharingSettingsResponse)
+async def get_sharing_settings(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Get sharing settings for a team.
+    Only ADMIN users can access sharing settings.
+    """
+    log = new_logger("get_sharing_settings")
+    log.info(f"Getting sharing settings for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to access sharing settings for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only access settings for your own team")
+    
+    # Get existing sharing_settings or initialize with defaults
+    sharing_settings = team.sharing_settings or {}
+    
+    return SharingSettingsResponse(
+        enabled=sharing_settings.get("enabled", False),
+        uuid=sharing_settings.get("uuid"),
+        expires_at=sharing_settings.get("expires_at")
+    )
+
+
+@router.patch("/teams/{public_id}/sharing-settings", response_model=UpdateSharingSettingsResponse)
+async def update_sharing_settings(
+    public_id: str,
+    request: UpdateSharingSettingsRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Update sharing settings for a team.
+    Only ADMIN users can update sharing settings.
+    Generates UUID server-side when sharing is enabled for the first time.
+    """
+    log = new_logger("update_sharing_settings")
+    log.info(f"Updating sharing settings for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to update sharing settings for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only update settings for your own team")
+    
+    try:
+        # Get existing sharing_settings or initialize empty dict
+        existing_settings = team.sharing_settings or {}
+        
+        # Update enabled status
+        if request.enabled is not None:
+            existing_settings["enabled"] = request.enabled
+            
+            # Generate UUID when enabling sharing for the first time
+            if request.enabled and not existing_settings.get("uuid"):
+                from utils.short_id import generate_short_id
+                new_uuid = generate_short_id(25)
+                existing_settings["uuid"] = new_uuid
+                log.info(f"Generated new sharing UUID for team {public_id}: {new_uuid}")
+        
+        # Update expires_at
+        if request.expires_at is not None:
+            if request.expires_at == "" or request.expires_at.lower() == "null":
+                existing_settings["expires_at"] = None
+            else:
+                # Validate that the date is in the future
+                try:
+                    expires_datetime = datetime.fromisoformat(request.expires_at.replace('Z', '+00:00'))
+                    if expires_datetime <= datetime.now(expires_datetime.tzinfo if expires_datetime.tzinfo else None):
+                        raise HTTPException(status_code=400, detail="Expiration date must be in the future")
+                    # Store as ISO string
+                    existing_settings["expires_at"] = expires_datetime.isoformat()
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+        
+        # Update the team's sharing_settings
+        team.sharing_settings = dict(existing_settings)
+        
+        # Explicitly mark the field as modified for SQLAlchemy
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'sharing_settings')
+        
+        db.commit()
+        db.refresh(team)
+        
+        log.info(f"Updated sharing settings for team {public_id}: enabled = {existing_settings.get('enabled')}, uuid = {existing_settings.get('uuid')}, expires_at = {existing_settings.get('expires_at')}")
+        
+        return UpdateSharingSettingsResponse(
+            success=True,
+            message="Sharing settings updated successfully",
+            enabled=existing_settings.get("enabled", False),
+            uuid=existing_settings.get("uuid"),
+            expires_at=existing_settings.get("expires_at")
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to update sharing settings for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update sharing settings")
+
+
+def is_sharing_active(team: Team) -> bool:
+    """
+    Check if sharing is currently active for a team.
+    
+    Returns True if:
+    - sharing is enabled
+    - expires_at is None (never expires) OR expires_at is in the future
+    
+    Args:
+        team: Team model instance
+        
+    Returns:
+        bool: True if sharing is active, False otherwise
+    """
+    if not team.sharing_settings:
+        return False
+    
+    enabled = team.sharing_settings.get("enabled", False)
+    if not enabled:
+        return False
+    
+    expires_at_str = team.sharing_settings.get("expires_at")
+    if expires_at_str is None:
+        return True  # No expiration
+    
+    try:
+        expires_datetime = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        now = datetime.now(expires_datetime.tzinfo if expires_datetime.tzinfo else None)
+        return expires_datetime > now
+    except (ValueError, TypeError):
+        # If date parsing fails, assume not expired
+        return True
 
 
 # =====================

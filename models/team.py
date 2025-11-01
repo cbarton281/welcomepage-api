@@ -16,6 +16,7 @@ class Team(Base):
     color_scheme_data = Column(JSONB, nullable=True)  # Store the full color scheme object
     slack_settings = Column(JSONB, nullable=True)  # Store Slack integration settings (workspace ID, etc.)
     security_settings = Column(JSONB, nullable=True)  # Store security-related settings (e.g., allowed email domains)
+    sharing_settings = Column(JSONB, nullable=True)  # Store sharing settings (enabled, uuid, expires_at)
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
     
     # Stripe integration fields
@@ -37,6 +38,7 @@ class Team(Base):
             "color_scheme_data": self.color_scheme_data,
             "slack_settings": self.slack_settings,
             "security_settings": self.security_settings,
+            "sharing_settings": self.sharing_settings,
             "stripe_customer_id": self.stripe_customer_id,
             "stripe_subscription_id": self.stripe_subscription_id,
             "subscription_status": self.subscription_status,
