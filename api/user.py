@@ -341,6 +341,68 @@ def get_user_preview(public_id: str, db: Session = Depends(get_db)):
         log.error(f"Non-retryable error in get_user_preview: {e}")
         raise HTTPException(status_code=500, detail="Internal error")
 
+# ================================
+# Public page sharing endpoint
+# ================================
+
+@router.get("/public/pages/{share_uuid}", response_model=WelcomepageUserDTO)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(user_retry_logger, logging.WARNING)
+)
+def get_public_page(share_uuid: str, db: Session = Depends(get_db), current_user=Depends(require_roles("PUBLIC", "PRE_SIGNUP", "USER", "ADMIN"))):
+    """
+    Public endpoint returning full user page data by share_uuid.
+    Requires valid JWT signature (verifies request comes from Next.js).
+    Validates sharing is enabled and active.
+    """
+    log = new_logger("get_public_page")
+    log.info(f"Fetching public page with share_uuid: {share_uuid}")
+    
+    try:
+        # Find user by share_uuid
+        user = db.query(WelcomepageUser).filter_by(share_uuid=share_uuid).first()
+        if not user:
+            log.info(f"User not found for share_uuid: {share_uuid}")
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        # Verify page is shareable
+        if not user.is_shareable:
+            log.warning(f"Page is not shareable for share_uuid: {share_uuid}")
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        # Get user's team
+        team = user.team
+        if not team:
+            log.warning(f"User has no team for share_uuid: {share_uuid}")
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        # Check if team sharing is enabled and active
+        from api.team import is_sharing_active
+        if not is_sharing_active(team):
+            log.warning(f"Team sharing is not active for share_uuid: {share_uuid}, team: {team.public_id}")
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        log.info(f"Public page access granted for share_uuid: {share_uuid}, user: {user.public_id}")
+        
+        # Create response data with team public ID
+        user_data = user.__dict__.copy()
+        user_data['team_public_id'] = team.public_id
+        
+        # Use model_validate to handle data sanitization
+        return WelcomepageUserDTO.model_validate(user_data)
+        
+    except HTTPException:
+        raise
+    except OperationalError:
+        db.rollback()
+        raise
+    except Exception as e:
+        log.error(f"Non-retryable error in get_public_page: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
+
 # ==============================================
 # Ensure authenticated user exists in target team
 # ==============================================

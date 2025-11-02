@@ -1134,6 +1134,125 @@ def is_sharing_active(team: Team) -> bool:
         return True
 
 
+# ================================
+# Public team sharing endpoint
+# ================================
+
+class PublicPageSummary(BaseModel):
+    """Summary of a publicly shared page for team listing"""
+    public_id: str
+    share_uuid: str
+    name: str
+    role: Optional[str] = None
+    location: Optional[str] = None
+    wave_gif_url: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+
+class PublicTeamInfo(BaseModel):
+    """Team information for public sharing view"""
+    public_id: str
+    organization_name: str
+    company_logo_url: Optional[str] = None
+    color_scheme: Optional[str] = None
+    color_scheme_data: Optional[Dict[str, Any]] = None
+
+class PublicTeamPagesResponse(BaseModel):
+    """Response containing team info and list of publicly shared pages"""
+    team: PublicTeamInfo
+    pages: List[PublicPageSummary]
+
+@router.get("/public/teams/{share_uuid}/pages", response_model=PublicTeamPagesResponse)
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(OperationalError),
+    before_sleep=before_sleep_log(team_retry_logger, logging.WARNING)
+)
+def get_public_team_pages(share_uuid: str, db: Session = Depends(get_db), current_user=Depends(require_roles("PUBLIC", "PRE_SIGNUP", "USER", "ADMIN"))):
+    """
+    Public endpoint returning all publicly shared pages for a team by team sharing UUID.
+    Requires valid JWT signature (verifies request comes from Next.js).
+    Validates team sharing is enabled and active.
+    """
+    log = new_logger("get_public_team_pages")
+    log.info(f"Fetching public team pages with share_uuid: {share_uuid}")
+    
+    try:
+        # Find team by sharing UUID - match pattern used for slack_settings
+        # Query teams with sharing_settings and check uuid field
+        teams_with_sharing = db.query(Team).filter(Team.sharing_settings.isnot(None)).all()
+        target_team = None
+        
+        for team in teams_with_sharing:
+            sharing_settings = team.sharing_settings or {}
+            if sharing_settings.get("uuid") == share_uuid:
+                target_team = team
+                break
+        
+        if not target_team:
+            log.warning(f"Team not found for share_uuid: {share_uuid}")
+            log.info(f"Total teams with sharing_settings: {len(teams_with_sharing)}")
+            for team in teams_with_sharing[:5]:  # Log first 5 for debugging
+                settings = team.sharing_settings or {}
+                uuid_val = settings.get('uuid')
+                enabled = settings.get('enabled', False)
+                log.info(f"  Team {team.public_id}: sharing_settings.uuid = {uuid_val}, enabled = {enabled}")
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        log.info(f"Found team {target_team.public_id} for share_uuid: {share_uuid}")
+        
+        # Verify team sharing is active
+        if not is_sharing_active(target_team):
+            log.warning(f"Team sharing is not active for share_uuid: {share_uuid}, team: {target_team.public_id}")
+            raise HTTPException(status_code=404, detail="Team not found")
+        
+        # Query all users in the team where is_shareable = true and share_uuid IS NOT NULL
+        shared_pages = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == target_team.id,
+            WelcomepageUser.is_shareable == True,
+            WelcomepageUser.share_uuid.isnot(None)
+        ).all()
+        
+        log.info(f"Found {len(shared_pages)} publicly shared pages for team {target_team.public_id}")
+        
+        # Build team info
+        team_info = PublicTeamInfo(
+            public_id=target_team.public_id,
+            organization_name=target_team.organization_name,
+            company_logo_url=target_team.company_logo_url,
+            color_scheme=target_team.color_scheme,
+            color_scheme_data=target_team.color_scheme_data
+        )
+        
+        # Build page summaries
+        page_summaries = [
+            PublicPageSummary(
+                public_id=page.public_id,
+                share_uuid=page.share_uuid,
+                name=page.name,
+                role=page.role,
+                location=page.location,
+                wave_gif_url=page.wave_gif_url,
+                profile_photo_url=page.profile_photo_url
+            )
+            for page in shared_pages
+        ]
+        
+        return PublicTeamPagesResponse(
+            team=team_info,
+            pages=page_summaries
+        )
+        
+    except HTTPException:
+        raise
+    except OperationalError:
+        db.rollback()
+        raise
+    except Exception as e:
+        log.error(f"Non-retryable error in get_public_team_pages: {e}")
+        raise HTTPException(status_code=500, detail="Internal error")
+
+
 # =====================
 # Allowed Email Domains
 # =====================
