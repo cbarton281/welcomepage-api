@@ -181,6 +181,7 @@ class SlackInstallationService:
                 color_scheme_data=None,
                 slack_settings=None,
                 is_draft=True,
+                subscription_status="free",  # Initialize new teams with free subscription
             )
             self.db.add(team)
             self.db.commit()

@@ -1,6 +1,8 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users where team_id = 26 order by created_at desc
 
-select auth_email, auth_role, team_id, is_draft,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
+select share_uuid, is_shareable,  auth_email, auth_role, team_id, is_draft,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
+
+
 select t.* from teams t join welcomepage_users w on t.id = w.team_id where w.auth_email =  'charles.barton+100@gmail.com'
 
 select * from welcomepage_users where slack_user_id = 'U09EX7M3S2F'

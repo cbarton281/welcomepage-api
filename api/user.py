@@ -252,6 +252,7 @@ def google_auth(
             public_id=team_public_id,
             organization_name=f"{payload.name}'s Team",  # Default team name
             color_scheme="corporate-blue",
+            subscription_status="free",  # Initialize new teams with free subscription
         )
         db.add(new_team)
         db.flush()  # Get the team ID

@@ -599,6 +599,7 @@ def upsert_team_db_logic(
                 color_scheme_data=color_scheme_obj,
                 slack_settings=slack_settings_obj,
                 company_logo_url=logo_blob_url,
+                subscription_status="free",  # Initialize new teams with free subscription
             )
             db.add(team)
         db.commit()
