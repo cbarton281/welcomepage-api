@@ -61,55 +61,64 @@ async def publish_welcomepage_to_slack(
     log.info(f"Admin user found: {admin_user.public_id if admin_user else 'None'}")
     log.info(f"Admin email for receipt: {admin_email}")
     
-    # Count published pages for this team (is_draft=False)
-    published_count = db.query(WelcomepageUser).filter(
-        WelcomepageUser.team_id == team.id,
-        WelcomepageUser.is_draft == False
-    ).count()
-    
-    log.info(f"Team {team.public_id} has {published_count} published pages, subscription_status: {team.subscription_status}")
-    
-    # UNLIMITED subscription (staff only, set via SQL) bypasses all charges
-    if team.subscription_status == 'unlimited':
-        log.info(f"Team {team.public_id} has unlimited subscription, bypassing charges")
-    # If over 3-page free limit and has payment method, charge $7.99
-    elif published_count >= 3 and team.stripe_customer_id:
-        log.info(f"Over free limit ({published_count} >= 3) and has payment method, charging $7.99")
+    # Check if user's page is already published
+    # If already published, skip charging (payment already happened when publish button was clicked)
+    if not user.is_draft:
+        log.info(f"User {user.public_id} page is already published, skipping charge")
+    else:
+        # Count published pages for this team (is_draft=False)
+        # Exclude current user from count since we're about to publish it
+        published_count = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id,
+            WelcomepageUser.is_draft == False,
+            WelcomepageUser.public_id != request.user_public_id  # Exclude current user
+        ).count()
         
-        from services.stripe_service import StripeService
+        log.info(f"Team {team.public_id} has {published_count} published pages (excluding current), subscription_status: {team.subscription_status}")
         
-        try:
-            charge_result = await StripeService.charge_for_welcomepage(
-                team_public_id=team.public_id,
-                team_stripe_customer_id=team.stripe_customer_id,
-                user_public_id=user.public_id,
-                user_name=user.name,
-                admin_email=admin_email
-            )
+        # UNLIMITED subscription (staff only, set via SQL) bypasses all charges
+        if team.subscription_status == 'unlimited':
+            log.info(f"Team {team.public_id} has unlimited subscription, bypassing charges")
+        # If over 3-page free limit and has payment method, charge $7.99
+        elif published_count >= 3 and team.stripe_customer_id:
+            log.info(f"Over free limit ({published_count} >= 3) and has payment method, charging $7.99")
             
-            if not charge_result.get("success"):
-                log.error(f"Payment failed for user {user.public_id}: {charge_result}")
+            from services.stripe_service import StripeService
+            
+            try:
+                charge_result = await StripeService.charge_for_welcomepage(
+                    team_public_id=team.public_id,
+                    team_stripe_customer_id=team.stripe_customer_id,
+                    user_public_id=user.public_id,
+                    user_name=user.name,
+                    admin_email=admin_email
+                )
+                
+                if not charge_result.get("success"):
+                    log.error(f"Payment failed for user {user.public_id}: {charge_result}")
+                    raise HTTPException(
+                        status_code=402,
+                        detail={
+                            "error": "Payment failed",
+                            "message": "Payment failed. Please update your payment method in team settings."
+                        }
+                    )
+                
+                log.info(f"Payment successful for user {user.public_id}, proceeding to publish")
+                
+            except HTTPException:
+                raise
+            except Exception as e:
+                log.error(f"Error charging for welcomepage: {str(e)}")
                 raise HTTPException(
                     status_code=402,
                     detail={
                         "error": "Payment failed",
-                        "message": "Payment failed. Please update your payment method in team settings."
+                        "message": f"Payment failed: {str(e)}"
                     }
                 )
-            
-            log.info(f"Payment successful for user {user.public_id}, proceeding to publish")
-            
-        except Exception as e:
-            log.error(f"Error charging for welcomepage: {str(e)}")
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "error": "Payment failed",
-                    "message": f"Payment failed: {str(e)}"
-                }
-            )
-    elif published_count >= 3 and not team.stripe_customer_id:
-        log.info(f"Over free limit ({published_count} >= 3) but no payment method, allowing free publish")
+        elif published_count >= 3 and not team.stripe_customer_id:
+            log.info(f"Over free limit ({published_count} >= 3) but no payment method, allowing free publish")
     
     # Call the service to publish to Slack
     result = SlackPublishService.publish_welcomepage(

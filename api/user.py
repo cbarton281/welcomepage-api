@@ -1283,3 +1283,154 @@ async def update_page_sharing(
         db.rollback()
         log.error(f"Failed to update page sharing for user {public_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update page sharing")
+
+
+class PublishPageRequest(BaseModel):
+    user_public_id: str
+
+
+class PublishPageResponse(BaseModel):
+    success: bool
+    message: str
+    charged: bool = False
+
+
+@router.post("/users/{public_id}/publish", response_model=PublishPageResponse)
+async def publish_user_page(
+    public_id: str,
+    request: PublishPageRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Charge for and publish a user's page (set is_draft=False).
+    Only the page owner can publish.
+    """
+    log = new_logger("publish_user_page")
+    log.info(f"Publishing page for user: {public_id}")
+    
+    # Verify target user exists
+    user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+    if not user:
+        log.warning(f"User not found: {public_id}")
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    
+    # Verify current user is the owner (only owner can publish)
+    if user_public_id != public_id:
+        log.warning(f"Access denied: User {user_public_id} attempted to publish page for {public_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only publish your own page")
+    
+    # If already published, skip charging but still update is_shareable to False
+    # This ensures is_shareable is reset when re-publishing
+    already_published = not user.is_draft
+    if already_published:
+        log.info(f"Page for user {public_id} is already published, skipping charge but ensuring is_shareable=False")
+        # Don't charge again, but still update is_shareable
+        user.is_shareable = False
+        if user.share_uuid:
+            user.share_uuid = None
+            log.info(f"Cleared share_uuid for user {public_id}")
+        db.commit()
+        db.refresh(user)
+        return PublishPageResponse(
+            success=True,
+            message="Page is already published",
+            charged=False
+        )
+    
+    team = user.team
+    if not team:
+        log.error(f"Team not found for user {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Get team admin's email for receipt
+    admin_user = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.auth_role == "ADMIN"
+    ).first()
+    
+    admin_email = admin_user.auth_email if admin_user else None
+    log.info(f"Admin email for receipt: {admin_email}")
+    
+    # Count published pages for this team (is_draft=False)
+    # Exclude current user from count since we're about to publish it
+    published_count = db.query(WelcomepageUser).filter(
+        WelcomepageUser.team_id == team.id,
+        WelcomepageUser.is_draft == False,
+        WelcomepageUser.public_id != public_id  # Exclude current user
+    ).count()
+    
+    log.info(f"Team {team.public_id} has {published_count} published pages (excluding current), subscription_status: {team.subscription_status}")
+    
+    charged = False
+    
+    # UNLIMITED subscription (staff only, set via SQL) bypasses all charges
+    if team.subscription_status == 'unlimited':
+        log.info(f"Team {team.public_id} has unlimited subscription, bypassing charges")
+    # If over 3-page free limit and has payment method, charge $7.99
+    elif published_count >= 3 and team.stripe_customer_id:
+        log.info(f"Over free limit ({published_count} >= 3) and has payment method, charging $7.99")
+        
+        from services.stripe_service import StripeService
+        
+        try:
+            charge_result = await StripeService.charge_for_welcomepage(
+                team_public_id=team.public_id,
+                team_stripe_customer_id=team.stripe_customer_id,
+                user_public_id=user.public_id,
+                user_name=user.name,
+                admin_email=admin_email
+            )
+            
+            if not charge_result.get("success"):
+                log.error(f"Payment failed for user {user.public_id}: {charge_result}")
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "error": "Payment failed",
+                        "message": "Payment failed. Please update your payment method in team settings."
+                    }
+                )
+            
+            log.info(f"Payment successful for user {user.public_id}")
+            charged = True
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.error(f"Error charging for welcomepage: {str(e)}")
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "Payment failed",
+                    "message": f"Payment failed: {str(e)}"
+                }
+            )
+    elif published_count >= 3 and not team.stripe_customer_id:
+        log.info(f"Over free limit ({published_count} >= 3) but no payment method, allowing free publish")
+    
+    # Set is_draft = False and ensure is_shareable = False
+    # (Sharing should be enabled separately via the sharing button)
+    try:
+        user.is_draft = False
+        user.is_shareable = False  # Ensure page is not publicly shareable by default
+        if user.share_uuid:
+            # Clear share UUID when publishing (user can enable sharing later)
+            user.share_uuid = None
+            log.info(f"Cleared share_uuid for user {public_id} when publishing")
+        db.commit()
+        db.refresh(user)
+        log.info(f"Successfully published page for user {public_id} (is_draft=False, is_shareable=False)")
+        
+        return PublishPageResponse(
+            success=True,
+            message="Page published successfully",
+            charged=charged
+        )
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to update is_draft for user {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to publish page")
