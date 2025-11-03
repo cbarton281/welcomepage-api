@@ -289,21 +289,44 @@ def verify_code_with_retry(payload: 'VerificationRequest', db: Session, log):
         raise HTTPException(status_code=500, detail="Unable to verify code at this time.")
     
     team_public_id = None
+    team = None
     if user.team_id:
         team = db.query(Team).filter_by(id=user.team_id).first()
-        team_public_id = team.public_id
+        if team:
+            team_public_id = team.public_id
     
     auth_role = None
     if user.auth_role and user.auth_role != "PRE_SIGNUP":
+        # User already has a non-PRE_SIGNUP role, keep it
         auth_role = user.auth_role
     elif verification_code.intended_auth_role:
+        # Use intended role from verification code
         auth_role = verification_code.intended_auth_role
+    elif team:
+        # Original behavior: Check if user is the first user to verify in the team (team creator)
+        # Count users who have already verified (have auth_email) excluding the current user
+        verified_users_count = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id,
+            WelcomepageUser.auth_email.isnot(None),
+            WelcomepageUser.auth_email != '',
+            WelcomepageUser.public_id != user.public_id  # Exclude current user
+        ).count()
+        
+        if verified_users_count == 0:
+            # This is the first user to verify in this team - they're the team creator
+            log.info(f"User {user.public_id} is the first verified user in team {team.public_id} - assigning ADMIN role")
+            auth_role = "ADMIN"
+        else:
+            # Not the first user to verify - regular USER role
+            log.info(f"User {user.public_id} is not the first verified user in team {team.public_id} ({verified_users_count} already verified) - assigning USER role")
+            auth_role = "USER"
     else:
+        # No team context - default to PRE_SIGNUP (shouldn't happen in normal flow)
         auth_role = "PRE_SIGNUP"
     
     user_public_id = user.public_id if user.public_id else public_id
     
-    log.info(f"Returning auth_role: {auth_role} (intended: {verification_code.intended_auth_role}, current: {user.auth_role})")
+    log.info(f"Returning auth_role: {auth_role} (intended: {verification_code.intended_auth_role}, current: {user.auth_role}, team: {team_public_id if team else None})")
     return {"success": True, "public_id": user_public_id, "auth_role": auth_role, "team_public_id": team_public_id}
 
 @router.post("/verify_code/")
