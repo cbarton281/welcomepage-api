@@ -43,6 +43,8 @@ class WelcomepageUser(Base):
     # Page sharing settings
     is_shareable = Column(Boolean, nullable=False, default=False, server_default='0')  # Whether page is publicly shareable
     share_uuid = Column(String(25), nullable=True, unique=True, index=True)  # 25-character UUID for sharing
+    # Full-text search vector (tsvector) - managed by PostgreSQL
+    search_vector = Column('search_vector', type_=None, nullable=True)  # PostgreSQL tsvector type
 
     team = relationship("Team", back_populates="users")
 

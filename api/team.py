@@ -7,7 +7,7 @@ from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, asc, desc, and_
+from sqlalchemy import func, asc, desc, and_, or_, text
 from sqlalchemy.exc import OperationalError, IntegrityError, DataError, DatabaseError
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
@@ -282,13 +282,70 @@ async def get_team_members_view(
         WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
     )
     
-    # Apply search filter if provided
+    # Log base query count before search
+    base_count = query.count()
+    log.info(f"Base query (team_id={team.id}, with auth filters) returned {base_count} users")
+    
+    # Apply full-text search filter if provided
     if search:
-        search_term = f"%{search.lower()}%"
-        query = query.filter(
-            (WelcomepageUser.name.ilike(search_term)) |
-            (WelcomepageUser.auth_email.ilike(search_term))
-        )
+        log.info(f"Applying full-text search filter for term: '{search}'")
+        # Use PostgreSQL full-text search with search_vector column
+        # For prefix matching (partial words), we use to_tsquery with :* operator
+        # For full words/phrases, we use plainto_tsquery
+        # This handles both "toronto" (full word) and "tor" (prefix) searches
+        search_terms = search.strip().split()
+        if len(search_terms) == 1 and len(search.strip()) < 20:
+            # Single short term - use prefix matching for better partial word support
+            # Escape special characters and append :* for prefix match
+            # Replace spaces, quotes, and other special chars that break to_tsquery
+            search_query_str = """
+                to_tsquery('english', 
+                    regexp_replace(
+                        regexp_replace(:search_term, '[^a-zA-Z0-9\\s]', '', 'g'),
+                        '\\s+', ' & ', 'g'
+                    ) || ':*'
+                )
+            """
+            log.info(f"Using prefix search mode for term: '{search}'")
+        else:
+            # Multiple words or long term - use plainto_tsquery (handles phrases better)
+            search_query_str = "plainto_tsquery('english', :search_term)"
+            log.info(f"Using phrase search mode for term: '{search}'")
+        
+        search_filter = text(f"search_vector @@ ({search_query_str})").bindparams(search_term=search)
+        query = query.filter(search_filter)
+        
+        # Log count after search filter
+        search_count = query.count()
+        log.info(f"After search filter '{search}', query returned {search_count} users")
+        
+        # Debug: Check if search_vector is NULL for any users in this team
+        null_vector_count = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id,
+            WelcomepageUser.search_vector.is_(None)
+        ).count()
+        if null_vector_count > 0:
+            log.warning(f"Found {null_vector_count} users in team {team.id} with NULL search_vector")
+        
+        # Debug: Test search without other filters
+        search_only_count = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id
+        ).filter(search_filter).count()
+        log.info(f"Search '{search}' on team_id={team.id} (without auth filters) returned {search_only_count} users")
+        
+        # Debug: Check users excluded by auth filters
+        excluded_by_auth = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id,
+            or_(
+                WelcomepageUser.auth_email.is_(None),
+                WelcomepageUser.auth_email == '',
+                ~WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
+            )
+        ).filter(search_filter).count()
+        if excluded_by_auth > 0:
+            log.info(f"Search '{search}' matched {excluded_by_auth} users excluded by auth filters (no auth_email or wrong role)")
+    else:
+        log.info("No search term provided, returning all filtered users")
     
     # Apply sorting
     sort_column = None
@@ -334,7 +391,9 @@ async def get_team_members_view(
             unique_visits=0  # Simplified - no visit counting for team view
         ))
     
-    log.info(f"Returning {len(member_responses)} members view out of {total_count} total")
+    log.info(f"Returning {len(member_responses)} members view out of {total_count} total (page {page} of {total_pages})")
+    if search:
+        log.info(f"Search results for '{search}': {total_count} total matches, showing page {page}")
     
     return TeamMembersViewListResponse(
         members=member_responses,
@@ -1169,14 +1228,20 @@ class PublicTeamPagesResponse(BaseModel):
     retry=retry_if_exception_type(OperationalError),
     before_sleep=before_sleep_log(team_retry_logger, logging.WARNING)
 )
-def get_public_team_pages(share_uuid: str, db: Session = Depends(get_db), current_user=Depends(require_roles("PUBLIC", "PRE_SIGNUP", "USER", "ADMIN"))):
+def get_public_team_pages(
+    share_uuid: str, 
+    search: Optional[str] = Query(None, description="Full-text search query"),
+    db: Session = Depends(get_db), 
+    current_user=Depends(require_roles("PUBLIC", "PRE_SIGNUP", "USER", "ADMIN"))
+):
     """
     Public endpoint returning all publicly shared pages for a team by team sharing UUID.
     Requires valid JWT signature (verifies request comes from Next.js).
     Validates team sharing is enabled and active.
+    Supports full-text search across all user data.
     """
     log = new_logger("get_public_team_pages")
-    log.info(f"Fetching public team pages with share_uuid: {share_uuid}")
+    log.info(f"Fetching public team pages with share_uuid: {share_uuid}, search: {search}")
     
     try:
         # Find team by sharing UUID - match pattern used for slack_settings
@@ -1208,11 +1273,35 @@ def get_public_team_pages(share_uuid: str, db: Session = Depends(get_db), curren
             raise HTTPException(status_code=404, detail="Team not found")
         
         # Query all users in the team where is_shareable = true and share_uuid IS NOT NULL
-        shared_pages = db.query(WelcomepageUser).filter(
+        query = db.query(WelcomepageUser).filter(
             WelcomepageUser.team_id == target_team.id,
             WelcomepageUser.is_shareable == True,
             WelcomepageUser.share_uuid.isnot(None)
-        ).all()
+        )
+        
+        # Apply full-text search filter if provided
+        if search:
+            # Use PostgreSQL full-text search with search_vector column
+            # For prefix matching (partial words), we use to_tsquery with :* operator
+            # For full words/phrases, we use plainto_tsquery
+            search_terms = search.strip().split()
+            if len(search_terms) == 1 and len(search.strip()) < 20:
+                # Single short term - use prefix matching for better partial word support
+                search_query_str = """
+                    to_tsquery('english', 
+                        regexp_replace(
+                            regexp_replace(:search_term, '[^a-zA-Z0-9\\s]', '', 'g'),
+                            '\\s+', ' & ', 'g'
+                        ) || ':*'
+                    )
+                """
+            else:
+                # Multiple words or long term - use plainto_tsquery (handles phrases better)
+                search_query_str = "plainto_tsquery('english', :search_term)"
+            
+            query = query.filter(text(f"search_vector @@ ({search_query_str})").bindparams(search_term=search))
+        
+        shared_pages = query.all()
         
         log.info(f"Found {len(shared_pages)} publicly shared pages for team {target_team.public_id}")
         

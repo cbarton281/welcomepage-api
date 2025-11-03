@@ -831,6 +831,10 @@ def upsert_user_db_logic(
             try:
                 db.commit()
                 db.refresh(db_user)
+                # Update search_vector after commit
+                from utils.search_vector import update_search_vector
+                update_search_vector(db, db_user)
+                db.commit()
             except OperationalError as e:
                 db.rollback()
                 log.exception("OperationalError in verify_code_with_retry, will retry.")
@@ -879,6 +883,10 @@ def upsert_user_db_logic(
             try:
                 db.commit()
                 db.refresh(db_user)
+                # Update search_vector after commit
+                from utils.search_vector import update_search_vector
+                update_search_vector(db, db_user)
+                db.commit()
             except OperationalError as e:
                 db.rollback()
                 log.exception("OperationalError in verify_code_with_retry, will retry.")

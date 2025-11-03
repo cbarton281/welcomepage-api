@@ -1,6 +1,16 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users where team_id = 71 order by created_at desc
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+%gmail.com'  order by auth_email
+
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
+from welcomepage_users 
+where  auth_email like 'charles.barton%gmail.com' and team_id = 26 
+order by auth_email
+
+select * from welcomepage_users where name like 'Charlie%'
+select search_vector from welcomepage_users 
+where  auth_email like 'charles.barton+100@gmail.com'
 
 
 select t.* from teams t join welcomepage_users w on t.id = w.team_id where w.auth_email =  'charles.barton+100@gmail.com'
@@ -104,3 +114,15 @@ SET public_id = LEFT(public_id, 10)
 WHERE length(public_id) > 10;
 
 select * from page_visits
+
+-- Search for a single term (matches "toronto" or "Toronto")
+SELECT id, name, role, location
+FROM welcomepage_users
+WHERE search_vector @@ plainto_tsquery('toronto') and team_id = 26
+
+-- show excluded users
+SELECT id, name, role, auth_email, auth_role
+FROM welcomepage_users
+WHERE search_vector @@ plainto_tsquery('toronto') 
+  AND team_id = 26
+  AND (auth_email IS NULL OR auth_email = '' OR auth_role NOT IN ('USER', 'ADMIN'));
