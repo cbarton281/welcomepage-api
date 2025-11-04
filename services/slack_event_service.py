@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
+from sqlalchemy import text
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 import logging
 
@@ -473,16 +474,15 @@ class SlackEventService:
             return {"status": "error", "message": str(e)}
 
     def _find_team_by_slack_team_id(self, slack_team_id: str) -> Optional[Team]:
-        """Find a team by Slack team_id stored in slack_settings"""
+        """Find a team by Slack team_id stored in slack_settings using JSONB query"""
         try:
-            teams = self.db.query(Team).filter(Team.slack_settings.isnot(None)).all()
+            # Use PostgreSQL JSONB path query for efficient lookup with GIN index
+            team = self.db.query(Team).filter(
+                Team.slack_settings.isnot(None),
+                text("slack_settings->'slack_app'->>'team_id' = :slack_team_id")
+            ).bindparams(slack_team_id=slack_team_id).first()
             
-            for team in teams:
-                slack_app_data = team.slack_settings.get("slack_app", {}) if team.slack_settings else {}
-                if slack_app_data.get("team_id") == slack_team_id:
-                    return team
-            
-            return None
+            return team
             
         except Exception as e:
             log = new_logger("find_team_by_slack_team_id")
