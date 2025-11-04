@@ -227,8 +227,13 @@ async def get_team_members(
 class TeamMemberViewResponse(BaseModel):
     id: int
     public_id: str
+    name: Optional[str] = None
     first_name: str
     last_name: str
+    role: Optional[str] = None
+    nickname: Optional[str] = None
+    pronunciation_text: Optional[str] = None
+    pronunciation_recording_url: Optional[str] = None
     profile_image: Optional[str]
     wave_gif_url: Optional[str]
     unique_visits: int
@@ -384,8 +389,13 @@ async def get_team_members_view(
         member_responses.append(TeamMemberViewResponse(
             id=member.id,
             public_id=member.public_id,
+            name=member.name,
             first_name=first_name,
             last_name=last_name,
+            role=member.role,
+            nickname=member.nickname,
+            pronunciation_text=member.pronunciation_text,
+            pronunciation_recording_url=member.pronunciation_recording_url,
             profile_image=member.profile_photo_url,
             wave_gif_url=member.wave_gif_url,
             unique_visits=0  # Simplified - no visit counting for team view
@@ -1204,6 +1214,9 @@ class PublicPageSummary(BaseModel):
     share_uuid: str
     name: str
     role: Optional[str] = None
+    nickname: Optional[str] = None
+    pronunciation_text: Optional[str] = None
+    pronunciation_recording_url: Optional[str] = None
     location: Optional[str] = None
     wave_gif_url: Optional[str] = None
     profile_photo_url: Optional[str] = None
@@ -1321,6 +1334,9 @@ def get_public_team_pages(
                 share_uuid=page.share_uuid,
                 name=page.name,
                 role=page.role,
+                nickname=page.nickname,
+                pronunciation_text=page.pronunciation_text,
+                pronunciation_recording_url=page.pronunciation_recording_url,
                 location=page.location,
                 wave_gif_url=page.wave_gif_url,
                 profile_photo_url=page.profile_photo_url

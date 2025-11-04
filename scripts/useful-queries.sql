@@ -1,11 +1,11 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users where team_id = 71 order by created_at desc
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
-select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+%gmail.com'  order by auth_email
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton%gmail.com'  order by auth_email
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
 from welcomepage_users 
-where  auth_email like 'charles.barton%gmail.com' and team_id = 26 
+where  auth_email like 'charles.barton%johnny%@gmail.com'
 order by auth_email
 
 select * from welcomepage_users where name like 'Charlie%'
@@ -82,8 +82,8 @@ select * from alembic_version
 
 
 select * from teams order by public_id
-select * from teams where public_id = 'ied3vv24li' 
-select * from teams  order by id 
+select * from teams where public_id = 'sdx5imegc5' 
+select subscription_status, * from teams where subscription_status is not null order by id 
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
 
 SELECT *
@@ -126,3 +126,41 @@ FROM welcomepage_users
 WHERE search_vector @@ plainto_tsquery('toronto') 
   AND team_id = 26
   AND (auth_email IS NULL OR auth_email = '' OR auth_role NOT IN ('USER', 'ADMIN'));
+
+------- query profiling
+SELECT
+  relname,
+  seq_scan,
+  idx_scan,
+  seq_tup_read,
+  idx_tup_fetch
+FROM pg_stat_user_tables
+ORDER BY seq_scan DESC
+LIMIT 20;
+
+-- CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+SELECT
+  calls,
+  round(total_exec_time::numeric,2) AS total_ms,
+  round(mean_exec_time::numeric,2)  AS avg_ms,
+  rows,
+  shared_blks_read,
+  shared_blks_hit,
+  queryid,
+  query
+FROM pg_stat_statements
+WHERE query ILIKE '%welcomepage_users%'
+ORDER BY calls DESC
+LIMIT 20;
+
+SELECT pid, query
+FROM pg_stat_activity
+WHERE query ILIKE '%welcomepage_users%'
+  AND state = 'active';
+
+SELECT version();
+
+SELECT query
+FROM pg_stat_statements
+WHERE queryid = '-3558060556423766990';
