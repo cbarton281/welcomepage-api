@@ -479,8 +479,8 @@ class SlackEventService:
             # Use PostgreSQL JSONB path query for efficient lookup with GIN index
             team = self.db.query(Team).filter(
                 Team.slack_settings.isnot(None),
-                text("slack_settings->'slack_app'->>'team_id' = :slack_team_id")
-            ).bindparams(slack_team_id=slack_team_id).first()
+                text("slack_settings->'slack_app'->>'team_id' = :slack_team_id").bindparams(slack_team_id=slack_team_id)
+            ).first()
             
             return team
             

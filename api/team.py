@@ -1260,8 +1260,8 @@ def get_public_team_pages(
         # Find team by sharing UUID using PostgreSQL JSONB query for efficient lookup with GIN index
         target_team = db.query(Team).filter(
             Team.sharing_settings.isnot(None),
-            text("sharing_settings->>'uuid' = :share_uuid")
-        ).bindparams(share_uuid=share_uuid).first()
+            text("sharing_settings->>'uuid' = :share_uuid").bindparams(share_uuid=share_uuid)
+        ).first()
         
         if not target_team:
             log.warning(f"Team not found for share_uuid: {share_uuid}")
