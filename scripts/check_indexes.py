@@ -7,26 +7,37 @@ This script connects to your database and:
 2. Identifies missing critical indexes
 3. Provides EXPLAIN ANALYZE for sample queries
 4. Generates Alembic migration files for missing indexes
+5. Detects table scan patterns (fetch all + Python filtering)
 
 Usage:
-    python scripts/check_indexes.py [--explain] [--generate-migration]
+    python scripts/check_indexes.py [--explain] [--generate-migration] [--detect-scans]
     
 Options:
     --explain: Run EXPLAIN ANALYZE on sample queries
     --generate-migration: Generate Alembic migration file for missing indexes
+    --detect-scans: Detect potential table scan patterns in codebase
 """
 
 import os
 import sys
 import argparse
+import re
 from datetime import datetime
 from pathlib import Path
-from sqlalchemy import create_engine, text, inspect
-from sqlalchemy.exc import OperationalError
-from dotenv import load_dotenv
+# Optional imports (only needed for database operations)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    DOTENV_AVAILABLE = True
+except ImportError:
+    DOTENV_AVAILABLE = False
 
-# Load environment variables
-load_dotenv()
+try:
+    from sqlalchemy import create_engine, text, inspect
+    from sqlalchemy.exc import OperationalError
+    SQLALCHEMY_AVAILABLE = True
+except ImportError:
+    SQLALCHEMY_AVAILABLE = False
 
 # Critical indexes that should exist (after checking migrations and database)
 # Note: Some indexes may be satisfied by unique indexes or composite indexes
@@ -52,6 +63,10 @@ REQUIRED_INDEXES = {
 
 def get_db_engine():
     """Create database engine from DATABASE_URL"""
+    if not SQLALCHEMY_AVAILABLE:
+        print("Error: sqlalchemy is required for database operations")
+        sys.exit(1)
+    
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         print("Error: DATABASE_URL environment variable not set")
@@ -459,6 +474,124 @@ def explain_query(engine, query, description):
     except Exception as e:
         print(f"Error: {e}")
 
+def detect_table_scan_patterns():
+    """
+    Detect potential table scan patterns in the codebase.
+    Looks for patterns where code fetches all rows and filters in Python.
+    """
+    base_dir = Path(__file__).parent.parent
+    patterns_found = []
+    
+    # Patterns to detect
+    scan_patterns = [
+        {
+            'name': 'JSONB fetch all + Python filter',
+            'pattern': r'\.filter\([^)]*\.(?:sharing_settings|slack_settings)\.isnot\(None\)\)\.all\(\)',
+            'followup': r'for\s+\w+\s+in\s+\w+.*:\s*\n\s*[^\n]*\.get\(.*\)\s*==|\s*if\s+[^\n]*\.get\(.*\)\s*==',
+            'severity': 'HIGH',
+            'description': 'Fetches all rows with JSONB field, then filters in Python'
+        },
+        {
+            'name': 'Query fetch all + loop with JSONB/dict access',
+            'pattern': r'\.query\([^)]+\)\.(?:filter\([^)]*\))*\.all\(\)',
+            'followup': r'for\s+\w+\s+in\s+\w+.*:\s*\n\s*[^\n]*\.(?:get\(|sharing_settings|slack_settings)',
+            'severity': 'HIGH',
+            'description': 'Fetches all rows from query, then loops and accesses JSONB/dict fields in Python'
+        },
+        {
+            'name': 'Fetch all when first() would work',
+            'pattern': r'\.query\([^)]+\)\.(?:filter\([^)]*\))*\.all\(\)',
+            'followup': r'for\s+\w+\s+in\s+\w+.*:\s*\n\s*if\s+[^\n]*:\s*\n\s*(?:return\s+\w+|break)',
+            'severity': 'MEDIUM',
+            'description': 'Fetches all rows when only one result is needed (use .first() instead)'
+        }
+    ]
+    
+    # Directories to scan
+    scan_dirs = [
+        base_dir / 'api',
+        base_dir / 'services',
+    ]
+    
+    # Files to scan
+    files_to_scan = []
+    for scan_dir in scan_dirs:
+        if scan_dir.exists():
+            files_to_scan.extend(scan_dir.glob('*.py'))
+    
+    for file_path in files_to_scan:
+        try:
+            with open(file_path, 'r') as f:
+                content = f.read()
+                lines = content.split('\n')
+            
+            # Check each pattern
+            for pattern_def in scan_patterns:
+                # Find all matches of the main pattern
+                for match in re.finditer(pattern_def['pattern'], content, re.MULTILINE):
+                    line_num = content[:match.start()].count('\n') + 1
+                    
+                    # Check if there's a followup pattern (Python-side filtering)
+                    is_table_scan = False
+                    if pattern_def['followup']:
+                        # Look ahead in the code for the followup pattern (within next 20 lines)
+                        remaining_lines = lines[line_num:line_num + 20]
+                        remaining_content = '\n'.join(remaining_lines)
+                        if re.search(pattern_def['followup'], remaining_content, re.MULTILINE | re.DOTALL):
+                            is_table_scan = True
+                    else:
+                        # Pattern itself indicates a scan
+                        is_table_scan = True
+                    
+                    if is_table_scan:
+                        # Get context around the match
+                        start_line = max(0, line_num - 3)
+                        end_line = min(len(lines), line_num + 15)
+                        context = '\n'.join(lines[start_line:end_line])
+                        
+                        # Check if this is a false positive
+                        context_lower = context.lower()
+                        
+                        # Skip pagination patterns
+                        if any(keyword in context_lower for keyword in ['offset', 'limit', 'paginate', 'page_size']):
+                            continue
+                        
+                        # Skip if it's in a comment
+                        if '#' in lines[line_num - 1] and match.group(0) in lines[line_num - 1].split('#')[1]:
+                            continue
+                        
+                        # Skip if it's not a database query (no .query() or .filter())
+                        if 'db.query' not in context and 'self.db.query' not in context:
+                            # Check if it's a list comprehension or other non-db pattern
+                            if 'for ' in context and '.query' not in context:
+                                # Might be iterating over a list, not a DB result
+                                if not any(keyword in context for keyword in ['.all()', '.filter(', '.query(']):
+                                    continue
+                        
+                        patterns_found.append({
+                            'pattern': pattern_def['name'],
+                            'file': str(file_path.relative_to(base_dir)),
+                            'line': line_num,
+                            'severity': pattern_def['severity'],
+                            'description': pattern_def['description'],
+                            'code': context,
+                            'match': match.group(0)
+                        })
+        except Exception as e:
+            # Skip files that can't be read
+            continue
+    
+    # Remove duplicates (same file, same line)
+    seen = set()
+    unique_patterns = []
+    for pattern in patterns_found:
+        key = (pattern['file'], pattern['line'])
+        if key not in seen:
+            seen.add(key)
+            unique_patterns.append(pattern)
+    
+    return unique_patterns
+
 def run_sample_explains(engine):
     """Run EXPLAIN ANALYZE on sample queries"""
     # Get sample data
@@ -520,6 +653,9 @@ Examples:
   
   # Run EXPLAIN ANALYZE on sample queries
   python scripts/check_indexes.py --explain
+  
+  # Detect table scan patterns (fetch all + Python filtering)
+  python scripts/check_indexes.py --detect-scans
         '''
     )
     parser.add_argument('--create', action='store_true', 
@@ -528,8 +664,48 @@ Examples:
                        help='Generate Alembic migration file for missing indexes (recommended)')
     parser.add_argument('--explain', action='store_true',
                        help='Run EXPLAIN ANALYZE on sample queries')
+    parser.add_argument('--detect-scans', action='store_true',
+                       help='Detect potential table scan patterns (fetch all + Python filtering)')
     
     args = parser.parse_args()
+    
+    # If only detecting scans, do that and exit
+    if args.detect_scans:
+        print("Table Scan Pattern Detector")
+        print("=" * 60)
+        print("\nScanning codebase for potential table scan patterns...")
+        print("(Fetch all rows + Python-side filtering)\n")
+        
+        patterns = detect_table_scan_patterns()
+        
+        if patterns:
+            print(f"⚠ Found {len(patterns)} potential table scan pattern(s):\n")
+            for i, pattern in enumerate(patterns, 1):
+                print(f"{'='*60}")
+                print(f"Pattern {i}: {pattern['pattern']}")
+                print(f"File: {pattern['file']}")
+                print(f"Line: {pattern['line']}")
+                print(f"Severity: {pattern['severity']}")
+                print(f"\nCode context:")
+                print("-" * 60)
+                code_lines = pattern['code'].split('\n')
+                start_line = pattern['line'] - 3  # We show 3 lines before
+                for i, line in enumerate(code_lines):
+                    actual_line = start_line + i + 1
+                    marker = " >>> " if actual_line == pattern['line'] else "     "
+                    print(f"{actual_line:4d}{marker}{line}")
+                print("-" * 60)
+                print()
+            
+            print("\n💡 Recommendations:")
+            print("  - Replace Python-side filtering with PostgreSQL WHERE clauses")
+            print("  - Use JSONB operators (->, ->>, @>) in SQL WHERE clauses")
+            print("  - Add GIN indexes on JSONB columns for efficient lookups")
+            print("  - Consider using .first() instead of .all() + loop if only one result needed")
+        else:
+            print("✓ No table scan patterns detected!")
+        
+        return
     
     print("Database Index Checker")
     print("=" * 60)

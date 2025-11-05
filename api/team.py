@@ -1257,25 +1257,14 @@ def get_public_team_pages(
     log.info(f"Fetching public team pages with share_uuid: {share_uuid}, search: {search}")
     
     try:
-        # Find team by sharing UUID - match pattern used for slack_settings
-        # Query teams with sharing_settings and check uuid field
-        teams_with_sharing = db.query(Team).filter(Team.sharing_settings.isnot(None)).all()
-        target_team = None
-        
-        for team in teams_with_sharing:
-            sharing_settings = team.sharing_settings or {}
-            if sharing_settings.get("uuid") == share_uuid:
-                target_team = team
-                break
+        # Find team by sharing UUID using PostgreSQL JSONB query for efficient lookup with GIN index
+        target_team = db.query(Team).filter(
+            Team.sharing_settings.isnot(None),
+            text("sharing_settings->>'uuid' = :share_uuid")
+        ).bindparams(share_uuid=share_uuid).first()
         
         if not target_team:
             log.warning(f"Team not found for share_uuid: {share_uuid}")
-            log.info(f"Total teams with sharing_settings: {len(teams_with_sharing)}")
-            for team in teams_with_sharing[:5]:  # Log first 5 for debugging
-                settings = team.sharing_settings or {}
-                uuid_val = settings.get('uuid')
-                enabled = settings.get('enabled', False)
-                log.info(f"  Team {team.public_id}: sharing_settings.uuid = {uuid_val}, enabled = {enabled}")
             raise HTTPException(status_code=404, detail="Team not found")
         
         log.info(f"Found team {target_team.public_id} for share_uuid: {share_uuid}")

@@ -8,7 +8,7 @@ from welcomepage_users
 where  auth_email like 'charles.barton%johnny%@gmail.com'
 order by auth_email
 
-select * from welcomepage_users where name like 'Charlie%'
+select * from welcomepage_users where name like 'Derek Cox%'
 select search_vector from welcomepage_users 
 where  auth_email like 'charles.barton+100@gmail.com'
 
@@ -164,3 +164,5 @@ SELECT version();
 SELECT query
 FROM pg_stat_statements
 WHERE queryid = '-3558060556423766990';
+
+select * from page_visits
