@@ -32,6 +32,20 @@ async def get_billing_status(
         if not team:
             raise HTTPException(status_code=404, detail="Team not found")
         
+        # Check for unlimited subscription status (staff-only, set via SQL)
+        if team.subscription_status == 'unlimited':
+            return {
+                "plan": "unlimited",
+                "status": "active",
+                "welcomepages_limit": "unlimited",
+                "welcomepages_used": len(team.users),
+                "pricing": {
+                    "amount": 0,
+                    "currency": "usd",
+                    "interval": "forever"
+                }
+            }
+        
         # If no Stripe customer, return free plan status
         if not team.stripe_customer_id:
             return {

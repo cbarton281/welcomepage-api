@@ -165,4 +165,4 @@ SELECT query
 FROM pg_stat_statements
 WHERE queryid = '-3558060556423766990';
 
-select * from page_visits
+select * from page_visits order by visit_start_time desc
