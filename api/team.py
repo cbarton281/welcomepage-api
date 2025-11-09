@@ -25,6 +25,20 @@ router = APIRouter()
 
 team_retry_logger = new_logger("fetch_team_by_public_id_retry")
 
+def sanitize_for_logging(text: str, max_length: int = 100) -> str:
+    """
+    Sanitize user input for safe logging.
+    Removes newlines, control characters, and truncates to prevent log injection.
+    """
+    if not text:
+        return ""
+    # Remove newlines, carriage returns, and other control characters
+    sanitized = "".join(char for char in text if ord(char) >= 32 or char in "\t")
+    # Truncate to prevent extremely long log entries
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+    return sanitized
+
 # Pydantic models for team members response
 class TeamMemberResponse(BaseModel):
     id: int
@@ -293,7 +307,7 @@ async def get_team_members_view(
     
     # Apply full-text search filter if provided
     if search:
-        log.info(f"Applying full-text search filter for term: '{search}'")
+        log.info(f"Applying full-text search filter for term: '{sanitize_for_logging(search)}'")
         # Use PostgreSQL full-text search with search_vector column
         # For prefix matching (partial words), we use to_tsquery with :* operator
         # For full words/phrases, we use plainto_tsquery
@@ -311,18 +325,18 @@ async def get_team_members_view(
                     ) || ':*'
                 )
             """
-            log.info(f"Using prefix search mode for term: '{search}'")
+            log.info(f"Using prefix search mode for term: '{sanitize_for_logging(search)}'")
         else:
             # Multiple words or long term - use plainto_tsquery (handles phrases better)
             search_query_str = "plainto_tsquery('english', :search_term)"
-            log.info(f"Using phrase search mode for term: '{search}'")
+            log.info(f"Using phrase search mode for term: '{sanitize_for_logging(search)}'")
         
         search_filter = text(f"search_vector @@ ({search_query_str})").bindparams(search_term=search)
         query = query.filter(search_filter)
         
         # Log count after search filter
         search_count = query.count()
-        log.info(f"After search filter '{search}', query returned {search_count} users")
+        log.info(f"After search filter '{sanitize_for_logging(search)}', query returned {search_count} users")
         
         # Debug: Check if search_vector is NULL for any users in this team
         null_vector_count = db.query(WelcomepageUser).filter(
@@ -336,7 +350,7 @@ async def get_team_members_view(
         search_only_count = db.query(WelcomepageUser).filter(
             WelcomepageUser.team_id == team.id
         ).filter(search_filter).count()
-        log.info(f"Search '{search}' on team_id={team.id} (without auth filters) returned {search_only_count} users")
+        log.info(f"Search '{sanitize_for_logging(search)}' on team_id={team.id} (without auth filters) returned {search_only_count} users")
         
         # Debug: Check users excluded by auth filters
         excluded_by_auth = db.query(WelcomepageUser).filter(
@@ -348,7 +362,7 @@ async def get_team_members_view(
             )
         ).filter(search_filter).count()
         if excluded_by_auth > 0:
-            log.info(f"Search '{search}' matched {excluded_by_auth} users excluded by auth filters (no auth_email or wrong role)")
+            log.info(f"Search '{sanitize_for_logging(search)}' matched {excluded_by_auth} users excluded by auth filters (no auth_email or wrong role)")
     else:
         log.info("No search term provided, returning all filtered users")
     
@@ -403,7 +417,7 @@ async def get_team_members_view(
     
     log.info(f"Returning {len(member_responses)} members view out of {total_count} total (page {page} of {total_pages})")
     if search:
-        log.info(f"Search results for '{search}': {total_count} total matches, showing page {page}")
+        log.info(f"Search results for '{sanitize_for_logging(search)}': {total_count} total matches, showing page {page}")
     
     return TeamMembersViewListResponse(
         members=member_responses,
@@ -1254,7 +1268,7 @@ def get_public_team_pages(
     Supports full-text search across all user data.
     """
     log = new_logger("get_public_team_pages")
-    log.info(f"Fetching public team pages with share_uuid: {share_uuid}, search: {search}")
+    log.info(f"Fetching public team pages with share_uuid: {share_uuid}, search: {sanitize_for_logging(search) if search else None}")
     
     try:
         # Find team by sharing UUID using PostgreSQL JSONB query for efficient lookup with GIN index
