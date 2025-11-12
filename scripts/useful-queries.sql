@@ -1,4 +1,4 @@
-select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users where team_id = 71 order by created_at desc
+select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users  order by created_at desc
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton%gmail.com'  order by auth_email
@@ -8,7 +8,9 @@ from welcomepage_users
 where  auth_email like 'charles.barton%johnny%@gmail.com'
 order by auth_email
 
-select * from welcomepage_users where name like 'Derek Cox%'
+select   auth_email, * from welcomepage_users where team_id = 107
+
+select * from welcomepage_users where name like 'Michael Hernandez'
 select search_vector from welcomepage_users 
 where  auth_email like 'charles.barton+100@gmail.com'
 
@@ -81,13 +83,13 @@ select * from verification_codes order by id desc
 select * from alembic_version
 
 
-select * from teams order by public_id
-select * from teams where public_id = 'sdx5imegc5' 
+select * from teams order by organization_name
+select * from teams where public_id = 'ied3vv24li' 
 select subscription_status, * from teams where subscription_status is not null order by id 
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
 
 SELECT *
-FROM public.teams
+FROM public.teams order by id
 WHERE slack_settings->'slack_app' IS NOT NULL;
 
 SELECT sharing_settings,*
@@ -166,3 +168,36 @@ FROM pg_stat_statements
 WHERE queryid = '-3558060556423766990';
 
 select * from page_visits order by visit_start_time desc
+
+SELECT id, team_id
+FROM public.welcomepage_users
+WHERE auth_email = 'charles.barton+924@gmail.com'
+  AND team_id IS NOT NULL;
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+-- DELETE from teams and welcomepage_users where auth_email = charles.barton+924@gmail.com
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+BEGIN;
+
+CREATE TEMP TABLE target_users 
+ON COMMIT DROP
+AS
+SELECT id, team_id
+FROM public.welcomepage_users
+WHERE auth_email = 'charles.barton+924@gmail.com'
+  AND team_id IS NOT NULL;
+
+DELETE FROM public.welcomepage_users wu
+USING target_users tu
+WHERE wu.id = tu.id;
+
+DELETE FROM public.teams t
+USING (SELECT DISTINCT team_id FROM target_users) du
+WHERE t.id = du.team_id
+  AND NOT EXISTS (
+      SELECT 1 FROM public.welcomepage_users wu2
+      WHERE wu2.team_id = t.id
+  );
+
+COMMIT;

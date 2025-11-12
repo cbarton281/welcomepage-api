@@ -1133,10 +1133,10 @@ async def update_sharing_settings(
 async def get_sharing_status(
     public_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles("USER", "ADMIN"))
+    current_user=Depends(require_roles("USER", "ADMIN", "PRE_SIGNUP"))
 ):
     """
-    Get sharing status for a team (read-only, accessible to all team members).
+    Get sharing status for a team (read-only, accessible to all team members including PRE_SIGNUP).
     Returns only whether sharing is enabled and active (not expired).
     Used by create page to determine if share options should be available.
     """

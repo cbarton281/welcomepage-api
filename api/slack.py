@@ -122,6 +122,10 @@ async def slack_oauth_callback(
             if ctx == "publish_flow":
                 target = ret or "/create?afterSlack=1"
                 return RedirectResponse(url=f"{os.getenv('WEBAPP_URL')}{target}", status_code=302)
+            elif ctx == "signup_flow":
+                # For signup flow, redirect to the return path (which should include afterSlack=1)
+                target = ret or "/?afterSlack=1"
+                return RedirectResponse(url=f"{os.getenv('WEBAPP_URL')}{target}", status_code=302)
             return RedirectResponse(
                 url=f"{os.getenv('WEBAPP_URL')}/team-settings?slack_success=true",
                 status_code=302
