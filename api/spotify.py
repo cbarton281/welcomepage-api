@@ -27,7 +27,7 @@ class SpotifyData(BaseModel):
     url: str
     name: Optional[str] = None
     image: Optional[str] = None
-    type: Optional[Literal['playlist', 'podcast', 'track']] = None
+    type: Optional[Literal['playlist', 'podcast', 'track', 'artist', 'album', 'episode']] = None
     description: Optional[str] = None
     owner: Optional[str] = None
     publisher: Optional[str] = None
@@ -36,6 +36,7 @@ class SpotifyData(BaseModel):
     trackCount: Optional[int] = None
     episodeCount: Optional[int] = None
     duration: Optional[int] = None
+    showName: Optional[str] = None
 
 
 def _extract_type_and_id(url: str):
@@ -44,8 +45,11 @@ def _extract_type_and_id(url: str):
     - https://open.spotify.com/playlist/{id}
     - https://open.spotify.com/show/{id}
     - https://open.spotify.com/track/{id}
+    - https://open.spotify.com/artist/{id}
+    - https://open.spotify.com/album/{id}
+    - https://open.spotify.com/episode/{id}
     Also supports regional subpaths or query params.
-    Returns (api_type, id) where api_type in ['playlists', 'shows', 'tracks']
+    Returns (api_type, id) where api_type in ['playlists', 'shows', 'tracks', 'artists', 'albums', 'episodes']
     """
     try:
         # Normalize
@@ -53,11 +57,14 @@ def _extract_type_and_id(url: str):
             return None, None
         # Split by '/'
         parts = url.split('?')[0].split('#')[0].strip('/').split('/')
-        # Find indices for 'playlist' | 'show' | 'track'
+        # Find indices for 'playlist' | 'show' | 'track' | 'artist' | 'album' | 'episode'
         api_map = {
             'playlist': 'playlists',
             'show': 'shows',
             'track': 'tracks',
+            'artist': 'artists',
+            'album': 'albums',
+            'episode': 'episodes',
         }
         for i, p in enumerate(parts):
             if p in api_map and i + 1 < len(parts):
@@ -137,6 +144,37 @@ def resolve_spotify_url(payload: ResolveRequest):
             type='track',
             artist=(artists[0].get('name') if artists else None),
             album=album.get('name'),
+            duration=data.get('duration_ms'),
+        )
+    elif api_type == 'artists':
+        mapped = SpotifyData(
+            url=f"https://open.spotify.com/artist/{item_id}",
+            name=data.get('name'),
+            image=(data.get('images') or [{}])[0].get('url'),
+            type='artist',
+            description=None,  # Artists don't have descriptions in Spotify API
+        )
+    elif api_type == 'albums':
+        artists = data.get('artists') or []
+        mapped = SpotifyData(
+            url=f"https://open.spotify.com/album/{item_id}",
+            name=data.get('name'),
+            image=(data.get('images') or [{}])[0].get('url'),
+            type='album',
+            artist=(artists[0].get('name') if artists else None),  # Primary artist
+            trackCount=data.get('total_tracks'),
+            description=None,  # Albums don't have descriptions in Spotify API
+        )
+    elif api_type == 'episodes':
+        show = data.get('show') or {}
+        mapped = SpotifyData(
+            url=f"https://open.spotify.com/episode/{item_id}",
+            name=data.get('name'),
+            image=(data.get('images') or [{}])[0].get('url'),
+            type='episode',
+            description=data.get('description'),
+            publisher=show.get('publisher'),
+            showName=show.get('name'),
             duration=data.get('duration_ms'),
         )
     else:

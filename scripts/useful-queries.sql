@@ -1,6 +1,6 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users  order by created_at desc
 
-select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+924@gmail.com'  order by auth_email
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton%gmail.com'  order by auth_email
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
@@ -8,12 +8,22 @@ from welcomepage_users
 where  auth_email like 'charles.barton%johnny%@gmail.com'
 order by auth_email
 
-select   auth_email, * from welcomepage_users where team_id = 107
+select   auth_email, * from welcomepage_users where team_id = 109
 
-select * from welcomepage_users where name like 'Michael Hernandez'
+select name, auth_email, is_shareable,share_uuid, * from welcomepage_users where name like 'Gupree%'
+
 select search_vector from welcomepage_users 
-where  auth_email like 'charles.barton+100@gmail.com'
+where name  like 'jos%'
 
+select auth_email, is_shareable, share_uuid, is_draft, * from welcomepage_users where 
+team_id in (select id from teams where public_id = 'ied3vv24li' ) AND
+is_shareable is true
+
+-- "charles.barton+912@gmail.com"	true	"up5sdbhlusd4mya6ifz1z6p5i"	false	109	"8ko9uitxfw"
+-- "charles.barton+100@gmail.com"	true	"w79czshvu9tdjsji6rlau24kp"	false	55	"0bmntxfqao"
+-- "charles.barton+903@gmail.com"	true	"nbmciywdoidnfjfwu18pq6cig"	false	101	"ohex5hczr8"
+-- "charles.barton+905@gmail.com"	true	"nbmciop09idnfjfwu18pq6cig"	false	103	"9padt3qjqu"
+-- "charles.barton+907@gmail.com"	true	"zsg4y5vk1fskx23gxnn3s245j"	false	105	"di9wsokpd0"
 
 select t.* from teams t join welcomepage_users w on t.id = w.team_id where w.auth_email =  'charles.barton+100@gmail.com'
 
@@ -169,7 +179,7 @@ WHERE queryid = '-3558060556423766990';
 
 select * from page_visits order by visit_start_time desc
 
-SELECT id, team_id
+SELECT id, team_id, is_draft
 FROM public.welcomepage_users
 WHERE auth_email = 'charles.barton+924@gmail.com'
   AND team_id IS NOT NULL;
@@ -201,3 +211,5 @@ WHERE t.id = du.team_id
   );
 
 COMMIT;
+
+
