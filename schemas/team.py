@@ -17,6 +17,7 @@ class TeamRead(TeamCreate):
     slack_settings: Optional[Dict[str, Any]] = None
     security_settings: Optional[Dict[str, Any]] = None
     sharing_settings: Optional[Dict[str, Any]] = None
+    custom_prompts: Optional[Dict[str, Any]] = None
     is_draft: bool
     # Stripe integration fields
     stripe_customer_id: Optional[str] = None

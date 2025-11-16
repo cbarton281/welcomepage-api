@@ -1464,3 +1464,361 @@ async def update_security_settings(
         db.rollback()
         log.error(f"Failed to update security settings for team {public_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update security settings")
+
+
+# =====================
+# Custom Prompts
+# =====================
+
+class CustomPromptRequest(BaseModel):
+    text: str
+
+class CustomPromptResponse(BaseModel):
+    id: str
+    text: str
+
+class CustomPromptsListResponse(BaseModel):
+    prompts: List[CustomPromptResponse]
+
+
+@router.get("/teams/{public_id}/custom-prompts", response_model=CustomPromptsListResponse)
+async def get_custom_prompts(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get custom prompts for a team.
+    Both USER and ADMIN roles can view custom prompts.
+    """
+    log = new_logger("get_custom_prompts")
+    log.info(f"Getting custom prompts for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    log.info(f"Current user: public_id={user_public_id}, team_id={user_team_id}, requesting team={public_id}")
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    log.info(f"Looking up team with public_id: {public_id}")
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}. User's team_id from JWT: {user_team_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to access custom prompts for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only access custom prompts for your own team")
+    
+    # Get custom_prompts or empty list if none exist
+    custom_prompts = team.custom_prompts or {}
+    prompts_list = custom_prompts.get("prompts", []) if isinstance(custom_prompts, dict) else []
+    
+    # Ensure prompts are in the correct format
+    formatted_prompts = []
+    for prompt in prompts_list:
+        if isinstance(prompt, dict) and "id" in prompt and "text" in prompt:
+            formatted_prompts.append(CustomPromptResponse(id=prompt["id"], text=prompt["text"]))
+    
+    log.info(f"Retrieved {len(formatted_prompts)} custom prompts for team {public_id}")
+    
+    return CustomPromptsListResponse(prompts=formatted_prompts)
+
+
+@router.post("/teams/{public_id}/custom-prompts", response_model=CustomPromptResponse)
+async def create_custom_prompt(
+    public_id: str,
+    request: CustomPromptRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Create a new custom prompt for a team.
+    Only ADMIN users can create custom prompts.
+    """
+    log = new_logger("create_custom_prompt")
+    log.info(f"Creating custom prompt for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    log.info(f"Current user: public_id={user_public_id}, team_id={user_team_id}, requesting team={public_id}")
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Validate request body
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Prompt text is required")
+    
+    # Verify target team exists
+    log.info(f"Looking up team with public_id: {public_id}")
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}. User's team_id from JWT: {user_team_id}")
+        # Try to find any teams to help debug
+        all_teams = db.query(Team).limit(5).all()
+        log.info(f"Sample teams in database (first 5): {[t.public_id for t in all_teams]}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to create custom prompt for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only create custom prompts for your own team")
+    
+    try:
+        # Get existing custom_prompts or initialize empty dict
+        existing_prompts = team.custom_prompts or {}
+        if not isinstance(existing_prompts, dict):
+            existing_prompts = {}
+        
+        prompts_list = existing_prompts.get("prompts", [])
+        if not isinstance(prompts_list, list):
+            prompts_list = []
+        
+        # Generate a unique ID for the new prompt
+        from utils.short_id import generate_short_id
+        new_prompt_id = generate_short_id(10)
+        
+        # Create the new prompt
+        new_prompt = {
+            "id": new_prompt_id,
+            "text": request.text.strip()
+        }
+        
+        # Add the new prompt to the list
+        prompts_list.append(new_prompt)
+        existing_prompts["prompts"] = prompts_list
+        
+        # Update the team's custom_prompts
+        team.custom_prompts = existing_prompts
+        
+        # Explicitly mark the field as modified for SQLAlchemy
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'custom_prompts')
+        
+        db.commit()
+        db.refresh(team)
+        
+        log.info(f"Created custom prompt {new_prompt_id} for team {public_id}: {request.text.strip()}")
+        
+        return CustomPromptResponse(id=new_prompt_id, text=request.text.strip())
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to create custom prompt for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create custom prompt")
+
+
+@router.patch("/teams/{public_id}/custom-prompts/{prompt_id}", response_model=CustomPromptResponse)
+async def update_custom_prompt(
+    public_id: str,
+    prompt_id: str,
+    request: CustomPromptRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Update an existing custom prompt for a team.
+    Only ADMIN users can update custom prompts.
+    """
+    log = new_logger("update_custom_prompt")
+    log.info(f"Updating custom prompt {prompt_id} for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Validate request body
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Prompt text is required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to update custom prompt for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only update custom prompts for your own team")
+    
+    try:
+        # Get existing custom_prompts or initialize empty dict
+        existing_prompts = team.custom_prompts or {}
+        if not isinstance(existing_prompts, dict):
+            existing_prompts = {}
+        
+        prompts_list = existing_prompts.get("prompts", [])
+        if not isinstance(prompts_list, list):
+            prompts_list = []
+        
+        # Find the prompt to update
+        prompt_found = False
+        for i, prompt in enumerate(prompts_list):
+            if isinstance(prompt, dict) and prompt.get("id") == prompt_id:
+                prompts_list[i] = {
+                    "id": prompt_id,
+                    "text": request.text.strip()
+                }
+                prompt_found = True
+                break
+        
+        if not prompt_found:
+            log.warning(f"Custom prompt {prompt_id} not found for team {public_id}")
+            raise HTTPException(status_code=404, detail="Custom prompt not found")
+        
+        existing_prompts["prompts"] = prompts_list
+        
+        # Update the team's custom_prompts
+        team.custom_prompts = existing_prompts
+        
+        # Explicitly mark the field as modified for SQLAlchemy
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'custom_prompts')
+        
+        db.commit()
+        db.refresh(team)
+        
+        log.info(f"Updated custom prompt {prompt_id} for team {public_id}: {request.text.strip()}")
+        
+        return CustomPromptResponse(id=prompt_id, text=request.text.strip())
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to update custom prompt {prompt_id} for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update custom prompt")
+
+
+@router.delete("/teams/{public_id}/custom-prompts/{prompt_id}")
+async def delete_custom_prompt(
+    public_id: str,
+    prompt_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Delete a custom prompt for a team.
+    Only ADMIN users can delete custom prompts.
+    """
+    log = new_logger("delete_custom_prompt")
+    log.info(f"Deleting custom prompt {prompt_id} for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to delete custom prompt for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only delete custom prompts for your own team")
+    
+    try:
+        # Get existing custom_prompts or initialize empty dict
+        existing_prompts = team.custom_prompts or {}
+        if not isinstance(existing_prompts, dict):
+            existing_prompts = {}
+        
+        prompts_list = existing_prompts.get("prompts", [])
+        if not isinstance(prompts_list, list):
+            prompts_list = []
+        
+        # Find the prompt to get its text
+        prompt_to_delete = None
+        for prompt in prompts_list:
+            if isinstance(prompt, dict) and prompt.get("id") == prompt_id:
+                prompt_to_delete = prompt
+                break
+        
+        if not prompt_to_delete:
+            log.warning(f"Custom prompt {prompt_id} not found for team {public_id}")
+            raise HTTPException(status_code=404, detail="Custom prompt not found")
+        
+        prompt_text = prompt_to_delete.get("text")
+        if not prompt_text:
+            log.warning(f"Custom prompt {prompt_id} has no text field")
+            raise HTTPException(status_code=400, detail="Invalid custom prompt: missing text")
+        
+        # Check if any users in the team have answered this prompt
+        # Query users where:
+        # 1. The prompt text appears in their selected_prompts JSONB array, OR
+        # 2. The prompt text appears as a key in their answers JSONB dict
+        log.info(f"Checking if prompt '{prompt_text}' is being used by team members")
+        
+        # PostgreSQL JSONB query to check if prompt is in selected_prompts array or answers dict
+        # For array: selected_prompts @> '["prompt text"]'::jsonb checks if array contains the value
+        # For object: answers ? 'prompt text' checks if the key exists
+        users_with_prompt = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id,
+            or_(
+                # Check if prompt text is in selected_prompts array
+                text("selected_prompts @> :prompt_json").bindparams(
+                    prompt_json=json.dumps([prompt_text])
+                ),
+                # Check if prompt text is a key in answers dict
+                text("answers ? :prompt_text").bindparams(prompt_text=prompt_text)
+            )
+        ).count()
+        
+        if users_with_prompt > 0:
+            log.warning(f"Cannot delete custom prompt '{prompt_text}' (id: {prompt_id}): {users_with_prompt} team member(s) have already answered it")
+            raise HTTPException(
+                status_code=400,
+                detail=f"This prompt cannot be deleted because {users_with_prompt} team member{'s have' if users_with_prompt > 1 else ' has'} already answered it. Please remove all answers before deleting the prompt."
+            )
+        
+        log.info(f"Prompt '{prompt_text}' is not in use, proceeding with deletion")
+        
+        # Remove the prompt from the list
+        updated_prompts = [
+            prompt for prompt in prompts_list
+            if not (isinstance(prompt, dict) and prompt.get("id") == prompt_id)
+        ]
+        
+        existing_prompts["prompts"] = updated_prompts
+        
+        # Update the team's custom_prompts
+        team.custom_prompts = existing_prompts
+        
+        # Explicitly mark the field as modified for SQLAlchemy
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'custom_prompts')
+        
+        db.commit()
+        db.refresh(team)
+        
+        log.info(f"Deleted custom prompt {prompt_id} for team {public_id}")
+        
+        return {"success": True}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to delete custom prompt {prompt_id} for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to delete custom prompt")
