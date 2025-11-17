@@ -12,7 +12,7 @@ from database import get_db
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
 from fastapi import HTTPException
-from utils.supabase_storage import upload_to_supabase_storage
+from utils.supabase_storage import upload_to_supabase_storage, sanitize_storage_key
 from datetime import datetime, timezone
 from schemas.peer_data import PeerDataResponse, PeerAnswer
 from utils.short_id import generate_short_id_with_collision_check, generate_file_id, generate_short_id
@@ -589,7 +589,8 @@ async def upsert_user(
                 log.info(f"Processing Bento widget image upload for widget id: {widget_id}")
 
                 # Create a stable filename based on the user's public_id and widget id
-                safe_widget_id = widget_id.replace("/", "_").replace("\\", "_").replace(":", "_")
+                # Use sanitize_storage_key for consistency and to handle any edge cases
+                safe_widget_id = sanitize_storage_key(widget_id)
                 image_filename = f"{generate_file_id(public_id)}-bento-{safe_widget_id}"
 
                 # Upload image to Supabase
@@ -637,8 +638,8 @@ async def upsert_user(
             prompt_text = field_name.replace("answer_image_", "")
             log.info(f"Processing image upload for prompt: '{prompt_text}'")
             
-            # Create safe filename
-            safe_prompt_label = prompt_text.replace("?", "").replace("'", "").replace(" ", "_").replace(".", "").replace(",", "").replace("/", "_").replace("\\", "_").replace(":", "_").lower()
+            # Create safe filename using proper sanitization (handles Unicode characters like ellipsis)
+            safe_prompt_label = sanitize_storage_key(prompt_text)
             image_filename = f"{generate_file_id(public_id)}-prompt-{safe_prompt_label}"
             
             # Upload image to Supabase

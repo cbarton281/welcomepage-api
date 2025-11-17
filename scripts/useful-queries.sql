@@ -1,16 +1,16 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users  order by created_at desc
 
-select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+924@gmail.com'  order by auth_email
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton%gmail.com'  order by auth_email
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
 from welcomepage_users 
-where  auth_email like 'charles.barton%johnny%@gmail.com'
+where  auth_email like 'charles.barton+%@gmail.com'
 order by auth_email
 
 select   auth_email, * from welcomepage_users where team_id = 109
 
-select name, auth_email, is_shareable,share_uuid, * from welcomepage_users where name like 'Gupree%'
+select name, auth_email, is_shareable,share_uuid, * from welcomepage_users where name like 'Joel%'
 
 select search_vector from welcomepage_users 
 where name  like 'jos%'
@@ -99,8 +99,9 @@ select subscription_status, * from teams where subscription_status is not null o
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
 
 SELECT *
-FROM public.teams order by id
-WHERE slack_settings->'slack_app' IS NOT NULL;
+FROM public.teams 
+WHERE custom_prompts IS NOT NULL
+order by id
 
 SELECT sharing_settings,*
 FROM public.teams
