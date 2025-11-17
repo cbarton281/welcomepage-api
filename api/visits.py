@@ -124,6 +124,11 @@ async def record_visit(
         log.error("No visitor public_id found in authenticated user")
         raise HTTPException(status_code=401, detail="Invalid authentication")
     
+    # Prevent users from recording visits to their own page
+    if visitor_public_id == visit_data.visited_user_public_id:
+        log.info(f"User attempted to record visit to their own page: {visitor_public_id}")
+        raise HTTPException(status_code=400, detail="Cannot record visit to your own page")
+    
     # Get client IP for geolocation - prioritize real_client_ip from request body
     if visit_data.real_client_ip:
         client_ip = visit_data.real_client_ip
@@ -273,23 +278,28 @@ async def get_visit_stats(
         total_visits = visits_query.count()
         
         # Count unique visitors (all visitors are authenticated users)
-        unique_visits = visits_query.distinct(PageVisit.visitor_public_id).count()
+        # Exclude visits made by the user to their own page
+        unique_visits_query = visits_query.filter(PageVisit.visitor_public_id != user.public_id)
+        unique_visits = unique_visits_query.distinct(PageVisit.visitor_public_id).count()
         
-        # Average duration (only for visits with duration data)
+        # Average duration (only for visits with duration data, excluding own visits)
         avg_duration = db.query(func.avg(PageVisit.visit_duration_seconds)).filter(
             PageVisit.visited_user_id == user.id,
+            PageVisit.visitor_public_id != user.public_id,
             PageVisit.visit_duration_seconds.isnot(None)
         ).scalar()
         
-        # Count unique countries
+        # Count unique countries (excluding own visits)
         countries_reached = db.query(func.count(func.distinct(PageVisit.visitor_country))).filter(
             PageVisit.visited_user_id == user.id,
+            PageVisit.visitor_public_id != user.public_id,
             PageVisit.visitor_country.isnot(None)
         ).scalar() or 0
         
-        # Get recent visitors (last 10 visitors)
+        # Get recent visitors (last 10 visitors, excluding own visits)
         recent_visitors = db.query(PageVisit.visitor_public_id).filter(
-            PageVisit.visited_user_id == user.id
+            PageVisit.visited_user_id == user.id,
+            PageVisit.visitor_public_id != user.public_id
         ).order_by(PageVisit.visit_start_time.desc()).limit(10).all()
         
         recent_visitor_ids = [v.visitor_public_id for v in recent_visitors if v.visitor_public_id]

@@ -185,20 +185,24 @@ async def get_team_members(
     has_previous = page > 1
     
     # Get visit counts for all team members in a single efficient query
-    member_ids = [member.id for member in members]
     visit_counts = {}
     
-    if member_ids:
+    if members:
         # Query to get unique visit counts for all members (all visitors are authenticated)
-        visit_stats = db.query(
-            PageVisit.visited_user_id,
-            func.count(func.distinct(PageVisit.visitor_public_id)).label('unique_visits')
-        ).filter(
-            PageVisit.visited_user_id.in_(member_ids)
-        ).group_by(PageVisit.visited_user_id).all()
+        # Exclude visits made by each member to their own page
+        # Use the already-loaded member objects to avoid extra queries
+        visit_stats = []
+        for member in members:
+            unique_visits = db.query(
+                func.count(func.distinct(PageVisit.visitor_public_id))
+            ).filter(
+                PageVisit.visited_user_id == member.id,
+                PageVisit.visitor_public_id != member.public_id
+            ).scalar() or 0
+            visit_stats.append((member.id, unique_visits))
         
         # Create a lookup dictionary for visit counts
-        visit_counts = {stat.visited_user_id: stat.unique_visits for stat in visit_stats}
+        visit_counts = {stat[0]: stat[1] for stat in visit_stats}
         log.info(f"Retrieved visit counts for {len(visit_counts)} members")
     
     # Transform data to match frontend expectations

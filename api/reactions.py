@@ -55,6 +55,12 @@ async def add_reaction(
         if cu_team_public_id != target_team_public_id:
             log.warning(f"Team access denied: actor_team={cu_team_public_id} target_team={target_team_public_id}")
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        
+        # Prevent users from reacting to their own page
+        current_user_id = current_user.get('user_id') if isinstance(current_user, dict) else None
+        if current_user_id == request.target_user_id:
+            log.warning(f"User attempted to react to their own page: {current_user_id}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot react to your own page")
 
         
         # Parse existing answers
@@ -90,8 +96,22 @@ async def add_reaction(
                 detail="User has already reacted with this emoji"
             )
         
-        # Use JWT-provided name to avoid extra DB query/load
-        reacting_user_name = current_user.get('name', 'Anonymous User') if isinstance(current_user, dict) else 'Anonymous User'
+        # Get the reacting user's name from the database
+        current_user_id = current_user.get('user_id') if isinstance(current_user, dict) else None
+        reacting_user = None
+        reacting_user_name = 'Anonymous User'
+        
+        if current_user_id:
+            reacting_user = (
+                db.query(WelcomepageUser)
+                .filter(WelcomepageUser.public_id == current_user_id)
+                .first()
+            )
+            if reacting_user and reacting_user.name:
+                reacting_user_name = reacting_user.name
+            else:
+                log.warning(f"Could not find user or name for user_id: {current_user_id}")
+        
         log.info(f"Reacting user name: {reacting_user_name}")
         
         # Create new reaction
