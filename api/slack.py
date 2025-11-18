@@ -964,6 +964,7 @@ async def handle_welcomepage_command(
     
     blocks = SlackBlocksService.user_found_blocks(user_data=user_data, team_data=team_data)
     log.info(f"User found - slack_user_id: {command_user_id}, public_id: {user.public_id}")
+    log.info(f"Generated blocks for slash command: {json.dumps(blocks, indent=2)}")
     
     return JSONResponse(
         status_code=200,

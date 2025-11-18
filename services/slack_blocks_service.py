@@ -106,7 +106,6 @@ class SlackBlocksService:
                     "text": f"{full_name}'s Wave",
                     "emoji": True
                 },
-                "block_id": "wave_gif",
                 "image_url": validated_wave_url,
                 "alt_text": f"Wave animation from {full_name}"
             })
@@ -119,7 +118,6 @@ class SlackBlocksService:
                     "text": f"{full_name}'s Wave",
                     "emoji": True
                 },
-                "block_id": "wave_gif",
                 "image_url": f"{wp_webapp_url}/default_wave.gif",
                 "alt_text": f"Wave animation from {full_name}"
             })
