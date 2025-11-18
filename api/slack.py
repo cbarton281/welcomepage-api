@@ -885,6 +885,87 @@ async def handle_slack_command(
         )
 
 
+@router.post("/interactivity")
+async def handle_slack_interactivity(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Handle Slack interactivity events (button clicks, etc.)
+    This endpoint receives interaction payloads from Slack when users interact with buttons
+    """
+    log = new_logger("handle_slack_interactivity")
+    try:
+        # Get request body for signature verification
+        body = await request.body()
+        timestamp = request.headers.get("X-Slack-Request-Timestamp")
+        signature = request.headers.get("X-Slack-Signature")
+        
+        if not timestamp or not signature:
+            log.error("Missing required Slack headers for interactivity")
+            raise HTTPException(status_code=400, detail="Missing required headers")
+        
+        # Verify Slack signature
+        verifier = SlackSignatureVerifier()
+        if not verifier.verify_signature(body, timestamp, signature):
+            log.error("Invalid Slack signature for interactivity")
+            raise HTTPException(status_code=403, detail="Invalid Slack signature")
+        
+        # Parse form data manually (Slack sends interactivity as form-urlencoded with 'payload' field)
+        # Body is already consumed, so parse from bytes
+        body_str = body.decode('utf-8')
+        parsed_data = parse_qs(body_str, keep_blank_values=True)
+        
+        # Extract payload (parse_qs returns lists, get first element)
+        payload_str = parsed_data.get("payload", [None])[0]
+        
+        if not payload_str:
+            log.error("Missing payload in interactivity request")
+            raise HTTPException(status_code=400, detail="Missing payload")
+        
+        # Parse the JSON payload
+        payload = json.loads(payload_str)
+        
+        # Extract useful information for logging
+        action_id = None
+        user_id = None
+        team_id = None
+        
+        if payload.get("type") == "block_actions":
+            actions = payload.get("actions", [])
+            if actions:
+                action = actions[0]
+                action_id = action.get("action_id")
+                user_id = payload.get("user", {}).get("id")
+                team_id = payload.get("team", {}).get("id")
+                
+                log.info(
+                    f"Slack interactivity - action_id: {action_id}, "
+                    f"user_id: {user_id}, team_id: {team_id}, "
+                    f"action_type: {action.get('type')}"
+                )
+        
+        # For URL buttons, we just need to acknowledge - no further action needed
+        # Return 200 OK quickly so Slack is happy
+        return JSONResponse(
+            status_code=200,
+            content={}
+        )
+        
+    except HTTPException:
+        raise
+    except json.JSONDecodeError as e:
+        log.error(f"Failed to parse interactivity payload: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid payload format")
+    except Exception as e:
+        log.error(f"Failed to handle Slack interactivity: {str(e)}", exc_info=True)
+        # Still return 200 to prevent Slack from retrying excessively
+        return JSONResponse(
+            status_code=200,
+            content={}
+        )
+
+
 async def handle_welcomepage_command(
     command_text: str,
     slack_team_id: str,

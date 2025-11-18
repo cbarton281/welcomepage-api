@@ -131,6 +131,7 @@ class SlackBlocksService:
                 "elements": [
                     {
                         "type": "button",
+                        "action_id": "open_welcomepage",
                         "text": {
                             "type": "plain_text",
                             "text": button_label
