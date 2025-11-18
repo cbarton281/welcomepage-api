@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
-from fastapi.responses import RedirectResponse, PlainTextResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body, Form
+from fastapi.responses import RedirectResponse, PlainTextResponse, JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 import os
 import json
 import logging
+import re
+from urllib.parse import parse_qs
 
 from database import get_db
 from services.slack_installation_service import SlackInstallationService
@@ -811,3 +813,164 @@ async def can_post_to_channel(
     except Exception as e:
         log.error(f"Error in can_post_to_channel: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while verifying Slack channel")
+
+
+@router.post("/commands")
+async def handle_slack_command(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Handle Slack slash commands
+    This endpoint receives slash command requests from Slack (e.g., /welcomepage)
+    """
+    log = new_logger("handle_slack_command")
+    try:
+        # Get request body for signature verification
+        body = await request.body()
+        timestamp = request.headers.get("X-Slack-Request-Timestamp")
+        signature = request.headers.get("X-Slack-Signature")
+        
+        if not timestamp or not signature:
+            log.error("Missing required Slack headers")
+            raise HTTPException(status_code=400, detail="Missing required headers")
+        
+        # Verify Slack signature
+        verifier = SlackSignatureVerifier()
+        if not verifier.verify_signature(body, timestamp, signature):
+            log.error("Invalid Slack signature")
+            raise HTTPException(status_code=403, detail="Invalid Slack signature")
+        
+        # Parse form data manually (Slack sends slash commands as form-urlencoded)
+        # Body is already consumed, so parse from bytes
+        body_str = body.decode('utf-8')
+        parsed_data = parse_qs(body_str, keep_blank_values=True)
+        
+        # Extract values (parse_qs returns lists, get first element)
+        command = parsed_data.get("command", [None])[0]
+        command_text = parsed_data.get("text", [""])[0] or ""
+        team_id = parsed_data.get("team_id", [None])[0]  # Slack team_id
+        user_id = parsed_data.get("user_id", [None])[0]  # Slack user_id of the person running the command
+        
+        log.info(f"Received Slack command: {command}, text: {command_text}, team_id: {team_id}, user_id: {user_id}")
+        
+        # Handle /welcomepage command
+        if command == "/welcomepage":
+            return await handle_welcomepage_command(
+                command_text=command_text,
+                slack_team_id=team_id,
+                db=db
+            )
+        
+        log.error(f"Unrecognized command: {command}")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "response_type": "ephemeral",
+                "text": f"Unrecognized command '{command}'"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to handle Slack command: {str(e)}", exc_info=True)
+        # Return 200 to prevent Slack from retrying
+        return JSONResponse(
+            status_code=200,
+            content={
+                "response_type": "ephemeral",
+                "text": "Oops! Something went wrong while processing your /welcomepage command. Please try again or reach out if the issue persists."
+            }
+        )
+
+
+async def handle_welcomepage_command(
+    command_text: str,
+    slack_team_id: str,
+    db: Session
+) -> JSONResponse:
+    """
+    Handle the /welcomepage slash command
+    Parses @teammember mentions and returns their welcomepage link
+    """
+    log = new_logger("handle_welcomepage_command")
+    log.info(f"Handling /welcomepage command for team {slack_team_id}, text: {command_text}")
+    
+    # Check if the user asked for help
+    if command_text.lower() == "help":
+        log.info("User requested help for /welcomepage command")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "response_type": "ephemeral",
+                "text": "Usage: /welcomepage @teammember — Get a quick link to a team member's profile."
+            }
+        )
+    
+    # Parse the command text to extract Slack user ID and display name
+    # Format: <@U123456|Display Name>
+    user_id_match = re.search(r'<@([A-Z0-9]+)\|', command_text)
+    display_name_match = re.search(r"\|([^>]+)>", command_text)
+    
+    if not user_id_match or not display_name_match:
+        log.error(f"Could not parse command text: {command_text}")
+        return JSONResponse(
+            status_code=200,
+            content={
+                "response_type": "ephemeral",
+                "text": "Sorry, I didn't recognize that command format. Please try using /welcomepage @teammember."
+            }
+        )
+    
+    command_user_id = user_id_match.group(1)  # Slack user ID of the mentioned user
+    display_name = display_name_match.group(1)
+    log.info(f"Parsed user_id: {command_user_id}, display_name: {display_name}")
+    
+    # Look up user by slack_user_id directly
+    user = db.query(WelcomepageUser).filter_by(
+        slack_user_id=command_user_id
+    ).first()
+    
+    if not user:
+        log.info(f"User not found - slack_user_id: {command_user_id}")
+        blocks = SlackBlocksService.user_not_found_blocks(display_name=display_name)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "response_type": "ephemeral",
+                "text": "User not found",
+                "blocks": blocks
+            }
+        )
+    
+    # User found - get team for team_data
+    team = user.team
+    
+    # Build user data dict for blocks
+    user_data = {
+        "name": user.name,
+        "role": user.role,
+        "location": user.location,
+        "public_id": user.public_id,
+        "profile_photo_url": user.profile_photo_url
+    }
+    
+    # Build team data dict
+    team_data = {
+        "name": team.organization_name if team and team.organization_name else "Team"
+    }
+    
+    blocks = SlackBlocksService.user_found_blocks(user_data=user_data, team_data=team_data)
+    log.info(f"User found - slack_user_id: {command_user_id}, public_id: {user.public_id}")
+    
+    return JSONResponse(
+        status_code=200,
+        content={
+            "response_type": "ephemeral",
+            "text": "Here is your teammate's Welcomepage",
+            "blocks": blocks
+        }
+    )
+
+
