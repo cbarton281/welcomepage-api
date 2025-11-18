@@ -68,7 +68,7 @@ class SlackBlocksService:
         title = user_data.get('role', 'Team Member')
         location = user_data.get('location', 'Unknown Location')
         public_id = user_data.get('public_id')
-        profile_photo_url = user_data.get('profile_photo_url')
+        wave_gif_url = user_data.get('wave_gif_url')
         
         # Build summary text
         template_str = Template("*$full_name*\n $title \n $location \n \n _*> *_")
@@ -82,10 +82,6 @@ class SlackBlocksService:
         button_label_template = Template("Go to $full_name's Story")
         button_label = button_label_template.substitute(full_name=full_name)
         
-        # Build image URL and validate it
-        image_url = SlackBlocksService.get_valid_image_url(profile_photo_url)
-        image_alt_text = f"{full_name} profile"
-        
         # Build welcomepage URL
         wp_url = f"{wp_webapp_url}/view/{public_id}"
         
@@ -95,13 +91,40 @@ class SlackBlocksService:
                 "text": {
                     "type": "mrkdwn",
                     "text": summary_paragraph
-                },
-                "accessory": {
-                    "type": "image",
-                    "image_url": image_url,
-                    "alt_text": image_alt_text
                 }
-            },
+            }
+        ]
+        
+        # Add wave gif if available
+        if wave_gif_url:
+            # Validate wave gif URL
+            validated_wave_url = SlackBlocksService.get_valid_image_url(wave_gif_url)
+            blocks.append({
+                "type": "image",
+                "title": {
+                    "type": "plain_text",
+                    "text": f"{full_name}'s Wave",
+                    "emoji": True
+                },
+                "block_id": "wave_gif",
+                "image_url": validated_wave_url,
+                "alt_text": f"Wave animation from {full_name}"
+            })
+        else:
+            # Use default wave gif if not available
+            blocks.append({
+                "type": "image",
+                "title": {
+                    "type": "plain_text",
+                    "text": f"{full_name}'s Wave",
+                    "emoji": True
+                },
+                "block_id": "wave_gif",
+                "image_url": f"{wp_webapp_url}/default_wave.gif",
+                "alt_text": f"Wave animation from {full_name}"
+            })
+        
+        blocks.extend([
             {
                 "type": "divider"
             },
@@ -119,7 +142,7 @@ class SlackBlocksService:
                     }
                 ]
             }
-        ]
+        ])
         return blocks
     
     @staticmethod

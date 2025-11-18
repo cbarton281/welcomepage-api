@@ -948,13 +948,13 @@ async def handle_welcomepage_command(
     team = user.team
     
     # Build user data dict for blocks
-    log.info(f"User profile_photo_url: {user.profile_photo_url}")
+    log.info(f"User wave_gif_url: {user.wave_gif_url}")
     user_data = {
         "name": user.name,
         "role": user.role,
         "location": user.location,
         "public_id": user.public_id,
-        "profile_photo_url": user.profile_photo_url
+        "wave_gif_url": user.wave_gif_url
     }
     
     # Build team data dict
