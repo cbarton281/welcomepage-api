@@ -79,7 +79,7 @@ class SlackBlocksService:
         )
         
         # Build button label
-        button_label_template = Template("Go to $full_name's Story")
+        button_label_template = Template("Go to $full_name's Welcomepage")
         button_label = button_label_template.substitute(full_name=full_name)
         
         # Build welcomepage URL
@@ -137,8 +137,7 @@ class SlackBlocksService:
                             "type": "plain_text",
                             "text": button_label
                         },
-                        "url": wp_url,
-                        "action_id": "actionId-0"
+                        "url": wp_url
                     }
                 ]
             }
