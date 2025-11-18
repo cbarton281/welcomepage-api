@@ -9,28 +9,29 @@ class SlackBlocksService:
     """Service for generating Slack block kit UI components"""
     
     @staticmethod
-    def get_valid_image_url(image_url: str) -> str:
+    def get_valid_image_url(image_url: Optional[str]) -> str:
         """Validate image URL and return default if invalid"""
         log = new_logger("get_valid_image_url")
         log.info(f"Validating image_url: {image_url}")
         
         # Get webapp URL from environment
         wp_webapp_url = os.getenv('WEBAPP_URL')
-        default_url = f"{wp_webapp_url}/default_profile.png"
+        default_url = f"{wp_webapp_url}/default_wave.gif"
         
         if not image_url:
+            log.info(f"No image_url provided, using default: {default_url}")
             return default_url
-            
-        try:
-            resp = requests.head(image_url, timeout=2)
-            log.info(f"Image validation - status: {resp.status_code}, content-type: {resp.headers.get('Content-Type', '')}")
-            
-            if resp.status_code == 200 and (resp.headers.get('Content-Type', '').startswith('image/') or resp.headers.get('Content-Type', '').startswith('video/webm')):
-                return image_url
-        except Exception as e:
-            log.info(f"Exception validating image_url {image_url}: {str(e)}")
-            
-        return default_url
+        
+        # Check if it's a valid URL format (starts with http:// or https://)
+        if not (image_url.startswith('http://') or image_url.startswith('https://')):
+            log.warning(f"Invalid URL format: {image_url}, using default")
+            return default_url
+        
+        # For Slack, we trust that Supabase public URLs are accessible
+        # Don't do HEAD request validation as it can fail due to CORS/timeout
+        # and Slack will handle broken images gracefully
+        log.info(f"Using image_url: {image_url}")
+        return image_url
     
     @staticmethod
     def user_not_found_blocks(display_name: str) -> List[Dict[str, Any]]:
@@ -50,7 +51,7 @@ class SlackBlocksService:
                 },
                 "accessory": {
                     "type": "image",
-                    "image_url": f"{wp_webapp_url}/default_profile.png",
+                    "image_url": f"{wp_webapp_url}/placeholder-user.jpg",
                     "alt_text": "profile not found"
                 }
             }
