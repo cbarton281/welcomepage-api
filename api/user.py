@@ -382,9 +382,29 @@ def get_public_page(share_uuid: str, db: Session = Depends(get_db), current_user
         
         # Check if team sharing is enabled and active
         from api.team import is_sharing_active
+        sharing_settings = team.sharing_settings or {}
+        enabled = sharing_settings.get("enabled", False)
+        expires_at_str = sharing_settings.get("expires_at")
+        
+        if not enabled:
+            log.warning(f"Team sharing is disabled for share_uuid: {share_uuid}, team: {team.public_id}")
+            raise HTTPException(status_code=404, detail="Sharing disabled")
+        
+        # Check if expired
+        if expires_at_str:
+            try:
+                from datetime import datetime
+                expires_datetime = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                now = datetime.now(expires_datetime.tzinfo if expires_datetime.tzinfo else None)
+                if expires_datetime <= now:
+                    log.warning(f"Team sharing has expired for share_uuid: {share_uuid}, team: {team.public_id}")
+                    raise HTTPException(status_code=404, detail="Sharing expired")
+            except (ValueError, TypeError):
+                pass  # If date parsing fails, continue with normal check
+        
         if not is_sharing_active(team):
             log.warning(f"Team sharing is not active for share_uuid: {share_uuid}, team: {team.public_id}")
-            raise HTTPException(status_code=404, detail="Page not found")
+            raise HTTPException(status_code=404, detail="Sharing expired")
         
         log.info(f"Public page access granted for share_uuid: {share_uuid}, user: {user.public_id}")
         
@@ -1216,6 +1236,71 @@ async def get_page_sharing(
     )
 
 
+@router.post("/users/{public_id}/page-sharing/regenerate", response_model=PageSharingResponse)
+async def regenerate_page_sharing_uuid(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Regenerate the sharing UUID for a user's page.
+    Only the page owner can regenerate the link.
+    """
+    log = new_logger("regenerate_page_sharing_uuid")
+    log.info(f"Regenerating page sharing UUID for user: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target user exists
+    target_user = db.query(WelcomepageUser).filter_by(public_id=public_id).first()
+    if not target_user:
+        log.warning(f"User not found: {public_id}")
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify current user is the owner (only owner can regenerate)
+    if user_public_id != public_id:
+        log.warning(f"User {user_public_id} attempted to regenerate page sharing UUID for user {public_id} but is not the owner")
+        raise HTTPException(status_code=403, detail="Access denied: You can only regenerate links for your own page")
+    
+    try:
+        # Generate new UUID with collision checking
+        max_attempts = 10
+        new_uuid = None
+        for attempt in range(max_attempts):
+            candidate_uuid = generate_short_id(25)
+            existing = db.query(WelcomepageUser).filter_by(share_uuid=candidate_uuid).first()
+            if not existing:
+                new_uuid = candidate_uuid
+                break
+            log.warning(f"Share UUID collision detected: {candidate_uuid} (attempt {attempt + 1}/{max_attempts})")
+        
+        if not new_uuid:
+            raise HTTPException(status_code=500, detail="Failed to generate unique share UUID after multiple attempts")
+        
+        target_user.share_uuid = new_uuid
+        log.info(f"Regenerated share UUID for user {public_id}: {new_uuid}")
+        
+        db.commit()
+        db.refresh(target_user)
+        
+        return PageSharingResponse(
+            is_shareable=target_user.is_shareable or False,
+            share_uuid=target_user.share_uuid
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to regenerate page sharing UUID for user {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to regenerate page sharing link")
+
+
 @router.patch("/users/{public_id}/page-sharing", response_model=PageSharingResponse)
 async def update_page_sharing(
     public_id: str,
@@ -1272,11 +1357,7 @@ async def update_page_sharing(
                 
                 target_user.share_uuid = new_uuid
                 log.info(f"Generated new share UUID for user {public_id}: {new_uuid}")
-        else:
-            # When disabling sharing, clear the UUID
-            if target_user.share_uuid:
-                target_user.share_uuid = None
-                log.info(f"Cleared share UUID for user {public_id} when disabling sharing")
+        # Note: We no longer clear UUID when disabling sharing to preserve links
         
         db.commit()
         db.refresh(target_user)

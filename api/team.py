@@ -1075,12 +1075,12 @@ async def update_sharing_settings(
                     existing_settings["uuid"] = new_uuid
                     log.info(f"Generated new sharing UUID for team {public_id}: {new_uuid}")
             else:
-                # When disabling sharing, clear uuid and expires_at
-                if previous_enabled:  # Only clear if it was previously enabled
-                    existing_settings.pop("uuid", None)
+                # When disabling sharing, preserve UUID but clear expires_at
+                # This allows links to remain valid if sharing is re-enabled
+                if previous_enabled:  # Only clear expires_at if it was previously enabled
                     existing_settings.pop("expires_at", None)
                     just_disabled = True
-                    log.info(f"Cleared UUID and expiry date for team {public_id} when disabling sharing")
+                    log.info(f"Disabled sharing for team {public_id} (UUID preserved)")
         
         # Update expires_at only if sharing is enabled (skip if we just disabled it)
         # This prevents re-setting expires_at when disabling sharing
@@ -1131,6 +1131,72 @@ async def update_sharing_settings(
         db.rollback()
         log.error(f"Failed to update sharing settings for team {public_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update sharing settings")
+
+
+@router.post("/teams/{public_id}/sharing-settings/regenerate", response_model=UpdateSharingSettingsResponse)
+async def regenerate_sharing_uuid(
+    public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Regenerate the sharing UUID for a team.
+    Only ADMIN users can regenerate sharing links.
+    """
+    log = new_logger("regenerate_sharing_uuid")
+    log.info(f"Regenerating sharing UUID for team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to regenerate sharing UUID for team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only regenerate links for your own team")
+    
+    try:
+        # Get existing sharing_settings or initialize empty dict
+        existing_settings = team.sharing_settings or {}
+        
+        # Generate new UUID
+        from utils.short_id import generate_short_id
+        new_uuid = generate_short_id(25)
+        existing_settings["uuid"] = new_uuid
+        log.info(f"Regenerated sharing UUID for team {public_id}: {new_uuid}")
+        
+        # Update the team's sharing_settings
+        team.sharing_settings = dict(existing_settings)
+        
+        # Explicitly mark the field as modified for SQLAlchemy
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(team, 'sharing_settings')
+        
+        db.commit()
+        db.refresh(team)
+        
+        return UpdateSharingSettingsResponse(
+            success=True,
+            message="Sharing link regenerated successfully",
+            enabled=existing_settings.get("enabled", False),
+            uuid=existing_settings.get("uuid"),
+            expires_at=existing_settings.get("expires_at")
+        )
+        
+    except Exception as e:
+        db.rollback()
+        log.error(f"Failed to regenerate sharing UUID for team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to regenerate sharing link")
 
 
 @router.get("/teams/{public_id}/sharing-settings/status")

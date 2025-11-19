@@ -1,7 +1,7 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users  order by created_at desc
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
-select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton%gmail.com'  order by auth_email
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+904@gmail.com'  order by auth_email
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
 from welcomepage_users 
@@ -94,7 +94,7 @@ select * from alembic_version
 
 
 select * from teams order by organization_name
-select * from teams where public_id = 'ied3vv24li' 
+select sharing_settings, * from teams where public_id = 'ied3vv24li' 
 select subscription_status, * from teams where subscription_status is not null order by id 
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
 
@@ -212,5 +212,3 @@ WHERE t.id = du.team_id
   );
 
 COMMIT;
-
-
