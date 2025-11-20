@@ -8,9 +8,9 @@ from welcomepage_users
 where  auth_email like 'charles.barton+%@gmail.com'
 order by auth_email
 
-select   auth_email, * from welcomepage_users where team_id = 109
+select   auth_email, * from welcomepage_users where team_id = 146
 
-select name, auth_email, is_shareable,share_uuid, * from welcomepage_users where name like 'Joel%'
+select name, auth_email, is_shareable,share_uuid, * from welcomepage_users where name like 'Angel%'
 
 select search_vector from welcomepage_users 
 where name  like 'jos%'
@@ -92,8 +92,13 @@ select * from verification_codes order by id desc
 
 select * from alembic_version
 
-
+---------------------------
+---------------------------
+---------------------------
+--- TEAMS QUERIES ---------
+---------------------------
 select * from teams order by organization_name
+select * from teams where organization_name like 'IBM%'
 select sharing_settings, * from teams where public_id = 'ied3vv24li' 
 select subscription_status, * from teams where subscription_status is not null order by id 
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
