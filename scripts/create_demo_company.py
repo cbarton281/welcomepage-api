@@ -53,6 +53,10 @@ from sqlalchemy.orm import Session
 # Add the parent directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 from database import SessionLocal
 from models.team import Team
 from models.welcomepage_user import WelcomepageUser
@@ -268,22 +272,24 @@ TEAM_MEMBERS = [
 # User public IDs will be constructed from prefix: {prefix}001, {prefix}002, etc.
 
 # Sample Spotify URLs (playlists, tracks, shows) - one per user
+# Use tracks and albums primarily - they're more likely to be public and accessible
+# Playlists can be private and return 404, so we use fewer of them
 SAMPLE_SPOTIFY_URLS = [
-    "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",  # Today's Top Hits
-    "https://open.spotify.com/playlist/37i9dQZF1DX4Wsb4d7NKfP",  # Discover Weekly
-    "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",  # Popular track
-    "https://open.spotify.com/playlist/37i9dQZF1DX76WlFD35A8z",  # Chill Hits
-    "https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk",  # Popular podcast
-    "https://open.spotify.com/playlist/37i9dQZF1DX0XUsuxWHRQd",  # RapCaviar
+    "https://open.spotify.com/track/3bE5slaVEfaDreqARl6k4M",  # Pearl Jam - Yellow Ledbetter (known working track)
     "https://open.spotify.com/track/5VSCgNlSmTV2Yq5lB40Eaw",  # Popular track
-    "https://open.spotify.com/playlist/37i9dQZF1DX4o1oenSJRJd",  # All Out 80s
-    "https://open.spotify.com/show/1VXcH8QHkjRcTCEd88U3ti",  # Popular podcast
-    "https://open.spotify.com/playlist/37i9dQZF1DXcF6B6QPhFDv",  # Rock Classics
+    "https://open.spotify.com/album/1ATL5GLyefJaxhQzSPVrLX",  # Popular album
     "https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp",  # Popular track
-    "https://open.spotify.com/playlist/37i9dQZF1DX1s9knjP51Oa",  # Coffee House
-    "https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCl",  # Popular podcast
-    "https://open.spotify.com/playlist/37i9dQZF1DX4JAvHpjipBk",  # New Music Friday
+    "https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk",  # Popular podcast
     "https://open.spotify.com/track/5y38S3svDxqF4fmPaUxp8R",  # Popular track
+    "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album
+    "https://open.spotify.com/track/1Je1IMUlBXcx1Fz0WE7oPT",  # Popular track
+    "https://open.spotify.com/show/1VXcH8QHkjRcTCEd88U3ti",  # Popular podcast
+    "https://open.spotify.com/album/6ZvDJs17O3woQirttKRYCG",  # Popular album
+    "https://open.spotify.com/track/2VxeLyX666F8uXCJ0dZF8B",  # Popular track
+    "https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCl",  # Popular podcast
+    "https://open.spotify.com/album/3mH6qwIy9crq0I9YQbOuDf",  # Popular album
+    "https://open.spotify.com/track/0VjIjW4GlU5U4D1y1z3iNi",  # Popular track
+    "https://open.spotify.com/album/1y8NcY4wTqL1zH5z1JmJ9J",  # Popular album
 ]
 
 # Sample YouTube URLs - one per user
@@ -639,6 +645,200 @@ def get_youtube_video_caption(video_id: str) -> str:
     """Get a caption for a YouTube video based on its ID."""
     return YOUTUBE_VIDEO_CAPTIONS.get(video_id, "Currently watching this video.")
 
+def extract_spotify_type_and_id(spotify_url: str) -> tuple[str, str]:
+    """
+    Extract Spotify type and ID from URL.
+    Returns (api_type, item_id) where api_type in ['playlists', 'shows', 'tracks', 'artists', 'albums', 'episodes']
+    """
+    if 'spotify.com' not in spotify_url:
+        return None, None
+    
+    # Split by '/' and find the type
+    parts = spotify_url.split('?')[0].split('#')[0].strip('/').split('/')
+    api_map = {
+        'playlist': 'playlists',
+        'show': 'shows',
+        'track': 'tracks',
+        'artist': 'artists',
+        'album': 'albums',
+        'episode': 'episodes',
+    }
+    
+    for i, p in enumerate(parts):
+        if p in api_map and i + 1 < len(parts):
+            return api_map[p], parts[i + 1]
+    return None, None
+
+def get_spotify_client_credentials_token() -> str:
+    """Get Spotify access token using client credentials flow."""
+    import base64
+    SPOTIFY_CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID")
+    SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET")
+    
+    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+        log.warning("SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET not set. Spotify images will be skipped.")
+        log.debug(f"SPOTIFY_CLIENT_ID present: {bool(SPOTIFY_CLIENT_ID)}, SPOTIFY_CLIENT_SECRET present: {bool(SPOTIFY_CLIENT_SECRET)}")
+        return None
+    
+    token_url = 'https://accounts.spotify.com/api/token'
+    basic = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
+    headers = {
+        'Authorization': f'Basic {basic}',
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }
+    data = {'grant_type': 'client_credentials'}
+    
+    try:
+        resp = requests.post(token_url, headers=headers, data=data, timeout=10)
+        if not resp.ok:
+            log.warning(f"Failed to get Spotify token: {resp.status_code}")
+            return None
+        return resp.json().get('access_token')
+    except Exception as e:
+        log.warning(f"Error getting Spotify token: {e}")
+        return None
+
+def fetch_spotify_data(spotify_url: str) -> dict:
+    """
+    Fetch full Spotify data from Spotify API (matching /api/spotify/resolve endpoint exactly).
+    Returns a dict with url, name, image, type, etc., or empty dict if unavailable.
+    """
+    if not spotify_url:
+        return {}
+    
+    api_type, item_id = extract_spotify_type_and_id(spotify_url)
+    if not api_type or not item_id:
+        log.warning(f"Could not extract type/ID from Spotify URL: {spotify_url}")
+        return {}
+    
+    token = get_spotify_client_credentials_token()
+    if not token:
+        return {}
+    
+    endpoint = f"https://api.spotify.com/v1/{api_type}/{item_id}"
+    headers = {'Authorization': f'Bearer {token}'}
+    
+    try:
+        r = requests.get(endpoint, headers=headers, timeout=10)
+        if not r.ok:
+            # 404 can happen for private playlists or invalid IDs
+            # Log but don't fail - we'll create a fallback structure
+            if r.status_code == 404:
+                log.warning(f"Spotify playlist/resource not found (404) for {spotify_url}. May be private or invalid.")
+            else:
+                log.warning(f"Spotify API error {r.status_code} for {spotify_url}: {r.text[:200]}")
+            return {}
+        
+        data = r.json()
+        
+        # Map response based on type (matching the app's /api/spotify/resolve endpoint exactly)
+        if api_type == 'playlists':
+            return {
+                "url": f"https://open.spotify.com/playlist/{item_id}",
+                "name": data.get('name'),
+                "image": (data.get('images') or [{}])[0].get('url') if data.get('images') else None,
+                "type": 'playlist',
+                "description": data.get('description'),
+                "owner": (data.get('owner') or {}).get('display_name'),
+                "trackCount": (data.get('tracks') or {}).get('total'),
+            }
+        elif api_type == 'shows':
+            return {
+                "url": f"https://open.spotify.com/show/{item_id}",
+                "name": data.get('name'),
+                "image": (data.get('images') or [{}])[0].get('url') if data.get('images') else None,
+                "type": 'podcast',
+                "description": data.get('description'),
+                "publisher": data.get('publisher'),
+                "episodeCount": data.get('total_episodes'),
+            }
+        elif api_type == 'tracks':
+            album = data.get('album') or {}
+            artists = data.get('artists') or []
+            return {
+                "url": f"https://open.spotify.com/track/{item_id}",
+                "name": data.get('name'),
+                "image": (album.get('images') or [{}])[0].get('url') if album.get('images') else None,
+                "type": 'track',
+                "artist": (artists[0].get('name') if artists else None),
+                "album": album.get('name'),
+                "duration": data.get('duration_ms'),
+            }
+        elif api_type == 'artists':
+            return {
+                "url": f"https://open.spotify.com/artist/{item_id}",
+                "name": data.get('name'),
+                "image": (data.get('images') or [{}])[0].get('url') if data.get('images') else None,
+                "type": 'artist',
+            }
+        elif api_type == 'albums':
+            artists = data.get('artists') or []
+            return {
+                "url": f"https://open.spotify.com/album/{item_id}",
+                "name": data.get('name'),
+                "image": (data.get('images') or [{}])[0].get('url') if data.get('images') else None,
+                "type": 'album',
+                "artist": (artists[0].get('name') if artists else None),
+                "trackCount": data.get('total_tracks'),
+            }
+        elif api_type == 'episodes':
+            show = data.get('show') or {}
+            return {
+                "url": f"https://open.spotify.com/episode/{item_id}",
+                "name": data.get('name'),
+                "image": (data.get('images') or [{}])[0].get('url') if data.get('images') else None,
+                "type": 'episode',
+                "description": data.get('description'),
+                "publisher": show.get('publisher'),
+                "showName": show.get('name'),
+                "duration": data.get('duration_ms'),
+            }
+        
+        return {}
+    except Exception as e:
+        log.warning(f"Error fetching Spotify data for {spotify_url}: {e}")
+        return {}
+
+def fetch_spotify_image_url(spotify_url: str) -> str:
+    """
+    Fetch Spotify cover art image URL from Spotify API.
+    Returns the image URL or empty string if unavailable.
+    """
+    spotify_data = fetch_spotify_data(spotify_url)
+    return spotify_data.get('image', '') if spotify_data else ""
+
+def download_spotify_image(image_url: str) -> bytes:
+    """Download Spotify cover art image."""
+    try:
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+        log.info(f"Successfully downloaded Spotify image from {image_url}")
+        return response.content
+    except requests.RequestException as e:
+        log.error(f"Failed to download Spotify image from {image_url}: {e}")
+        raise
+
+async def clone_spotify_image_to_user(image_content: bytes, user_public_id: str, spotify_url: str) -> str:
+    """Clone Spotify cover art to the user's storage location."""
+    try:
+        # Extract a simple identifier from the Spotify URL for the filename
+        api_type, item_id = extract_spotify_type_and_id(spotify_url)
+        if api_type and item_id:
+            filename = f"{user_public_id}-spotify-{item_id}.jpg"
+        else:
+            filename = f"{user_public_id}-spotify-cover.jpg"
+        
+        image_url = await upload_to_supabase_storage(
+            file_content=image_content,
+            filename=filename,
+            content_type="image/jpeg"
+        )
+        log.info(f"Successfully cloned Spotify image for user {user_public_id}: {image_url}")
+        return image_url
+    except Exception as e:
+        log.error(f"Failed to clone Spotify image for user {user_public_id}: {e}")
+        raise
+
 def read_logo_file(file_path: str) -> bytes:
     """Read logo from local file."""
     try:
@@ -705,7 +905,7 @@ def create_team(team_name: str, logo_url: str, team_public_id: str, db: Session)
     log.info(f"Created team: {team_name} (ID: {team.id}, Public ID: {team_public_id})")
     return team
 
-def create_bento_widgets(user_index: int, location: str, photo_v2_url: str = "", photo_v2_caption: str = "", spotify_url: str = "", youtube_url: str = "", video_thumbnail_url: str = "", video_caption: str = "") -> List[Dict[str, Any]]:
+def create_bento_widgets(user_index: int, location: str, photo_v2_url: str = "", photo_v2_caption: str = "", spotify_url: str = "", spotify_image_url: str = "", spotify_data: dict = None, youtube_url: str = "", video_thumbnail_url: str = "", video_caption: str = "") -> List[Dict[str, Any]]:
     """Create all available bento widgets for a user."""
     widgets = []
     
@@ -750,11 +950,24 @@ def create_bento_widgets(user_index: int, location: str, photo_v2_url: str = "",
                 "isCropping": False
             }
         elif widget_type['id'] == 'spotify':
-            widget["content"] = {
-                "text": "Currently listening to...",
-                "url": spotify_url,
-                "spotifyUrl": spotify_url
-            }
+            # Spotify widget expects SpotifyData structure (matching /api/spotify/resolve response)
+            if spotify_url and spotify_data and spotify_data.get('url'):
+                # Use the fetched Spotify data and replace the image URL with our uploaded Supabase URL
+                widget_content = spotify_data.copy()
+                # Always use the uploaded image URL if available, otherwise keep the original
+                if spotify_image_url:
+                    widget_content["image"] = spotify_image_url
+                elif not widget_content.get('image'):
+                    widget_content["image"] = ""
+                widget["content"] = widget_content
+            elif spotify_url:
+                # Fallback if we don't have full Spotify data - create minimal structure
+                widget["content"] = {
+                    "url": spotify_url,
+                    "image": spotify_image_url if spotify_image_url else ""
+                }
+            else:
+                widget["content"] = None
         elif widget_type['id'] == 'video':
             # Extract video ID from YouTube URL
             video_id = extract_youtube_video_id(youtube_url)
@@ -810,6 +1023,8 @@ def create_user(
     photo_v2_url: str,
     photo_v2_caption: str,
     spotify_url: str,
+    spotify_image_url: str,
+    spotify_data: dict,
     youtube_url: str,
     video_thumbnail_url: str,
     video_caption: str,
@@ -832,8 +1047,8 @@ def create_user(
         for prompt, answer_text in prompts_dict.items()
     }
     
-    # Create bento widgets with photo-v2 URL, caption, Spotify URL, YouTube URL, thumbnail URL, and caption
-    bento_widgets = create_bento_widgets(user_index, location, photo_v2_url, photo_v2_caption, spotify_url, youtube_url, video_thumbnail_url, video_caption)
+    # Create bento widgets with photo-v2 URL, caption, Spotify URL, Spotify image URL, Spotify data, YouTube URL, thumbnail URL, and caption
+    bento_widgets = create_bento_widgets(user_index, location, photo_v2_url, photo_v2_caption, spotify_url, spotify_image_url, spotify_data, youtube_url, video_thumbnail_url, video_caption)
     
     # Create handwave emoji (default)
     handwave_emoji = {
@@ -1483,7 +1698,14 @@ async def main_async():
                 # In actual run, this would be uploaded to: {public_id}-video-thumbnail-{video_id}.jpg
                 final_video_thumbnail_url = f"[Would be uploaded to: {public_id}-video-thumbnail-{video_id}.jpg]" if video_id else ""
                 
-                bento_widgets = create_bento_widgets(i, location, final_photo_v2_url, photo_v2_caption, spotify_url, youtube_url, final_video_thumbnail_url, video_caption)
+                # For dry-run, show what the Spotify image URL would be (after upload)
+                # In actual run, this would be uploaded to: {public_id}-spotify-{item_id}.jpg
+                final_spotify_image_url = f"[Would be uploaded to: {public_id}-spotify-cover.jpg]" if spotify_url else ""
+                
+                # Fetch full Spotify data for dry-run (for widget structure)
+                spotify_data = fetch_spotify_data(spotify_url) if spotify_url else None
+                
+                bento_widgets = create_bento_widgets(i, location, final_photo_v2_url, photo_v2_caption, spotify_url, final_spotify_image_url, spotify_data, youtube_url, final_video_thumbnail_url, video_caption)
                 
                 # Build complete user record
                 user_record = build_user_json_record(
@@ -1524,8 +1746,77 @@ async def main_async():
                         log.warning(f"Failed to download/upload YouTube thumbnail for user {public_id}: {e}. Continuing without thumbnail.")
                         cloned_video_thumbnail_url = ""
                 
+                # Download and clone Spotify cover art (external operation - not part of DB transaction)
+                cloned_spotify_image_url = ""
+                spotify_data = None
+                if spotify_url:
+                    try:
+                        # Fetch full Spotify data (name, type, etc.) for widget structure
+                        spotify_data = fetch_spotify_data(spotify_url)
+                        # Check if we got valid data (not empty dict) and it has required fields
+                        if spotify_data and spotify_data.get('url') and spotify_data.get('name'):
+                            # We have valid Spotify data with name - try to get image
+                            if spotify_data.get('image'):
+                                spotify_image_url = spotify_data.get('image')
+                                try:
+                                    spotify_image_content = download_spotify_image(spotify_image_url)
+                                    cloned_spotify_image_url = await clone_spotify_image_to_user(spotify_image_content, public_id, spotify_url)
+                                    # Update spotify_data with our uploaded image URL
+                                    spotify_data["image"] = cloned_spotify_image_url
+                                    log.info(f"Successfully downloaded and uploaded Spotify image for user {public_id}")
+                                except Exception as img_error:
+                                    log.warning(f"Failed to download/upload Spotify image for user {public_id}: {img_error}. Keeping original image URL.")
+                                    # Keep the original Spotify image URL if upload fails
+                                    spotify_data["image"] = spotify_image_url
+                            else:
+                                # No image available from Spotify API
+                                log.warning(f"Spotify data fetched but no image available for {spotify_url}. Continuing without image.")
+                                spotify_data["image"] = ""
+                        else:
+                            # fetch_spotify_data returned empty dict or missing required fields
+                            # This usually means Spotify credentials are not set or API call failed
+                            log.warning(f"Could not fetch Spotify data for {spotify_url}. Spotify credentials may not be set. Creating minimal structure.")
+                            # Extract type from URL as fallback
+                            api_type, item_id = extract_spotify_type_and_id(spotify_url)
+                            type_map = {
+                                'playlists': 'playlist',
+                                'shows': 'podcast',
+                                'tracks': 'track',
+                                'artists': 'artist',
+                                'albums': 'album',
+                                'episodes': 'episode'
+                            }
+                            spotify_type = type_map.get(api_type, 'playlist') if api_type else 'playlist'
+                            # Create a proper structure with at least required fields
+                            spotify_data = {
+                                "url": spotify_url,
+                                "name": f"Spotify {spotify_type.title()}",  # Fallback name
+                                "type": spotify_type,
+                                "image": ""
+                            }
+                    except Exception as e:
+                        log.warning(f"Failed to process Spotify data for user {public_id}: {e}. Creating minimal structure.")
+                        cloned_spotify_image_url = ""
+                        # Extract type from URL as fallback
+                        api_type, item_id = extract_spotify_type_and_id(spotify_url)
+                        type_map = {
+                            'playlists': 'playlist',
+                            'shows': 'podcast',
+                            'tracks': 'track',
+                            'artists': 'artist',
+                            'albums': 'album',
+                            'episodes': 'episode'
+                        }
+                        spotify_type = type_map.get(api_type, 'playlist') if api_type else 'playlist'
+                        spotify_data = {
+                            "url": spotify_url,
+                            "name": f"Spotify {spotify_type.title()}",  # Fallback name
+                            "type": spotify_type,
+                            "image": ""
+                        } if spotify_url else None
+                
                 # Create user (database operation - part of transaction)
-                user = create_user(team_id, public_id, name, role, location, greeting, nickname, prompts_dict, i, cloned_gif_url, cloned_photo_v2_url, photo_v2_caption, spotify_url, youtube_url, cloned_video_thumbnail_url, video_caption, auth_email, auth_role, db)
+                user = create_user(team_id, public_id, name, role, location, greeting, nickname, prompts_dict, i, cloned_gif_url, cloned_photo_v2_url, photo_v2_caption, spotify_url, cloned_spotify_image_url, spotify_data, youtube_url, cloned_video_thumbnail_url, video_caption, auth_email, auth_role, db)
                 log.info(f"User {i+1} added to transaction (will be committed at end): {public_id}")
                 
                 # Store both the user object (for search_vector update) and summary dict
