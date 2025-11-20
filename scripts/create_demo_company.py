@@ -696,7 +696,7 @@ def create_team(team_name: str, logo_url: str, team_public_id: str, db: Session)
         stripe_customer_id=None,
         stripe_subscription_id=None,
         stripe_subscription_status=None,
-        subscription_status="pro",  # Set as pro for demo
+        subscription_status="unlimited",  # Set as unlimited for demo
     )
     
     db.add(team)
@@ -1202,7 +1202,7 @@ def build_team_json_record(
         "stripe_customer_id": None,
         "stripe_subscription_id": None,
         "stripe_subscription_status": None,
-        "subscription_status": "pro"
+        "subscription_status": "unlimited"
     }
 
 def build_user_json_record(
