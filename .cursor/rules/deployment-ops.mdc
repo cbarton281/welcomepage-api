@@ -19,6 +19,8 @@ alwaysApply: true
 - Include both upgrade and downgrade operations
 - Use proper migration naming conventions
 - Document database schema changes
+- **ALWAYS increment Alembic revision numbers by 2** (e.g., if last revision is 20250863, next should be 20250865)
+- This allows retrofitting a version in-between if necessary in the future
 
 ## Environment Configuration
 - Use environment variables for configuration

@@ -105,7 +105,7 @@ async def get_team_members(
     public_id: str,
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(20, ge=1, le=100, description="Number of members per page"),
-    sort_by: str = Query("date_created", description="Sort field: date_created, last_modified, name, email"),
+    sort_by: str = Query("date_created", description="Sort field: date_created, last_modified, name, email, auth_role"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
     search: Optional[str] = Query(None, description="Search by name or email"),
     db: Session = Depends(get_db),
@@ -164,6 +164,8 @@ async def get_team_members(
         sort_column = WelcomepageUser.name
     elif sort_by == "email":
         sort_column = WelcomepageUser.auth_email
+    elif sort_by == "auth_role":
+        sort_column = WelcomepageUser.auth_role
     else:
         sort_column = WelcomepageUser.created_at  # default
     

@@ -46,6 +46,9 @@ alwaysApply: true
 - Test migrations on development data
 - Include both upgrade and downgrade operations
 - Use proper migration dependencies
+- **ALWAYS increment Alembic revision numbers by 2** (e.g., if last revision is 20250863, next should be 20250865)
+- This allows retrofitting a version in-between if necessary in the future
+- Format: YYYYMMDD (8 digits) followed by sequential number, always increment by 2
 
 ## Query Patterns
 - Use SQLAlchemy ORM for most queries
