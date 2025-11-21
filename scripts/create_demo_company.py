@@ -138,7 +138,8 @@ TEAM_MEMBERS = [
             "What's your favorite way to spend a weekend?": "Hiking with my dog and then trying a new restaurant in the evening. Perfect balance of activity and relaxation!",
             "What's your go-to productivity hack?": "Time blocking my calendar with specific tasks rather than general 'work time'. It helps me stay focused and track progress.",
             "I geek out on…": "Vintage synthesizers and electronic music production. I have a small home studio with some classic gear.",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Sarah Taylor", "Product Manager", "London, UK", "Hi everyone!", "Sarah",
@@ -147,7 +148,8 @@ TEAM_MEMBERS = [
             "What's something unexpected about you?": "I used to be a professional chess player before getting into tech. The strategic thinking definitely helps in my current role!",
             "What's a book/podcast that changed your perspective?": "The 'How I Built This' podcast showed me that every successful company started with someone just trying to solve a problem.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm a morning person, so I do my best deep work between 7-11am. Afternoons are for collaboration and meetings.",
-        }
+        },
+        True  # public_sharing flag
     ),
     (
         "Marcus Lee", "UX Designer", "Seattle, WA, USA", "Hello!", "Marcus",
@@ -156,7 +158,8 @@ TEAM_MEMBERS = [
             "What's your favorite way to spend a weekend?": "I'm part of a community garden and spend most weekends there. It's my meditation and social time rolled into one.",
             "What's a skill you're currently learning?": "I'm learning to play the guitar. It's been a great way to unwind after work and exercise a different part of my brain.",
             "My simple pleasures…": "A perfectly brewed cup of coffee in the morning, a good book before bed, and Sunday morning farmers markets.",
-        }
+        },
+        False  # public_sharing flag - every 3rd user (index 2)
     ),
     (
         "Samuel Rivera", "DevOps Engineer", "Toronto, ON, Canada", "Hey!", "Sam",
@@ -165,7 +168,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "The Pomodoro technique changed my life! 25 minutes of focused work followed by a 5-minute break works perfectly for my brain.",
             "What's a book/podcast that changed your perspective?": "'Atomic Habits' completely changed how I approach building new skills and breaking bad habits.",
             "What I need from teammates to do great work": "Clear requirements and context. I do my best work when I understand the 'why' behind what we're building.",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Sophia Kim", "Frontend Developer", "Amsterdam, Netherlands", "Hi there!", "Sophia",
@@ -174,7 +178,8 @@ TEAM_MEMBERS = [
             "What's a skill you're currently learning?": "I'm taking a course on machine learning. It's fascinating to see how AI can be applied to solve real-world problems.",
             "I geek out on…": "Astrophotography. I love capturing images of deep space objects with my telescope and camera setup.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I need complete silence for focused work, so I block 2-4pm every day for heads-down coding. Mornings are for standups and planning.",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Jessica Patel", "Backend Developer", "Boston, MA, USA", "Hello everyone!", "Jessica",
@@ -183,7 +188,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "I use the 'two-minute rule' - if something takes less than two minutes, I do it immediately instead of adding it to a todo list.",
             "What's a book/podcast that changed your perspective?": "'The Design of Everyday Things' opened my eyes to how important good UX is in everything we interact with.",
             "What I need from teammates to do great work": "Quick responses to questions. I'd rather ask a quick question than spend hours going down the wrong path.",
-        }
+        },
+        True  # public_sharing flag - every 3rd user (index 5)
     ),
     (
         "Katherine Wong", "Data Scientist", "Berlin, Germany", "Hey!", "Katherine",
@@ -192,7 +198,8 @@ TEAM_MEMBERS = [
             "What's your favorite way to spend a weekend?": "Exploring local museums and art galleries. There's always something new to discover even in familiar places.",
             "What's a skill you're currently learning?": "I'm learning Spanish through Duolingo. My goal is to be conversational by the end of the year.",
             "My simple pleasures…": "The smell of rain on hot pavement, finding a new favorite song, and that first bite of a really good sandwich.",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Ryan Johnson", "QA Engineer", "Vancouver, BC, Canada", "Hi!", "Ryan",
@@ -201,7 +208,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "I start every day by writing down my top 3 priorities. Everything else can wait until those are done.",
             "I geek out on…": "Mechanical keyboards. I've built several custom keyboards and love the sound and feel of different switches.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm most productive late at night (10pm-2am). During the day, I'm better at meetings and collaborative work.",
-        }
+        },
+        True  # public_sharing flag
     ),
     (
         "Quentin Martinez", "Technical Writer", "Portland, OR, USA", "Hello there!", "Quentin",
@@ -210,7 +218,8 @@ TEAM_MEMBERS = [
             "What's your favorite way to spend a weekend?": "Cooking elaborate meals from scratch. I love trying new recipes and techniques from different cuisines.",
             "What's a book/podcast that changed your perspective?": "The 'Freakonomics' podcast made me think differently about cause and effect in the world around us.",
             "What I need from teammates to do great work": "Honest feedback, especially early in the process. It's much easier to pivot early than to redo work later.",
-        }
+        },
+        True  # public_sharing flag - every 3rd user (index 8)
     ),
     (
         "Brooke Thompson", "Security Engineer", "Paris, France", "Hey everyone!", "Brooke",
@@ -219,7 +228,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "I batch similar tasks together. All my meetings in one block, all my coding in another, all my emails in another.",
             "What's a skill you're currently learning?": "I'm teaching myself woodworking. I just finished building my first bookshelf and I'm hooked!",
             "I geek out on…": "Coffee brewing methods. I'm always experimenting with different beans, grind sizes, and brewing techniques.",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Drew Garcia", "Mobile Developer", "Austin, TX, USA", "Hi!", "Drew",
@@ -228,7 +238,8 @@ TEAM_MEMBERS = [
             "What's a skill you're currently learning?": "I'm learning to cook authentic Italian cuisine. My carbonara is getting pretty good, if I do say so myself.",
             "My simple pleasures…": "Watching the sunset from my balcony, fresh sheets on the bed, and unexpected compliments from strangers.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I split my day: deep work in the morning (9am-12pm), meetings in the afternoon (1-4pm), then more focused work (4-6pm).",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Amelia Smith", "Product Designer", "Dublin, Ireland", "Hello!", "Amelia",
@@ -237,7 +248,8 @@ TEAM_MEMBERS = [
             "What's a book/podcast that changed your perspective?": "'Thinking, Fast and Slow' by Daniel Kahneman made me much more aware of my own cognitive biases and decision-making processes.",
             "I geek out on…": "Retro video game consoles. I collect and restore old systems, and I'm working on a complete NES library.",
             "What I need from teammates to do great work": "Time to focus without interruptions. I appreciate when people respect my 'do not disturb' hours.",
-        }
+        },
+        True  # public_sharing flag - every 3rd user (index 11)
     ),
     (
         "Emma Brown", "Full Stack Developer", "Montreal, QC, Canada", "Hey there!", "Emma",
@@ -246,7 +258,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "Time blocking my calendar with specific tasks rather than general 'work time'. It helps me stay focused and track progress.",
             "My simple pleasures…": "The sound of birds in the morning, a warm shower after a long day, and laughing until my stomach hurts.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I do my best coding work in the afternoon (2-6pm). Mornings are for emails, standups, and lighter tasks.",
-        }
+        },
+        False  # public_sharing flag
     ),
     (
         "Sage Williams", "Engineering Manager", "Barcelona, Spain", "Hi everyone!", "Sage",
@@ -255,7 +268,8 @@ TEAM_MEMBERS = [
             "What's something unexpected about you?": "I can speak five languages! I grew up in an international community and picked them up along the way.",
             "What's a skill you're currently learning?": "I'm learning to play the guitar. It's been a great way to unwind after work and exercise a different part of my brain.",
             "What I need from teammates to do great work": "Trust and autonomy. Give me the problem to solve and let me figure out the best approach.",
-        }
+        },
+        True  # public_sharing flag
     ),
     (
         "Olivia Davis", "Site Reliability Engineer", "New York, NY, USA", "Hello!", "Olivia",
@@ -264,7 +278,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "The Pomodoro technique changed my life! 25 minutes of focused work followed by a 5-minute break works perfectly for my brain.",
             "My simple pleasures…": "A clean workspace, the perfect temperature in my apartment, and catching up with old friends.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm a morning person, so I do my best deep work between 7-11am. Afternoons are for collaboration and meetings.",
-        }
+        },
+        True  # public_sharing flag - every 3rd user (index 14)
     ),
 ]
 
@@ -279,17 +294,17 @@ SAMPLE_SPOTIFY_URLS = [
     "https://open.spotify.com/track/5VSCgNlSmTV2Yq5lB40Eaw",  # Popular track
     "https://open.spotify.com/album/1ATL5GLyefJaxhQzSPVrLX",  # Popular album
     "https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp",  # Eminem - Lose Yourself
-    "https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk",   # Popular podcast (keep)
-    "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",  # Rick Astley - Never Gonna Give You Up (replacement)
-    "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album (keep)
+    "https://open.spotify.com/album/7xXWOU9SOmwwPBDBdCdlIX",  # Post Malone
+    "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",  # Rick Astley - Never Gonna Give You Up 
+    "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album 
     "https://open.spotify.com/track/1Je1IMUlBXcx1Fz0WE7oPT",  # Popular track
     "https://open.spotify.com/album/0E4xv5gPjykrwBgBZzI8XG",  # Amy Winehouse
-    "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj",  # The Beatles – Abbey Road (replacement)
+    "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj",  # The Beatles – Abbey Road 
     "https://open.spotify.com/track/2VxeLyX666F8uXCJ0dZF8B",  # Sia – Chandelier
     "https://open.spotify.com/show/6ZcvVBPQ2ToLXEWVbaw59P",   # The Rewatchables – movie podcast (new replacement)
-    "https://open.spotify.com/album/2noRn2Aes5aoNVsU6iWThc",  # Michael Jackson – Thriller (replacement)
+    "https://open.spotify.com/album/2noRn2Aes5aoNVsU6iWThc",  # Michael Jackson – Thriller 
     "https://open.spotify.com/album/3OxfaVgvTxUTy7276t7SPU",  # Amy Winehouse - Back to Black
-    "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy",  # Adele – 25 (replacement)
+    "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy",  # Adele – 25 
 ]
 
 # Sample YouTube URLs - one per user
@@ -450,9 +465,9 @@ def get_nearby_birth_location(current_location: str, user_index: int) -> dict:
 BENTO_WIDGET_TYPES = [
     {'id': 'location', 'name': 'Born and raised', 'component': 'location', 'defaultSize': '1x1'},
     {'id': 'current-location', 'name': 'Where I live now', 'component': 'current-location', 'defaultSize': '1x1'},
-    {'id': 'photo-v2', 'name': 'My favourite people / pets', 'component': 'photo-v2', 'defaultSize': '1x2'},
-    {'id': 'spotify', 'name': "I'm listening to...", 'component': 'spotify', 'defaultSize': '2x1'},
-    {'id': 'video', 'name': "I'm watching...", 'component': 'video', 'defaultSize': '2x2'},
+    {'id': 'photo-v2', 'name': 'My favourite people / pets', 'component': 'photo-v2', 'defaultSize': '2x1'},
+    {'id': 'spotify', 'name': "I'm listening to...", 'component': 'spotify', 'defaultSize': '1x2'},
+    {'id': 'video', 'name': "I'm watching...", 'component': 'video', 'defaultSize': '2x1'},
     {'id': 'fun-activities', 'name': "When I'm not at work...", 'component': 'fun-activities', 'defaultSize': '2x1'},
 ]
 
@@ -882,6 +897,16 @@ def create_team(team_name: str, logo_url: str, team_public_id: str, db: Session)
     """Create a new team in the database."""
     log.info(f"Creating team: {team_name} with public_id: {team_public_id}")
     
+    # Enable sharing settings for the team
+    from utils.short_id import generate_short_id
+    sharing_uuid = generate_short_id(25)
+    sharing_settings = {
+        "enabled": True,
+        "uuid": sharing_uuid,
+        "expires_at": None  # Never expires for demo teams
+    }
+    log.info(f"Enabled sharing for team {team_public_id} with UUID: {sharing_uuid}")
+    
     team = Team(
         public_id=team_public_id,
         organization_name=team_name,
@@ -890,7 +915,7 @@ def create_team(team_name: str, logo_url: str, team_public_id: str, db: Session)
         color_scheme_data=None,
         slack_settings=None,
         security_settings=None,
-        sharing_settings=None,
+        sharing_settings=sharing_settings,
         custom_prompts=None,
         is_draft=False,
         stripe_customer_id=None,
@@ -905,19 +930,41 @@ def create_team(team_name: str, logo_url: str, team_public_id: str, db: Session)
     log.info(f"Created team: {team_name} (ID: {team.id}, Public ID: {team_public_id})")
     return team
 
+def generate_work_schedule(user_index: int) -> Dict[str, str]:
+    """Generate a deterministic work schedule based on user index.
+    Returns a dict with 'am' and 'pm' keys, each set to one of:
+    'deep-work', 'collaboration', or 'no-preference'
+    """
+    # Deterministically assign schedules based on user_index
+    # This ensures each user gets a consistent schedule
+    schedules = [
+        {"am": "deep-work", "pm": "collaboration"},  # Morning deep work, afternoon collaboration
+        {"am": "collaboration", "pm": "deep-work"},  # Morning collaboration, afternoon deep work
+        {"am": "deep-work", "pm": "deep-work"},      # Deep work all day
+        {"am": "collaboration", "pm": "collaboration"},  # Collaboration all day
+        {"am": "deep-work", "pm": "no-preference"},  # Morning deep work, flexible afternoon
+        {"am": "no-preference", "pm": "deep-work"},  # Flexible morning, afternoon deep work
+        {"am": "collaboration", "pm": "no-preference"},  # Morning collaboration, flexible afternoon
+        {"am": "no-preference", "pm": "collaboration"},  # Flexible morning, afternoon collaboration
+    ]
+    return schedules[user_index % len(schedules)]
+
 def create_bento_widgets(user_index: int, location: str, photo_v2_url: str = "", photo_v2_caption: str = "", spotify_url: str = "", spotify_image_url: str = "", spotify_data: dict = None, youtube_url: str = "", video_thumbnail_url: str = "", video_caption: str = "") -> List[Dict[str, Any]]:
     """Create all available bento widgets for a user."""
     widgets = []
     
     # Calculate positions to place widgets in a 3-column grid
-    # We'll place them sequentially: row 0, row 1, row 2, etc.
+    # Layout matches manually organized version:
+    # Row 0: photo-v2 (2x1) on left, location (1x1) on right
+    # Row 1: video (2x1) on left, current-location (1x1) on right
+    # Row 2: fun-activities (2x1) on left, spotify (1x2) on right (spans rows 2-3)
     positions = [
-        (0, 0),  # location (1x1)
-        (1, 0),  # current-location (1x1)
-        (2, 0),  # photo-v2 (1x2) - starts at row 0, spans 2 rows
-        (0, 2),  # spotify (2x1) - starts at row 2
-        (0, 3),  # video (2x2) - starts at row 3
-        (0, 5),  # fun-activities (2x1) - starts at row 5
+        (2, 0),  # location (1x1) - column 2, row 0
+        (2, 1),  # current-location (1x1) - column 2, row 1
+        (0, 0),  # photo-v2 (2x1) - column 0, row 0, spans 2 columns
+        (2, 2),  # spotify (1x2) - column 2, row 2, spans 2 rows
+        (0, 1),  # video (2x1) - column 0, row 1, spans 2 columns
+        (0, 2),  # fun-activities (2x1) - column 0, row 2, spans 2 columns
     ]
     
     for i, widget_type in enumerate(BENTO_WIDGET_TYPES):
@@ -1030,22 +1077,29 @@ def create_user(
     video_caption: str,
     auth_email: str,
     auth_role: str,
-    db: Session
+    db: Session,
+    public_sharing: bool = False
 ) -> WelcomepageUser:
     """Create a welcomepage user with complete data."""
-    log.info(f"Creating user: {name} with public_id: {public_id}, auth_email: {auth_email}, auth_role: {auth_role}")
+    log.info(f"Creating user: {name} with public_id: {public_id}, auth_email: {auth_email}, auth_role: {auth_role}, public_sharing: {public_sharing}")
     
     # Use hardcoded prompts and answers from member_data
     selected_prompts = list(prompts_dict.keys())
-    answers = {
-        prompt: {
+    answers = {}
+    for prompt, answer_text in prompts_dict.items():
+        answer_entry = {
             "text": answer_text,
             "image": None,
             "specialData": None,
             "reactions": None
         }
-        for prompt, answer_text in prompts_dict.items()
-    }
+        # Handle special prompt: "When I do my best work"
+        if prompt == "When I do my best work (deep‑work hours vs. collaboration and meetings)":
+            schedule = generate_work_schedule(user_index)
+            answer_entry["specialData"] = {
+                "schedule": schedule
+            }
+        answers[prompt] = answer_entry
     
     # Create bento widgets with photo-v2 URL, caption, Spotify URL, Spotify image URL, Spotify data, YouTube URL, thumbnail URL, and caption
     bento_widgets = create_bento_widgets(user_index, location, photo_v2_url, photo_v2_caption, spotify_url, spotify_image_url, spotify_data, youtube_url, video_thumbnail_url, video_caption)
@@ -1055,6 +1109,13 @@ def create_user(
         "emoji": "👋",
         "label": "Default"
     }
+    
+    # Generate share_uuid if public_sharing is enabled
+    share_uuid = None
+    if public_sharing:
+        from utils.short_id import generate_short_id
+        share_uuid = generate_short_id(25)
+        log.info(f"Generated share_uuid for user {public_id}: {share_uuid}")
     
     user = WelcomepageUser(
         public_id=public_id,
@@ -1080,8 +1141,8 @@ def create_user(
         auth_role=auth_role,
         auth_email=auth_email,
         slack_user_id=None,
-        is_shareable=False,
-        share_uuid=None,
+        is_shareable=public_sharing,
+        share_uuid=share_uuid,
     )
     
     db.add(user)
@@ -1403,6 +1464,15 @@ def build_team_json_record(
     logo_url: str
 ) -> Dict[str, Any]:
     """Build a complete team record as a dictionary for JSON output."""
+    # Generate sharing settings for JSON output (same as create_team)
+    from utils.short_id import generate_short_id
+    sharing_uuid = generate_short_id(25)
+    sharing_settings = {
+        "enabled": True,
+        "uuid": sharing_uuid,
+        "expires_at": None  # Never expires for demo teams
+    }
+    
     return {
         "public_id": team_public_id,
         "organization_name": team_name,
@@ -1411,7 +1481,7 @@ def build_team_json_record(
         "color_scheme_data": None,
         "slack_settings": None,
         "security_settings": None,
-        "sharing_settings": None,
+        "sharing_settings": sharing_settings,
         "custom_prompts": None,
         "is_draft": False,
         "stripe_customer_id": None,
@@ -1437,26 +1507,39 @@ def build_user_json_record(
     youtube_url: str,
     auth_email: str,
     auth_role: str,
-    bento_widgets: List[Dict[str, Any]]
+    bento_widgets: List[Dict[str, Any]],
+    public_sharing: bool = False
 ) -> Dict[str, Any]:
     """Build a complete user record as a dictionary for JSON output."""
     
     # Build answers dict
-    answers = {
-        prompt: {
+    answers = {}
+    for prompt, answer_text in prompts_dict.items():
+        answer_entry = {
             "text": answer_text,
             "image": None,
             "specialData": None,
             "reactions": None
         }
-        for prompt, answer_text in prompts_dict.items()
-    }
+        # Handle special prompt: "When I do my best work"
+        if prompt == "When I do my best work (deep‑work hours vs. collaboration and meetings)":
+            schedule = generate_work_schedule(user_index)
+            answer_entry["specialData"] = {
+                "schedule": schedule
+            }
+        answers[prompt] = answer_entry
     
     # Build handwave emoji
     handwave_emoji = {
         "emoji": "👋",
         "label": "Default"
     }
+    
+    # Generate share_uuid if public_sharing is enabled
+    share_uuid = None
+    if public_sharing:
+        from utils.short_id import generate_short_id
+        share_uuid = generate_short_id(25)
     
     return {
         "public_id": public_id,
@@ -1482,8 +1565,8 @@ def build_user_json_record(
         "auth_role": auth_role,
         "auth_email": auth_email,
         "slack_user_id": None,
-        "is_shareable": False,
-        "share_uuid": None
+        "is_shareable": public_sharing,
+        "share_uuid": share_uuid
     }
 
 async def main_async():
@@ -1660,7 +1743,7 @@ async def main_async():
         for i in range(args.team_size):
             member_data = TEAM_MEMBERS[i]
             public_id = user_public_ids[i]  # Use constructed public ID from prefix
-            name, role, location, greeting, nickname, prompts_dict = member_data
+            name, role, location, greeting, nickname, prompts_dict, public_sharing = member_data
             log.info(f"Processing user {i+1}/{args.team_size}: {name} (ID: {public_id})")
             
             # Get wave GIF (deterministic based on user index)
@@ -1711,7 +1794,8 @@ async def main_async():
                 user_record = build_user_json_record(
                     public_id, name, role, location, greeting, nickname, prompts_dict,
                     i, team_id, final_wave_gif_url, final_photo_v2_url,
-                    photo_v2_caption, spotify_url, youtube_url, auth_email, auth_role, bento_widgets
+                    photo_v2_caption, spotify_url, youtube_url, auth_email, auth_role, bento_widgets,
+                    public_sharing=public_sharing
                 )
                 user_records.append(user_record)
                 
@@ -1836,7 +1920,7 @@ async def main_async():
                         } if spotify_url else None
                 
                 # Create user (database operation - part of transaction)
-                user = create_user(team_id, public_id, name, role, location, greeting, nickname, prompts_dict, i, cloned_gif_url, cloned_photo_v2_url, photo_v2_caption, spotify_url, cloned_spotify_image_url, spotify_data, youtube_url, cloned_video_thumbnail_url, video_caption, auth_email, auth_role, db)
+                user = create_user(team_id, public_id, name, role, location, greeting, nickname, prompts_dict, i, cloned_gif_url, cloned_photo_v2_url, photo_v2_caption, spotify_url, cloned_spotify_image_url, spotify_data, youtube_url, cloned_video_thumbnail_url, video_caption, auth_email, auth_role, db, public_sharing=public_sharing)
                 log.info(f"User {i+1} added to transaction (will be committed at end): {public_id}")
                 
                 # Store both the user object (for search_vector update) and summary dict
