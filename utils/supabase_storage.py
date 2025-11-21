@@ -145,17 +145,17 @@ def _is_retryable_error(retry_state) -> bool:
     
     error_str = str(exception).lower()
     # Check for SSL/network errors in the error message
-    if any(keyword in error_str for keyword in ['ssl', 'bad record mac', 'connection', 'timeout', 'network', 'readerror']):
+    if any(keyword in error_str for keyword in ['ssl', 'bad record mac', 'connection', 'timeout', 'network', 'readerror', 'writeerror', 'broken pipe']):
         return True
-    # Check exception types
-    if isinstance(exception, (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException, 
-                              httpcore.ReadError, httpcore.ConnectError, httpcore.TimeoutException)):
+    # Check exception types (including WriteError for broken pipe)
+    if isinstance(exception, (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException, httpx.WriteError,
+                              httpcore.ReadError, httpcore.ConnectError, httpcore.TimeoutException, httpcore.WriteError)):
         return True
     return False
 
 @retry(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=1, min=2, max=30),
+    stop=stop_after_attempt(7),  # Increased from 5 to 7 attempts for better resilience
+    wait=wait_exponential(multiplier=2, min=3, max=60),  # Longer waits: 3s, 6s, 12s, 24s, 48s, 60s, 60s
     retry=_is_retryable_error,
     before_sleep=before_sleep_log(upload_retry_logger, logging.WARNING),
     reraise=True
@@ -183,14 +183,14 @@ async def upload_to_supabase_storage(file_content: bytes, filename: str, content
         # Run in threadpool to avoid blocking the event loop during retries
         public_url = await run_in_threadpool(_upload_with_retry, file_content, filename, content_type)
         return public_url
-    except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException,
-            httpcore.ReadError, httpcore.ConnectError, httpcore.TimeoutException) as e:
+    except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException, httpx.WriteError,
+            httpcore.ReadError, httpcore.ConnectError, httpcore.TimeoutException, httpcore.WriteError) as e:
         # These are retryable network errors - should have been retried already
         raise HTTPException(status_code=500, detail=f"Supabase upload failed after retries due to network error: {str(e)}")
     except Exception as e:
         # Check if it's an SSL/network error that should have been retried
         error_str = str(e).lower()
-        if any(keyword in error_str for keyword in ['ssl', 'bad record mac', 'connection', 'timeout']):
+        if any(keyword in error_str for keyword in ['ssl', 'bad record mac', 'connection', 'timeout', 'writeerror', 'broken pipe']):
             # This should have been caught by retry, but if it wasn't, raise with context
             raise HTTPException(status_code=500, detail=f"Supabase upload failed due to SSL/network error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Supabase upload failed: {str(e)}")

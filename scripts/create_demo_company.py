@@ -275,40 +275,40 @@ TEAM_MEMBERS = [
 # Use tracks and albums primarily - they're more likely to be public and accessible
 # Playlists can be private and return 404, so we use fewer of them
 SAMPLE_SPOTIFY_URLS = [
-    "https://open.spotify.com/track/3bE5slaVEfaDreqARl6k4M",  # Pearl Jam - Yellow Ledbetter (known working track)
+    "https://open.spotify.com/track/3bE5slaVEfaDreqARl6k4M",  # Pearl Jam - Yellow Ledbetter
     "https://open.spotify.com/track/5VSCgNlSmTV2Yq5lB40Eaw",  # Popular track
     "https://open.spotify.com/album/1ATL5GLyefJaxhQzSPVrLX",  # Popular album
-    "https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp",  # Popular track
-    "https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk",  # Popular podcast
-    "https://open.spotify.com/track/5y38S3svDxqF4fmPaUxp8R",  # Popular track
-    "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album
+    "https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp",  # Eminem - Lose Yourself
+    "https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk",   # Popular podcast (keep)
+    "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",  # Rick Astley - Never Gonna Give You Up (replacement)
+    "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album (keep)
     "https://open.spotify.com/track/1Je1IMUlBXcx1Fz0WE7oPT",  # Popular track
-    "https://open.spotify.com/show/1VXcH8QHkjRcTCEd88U3ti",  # Popular podcast
-    "https://open.spotify.com/album/6ZvDJs17O3woQirttKRYCG",  # Popular album
-    "https://open.spotify.com/track/2VxeLyX666F8uXCJ0dZF8B",  # Popular track
-    "https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCl",  # Popular podcast
-    "https://open.spotify.com/album/3mH6qwIy9crq0I9YQbOuDf",  # Popular album
-    "https://open.spotify.com/track/0VjIjW4GlU5U4D1y1z3iNi",  # Popular track
-    "https://open.spotify.com/album/1y8NcY4wTqL1zH5z1JmJ9J",  # Popular album
+    "https://open.spotify.com/show/1wYLce2O4f8S9jqas0D6Il",   # Serial podcast (replacement)
+    "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj",  # The Beatles – Abbey Road (replacement)
+    "https://open.spotify.com/track/2VxeLyX666F8uXCJ0dZF8B",  # Sia – Chandelier
+    "https://open.spotify.com/show/6ZcvVBPQ2ToLXEWVbaw59P",   # The Rewatchables – movie podcast (new replacement)
+    "https://open.spotify.com/album/2noRn2Aes5aoNVsU6iWThc",  # Michael Jackson – Thriller (replacement)
+    "https://open.spotify.com/track/0VjIjW4GlU5U4D1y1z3iNi",  # The Weeknd – Blinding Lights
+    "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy",  # Adele – 25 (replacement)
 ]
 
 # Sample YouTube URLs - one per user
 SAMPLE_YOUTUBE_URLS = [
-    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Classic video
-    "https://www.youtube.com/watch?v=9bZkp7q19f0",  # Popular video
-    "https://www.youtube.com/watch?v=kJQP7kiw5Fk",  # Popular video
-    "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",  # Popular video
-    "https://www.youtube.com/watch?v=OPf0YbXqDm0",  # Popular video
-    "https://www.youtube.com/watch?v=LXb3EKWsInQ",  # Popular video
-    "https://www.youtube.com/watch?v=ZbZSe6N_BXs",  # Popular video
-    "https://www.youtube.com/watch?v=ScMzIvxBSi4",  # Popular video
-    "https://www.youtube.com/watch?v=2Vv-BfVoq4g",  # Popular video
-    "https://www.youtube.com/watch?v=YQHsXMglC9A",  # Popular video
-    "https://www.youtube.com/watch?v=FTQbiNvZqaY",  # Popular video
-    "https://www.youtube.com/watch?v=ZbZSe6N_BXs",  # Popular video
-    "https://www.youtube.com/watch?v=ScMzIvxBSi4",  # Popular video
-    "https://www.youtube.com/watch?v=2Vv-BfVoq4g",  # Popular video
-    "https://www.youtube.com/watch?v=YQHsXMglC9A",  # Popular video
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Rick Astley – Never Gonna Give You Up
+    "https://www.youtube.com/watch?v=9bZkp7q19f0",  # PSY – Gangnam Style
+    "https://www.youtube.com/watch?v=kJQP7kiw5Fk",  # Luis Fonsi – Despacito
+    "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",  # Queen – Bohemian Rhapsody
+    "https://www.youtube.com/watch?v=OPf0YbXqDm0",  # Mark Ronson – Uptown Funk
+    "https://www.youtube.com/watch?v=LXb3EKWsInQ",  # 4K Nature Relaxation
+    "https://www.youtube.com/watch?v=ZbZSe6N_BXs",  # Maroon 5 – Sugar
+    "https://www.youtube.com/watch?v=2Vv-BfVoq4g",  # Ed Sheeran – Perfect
+    "https://www.youtube.com/watch?v=YQHsXMglC9A",  # Adele – Hello
+    "https://www.youtube.com/watch?v=FTQbiNvZqaY",  # Toto – Africa
+    "https://www.youtube.com/watch?v=CevxZvSJLk8",  # Katy Perry – Roar (replacement for placeholder #1)
+    "https://www.youtube.com/watch?v=JGwWNGJdvx8",  # Ed Sheeran – Shape of You (replacement for placeholder #2)
+    "https://www.youtube.com/watch?v=3tmd-ClpJxA",  # Imagine Dragons – Believer
+    "https://www.youtube.com/watch?v=hT_nvWreIhg",  # OneRepublic – Counting Stars
+    "https://www.youtube.com/watch?v=ktvTqknDobU",  # Imagine Dragons – Radioactive
 ]
 
 # City coordinates for location widgets
@@ -1726,13 +1726,33 @@ async def main_async():
                 })
             else:
                 # Download and clone wave GIF (external operation - not part of DB transaction)
-                gif_content = download_wave_gif(wave_gif_url)
-                cloned_gif_url = await clone_wave_gif_to_user(gif_content, public_id)
+                # Add small delay between uploads to avoid overwhelming the connection
+                if i > 0:
+                    await asyncio.sleep(0.5)  # 500ms delay between users
+                
+                cloned_gif_url = ""
+                try:
+                    gif_content = download_wave_gif(wave_gif_url)
+                    cloned_gif_url = await clone_wave_gif_to_user(gif_content, public_id)
+                    log.info(f"Successfully uploaded wave GIF for user {public_id}")
+                except Exception as e:
+                    log.error(f"Failed to upload wave GIF for user {public_id}: {e}")
+                    log.warning(f"Continuing with user {public_id} but wave GIF upload failed. User will be created without wave GIF.")
+                    # Continue without wave GIF - user will still be created
+                    cloned_gif_url = wave_gif_url  # Use original URL as fallback
                 
                 # Download and clone photo-v2 image (external operation - not part of DB transaction)
-                photo_v2_content = download_photo_v2_image(photo_v2_library_url)
+                cloned_photo_v2_url = ""
                 widget_id = f"widget-2-{i}"  # photo-v2 is at index 2
-                cloned_photo_v2_url = await clone_photo_v2_to_user(photo_v2_content, public_id, widget_id)
+                try:
+                    photo_v2_content = download_photo_v2_image(photo_v2_library_url)
+                    cloned_photo_v2_url = await clone_photo_v2_to_user(photo_v2_content, public_id, widget_id)
+                    log.info(f"Successfully uploaded photo-v2 image for user {public_id}")
+                except Exception as e:
+                    log.error(f"Failed to upload photo-v2 image for user {public_id}: {e}")
+                    log.warning(f"Continuing with user {public_id} but photo-v2 upload failed. User will be created without photo-v2 image.")
+                    # Continue without photo-v2 - user will still be created
+                    cloned_photo_v2_url = photo_v2_library_url  # Use original URL as fallback
                 
                 # Download and clone YouTube thumbnail (external operation - not part of DB transaction)
                 cloned_video_thumbnail_url = ""
