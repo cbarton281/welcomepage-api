@@ -283,12 +283,12 @@ SAMPLE_SPOTIFY_URLS = [
     "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",  # Rick Astley - Never Gonna Give You Up (replacement)
     "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album (keep)
     "https://open.spotify.com/track/1Je1IMUlBXcx1Fz0WE7oPT",  # Popular track
-    "https://open.spotify.com/show/1wYLce2O4f8S9jqas0D6Il",   # Serial podcast (replacement)
+    "https://open.spotify.com/album/0E4xv5gPjykrwBgBZzI8XG",  # Amy Winehouse
     "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj",  # The Beatles – Abbey Road (replacement)
     "https://open.spotify.com/track/2VxeLyX666F8uXCJ0dZF8B",  # Sia – Chandelier
     "https://open.spotify.com/show/6ZcvVBPQ2ToLXEWVbaw59P",   # The Rewatchables – movie podcast (new replacement)
     "https://open.spotify.com/album/2noRn2Aes5aoNVsU6iWThc",  # Michael Jackson – Thriller (replacement)
-    "https://open.spotify.com/track/0VjIjW4GlU5U4D1y1z3iNi",  # The Weeknd – Blinding Lights
+    "https://open.spotify.com/album/3OxfaVgvTxUTy7276t7SPU",  # Amy Winehouse - Back to Black
     "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy",  # Adele – 25 (replacement)
 ]
 
