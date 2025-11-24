@@ -1576,7 +1576,7 @@ async def main_async():
     parser.add_argument("--logo-url", help="URL to the company logo (will be downloaded and uploaded to Supabase)")
     parser.add_argument("--logo-file", help="Path to local logo file (will be uploaded to Supabase)")
     parser.add_argument("--team-size", type=int, default=15, help="Number of team members to create (2-15, default: 15). Not used with --remove.")
-    parser.add_argument("--initial-email", help="Initial Gmail address with +number pattern (e.g., charles.barton+2000@gmail.com). Required for creation, not for removal.")
+    parser.add_argument("--initial-email", help="Initial Gmail address with +number pattern (e.g., fred.smith+2000@gmail.com). Required for creation, not for removal.")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be created/deleted without actually doing it")
     parser.add_argument("--remove", action="store_true", help="Remove the demo company instead of creating it. Deletes team, users, and all associated files from database and Supabase storage.")
     
