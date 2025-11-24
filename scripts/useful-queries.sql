@@ -1,7 +1,7 @@
 select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepage_users  order by created_at desc
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
-select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+904@gmail.com'  order by auth_email
+select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  public_id like 'bgs-0%'
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
 from welcomepage_users 

@@ -70,6 +70,7 @@ from api.spotify import router as spotify_router
 from api.google import router as google_router
 from api.stripe_billing import router as stripe_billing_router
 from api.stripe_webhooks import router as stripe_webhooks_router
+from api.game import router as game_router
 
 app.include_router(users_router, prefix="/api")
 app.include_router(team_router, prefix="/api")
@@ -88,3 +89,4 @@ app.include_router(spotify_router, prefix="/api")
 app.include_router(google_router, prefix="/api")
 app.include_router(stripe_billing_router, prefix="/api")
 app.include_router(stripe_webhooks_router, prefix="/api")
+app.include_router(game_router, prefix="/api")
