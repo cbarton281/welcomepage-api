@@ -33,8 +33,10 @@ class GameService:
             List of question dictionaries
         """
         import time
+        import uuid
+        request_id = str(uuid.uuid4())[:8]
         start_time = time.time()
-        log.info(f"Starting question generation for {len(members)} members")
+        log.info(f"[REQUEST_ID:{request_id}] Starting question generation for {len(members)} members")
         
         # Check API key early
         if not OPENAI_API_KEY or OPENAI_API_KEY == "INSERT_OPENAI_KEY":
@@ -70,7 +72,7 @@ class GameService:
         # Context will be minimized inside to only include members used for questions
         openai_start = time.time()
         questions = await GameService._generate_all_questions_single_call(
-            selected_members
+            selected_members, request_id
         )
         openai_time = (time.time() - openai_start) * 1000
         log.info(f"OpenAI API call took {openai_time:.2f}ms")
@@ -129,7 +131,8 @@ class GameService:
     
     @staticmethod
     async def _generate_all_questions_single_call(
-        members: List[Dict[str, Any]]
+        members: List[Dict[str, Any]],
+        request_id: str = "unknown"
     ) -> List[Dict[str, Any]]:
         """
         Generate all questions (guess-who and two-truths-lie) in a single OpenAI API call.
@@ -276,8 +279,27 @@ JSON structure:
         try:
             import time
             timeout = httpx.Timeout(90.0, connect=10.0)  # Longer timeout for single large call
+            
+            # Log the exact prompt for testing in ChatGPT
+            log.info("=" * 80)
+            log.info("OPENAI PROMPT FOR TESTING IN CHATGPT:")
+            log.info("=" * 80)
+            log.info("SYSTEM PROMPT:")
+            log.info(system_prompt)
+            log.info("-" * 80)
+            log.info("USER PROMPT:")
+            log.info(user_prompt)
+            log.info("-" * 80)
+            log.info("MODEL: gpt-4o")
+            log.info("MAX_TOKENS: 1500")
+            log.info("TEMPERATURE: 0.7")
+            log.info("RESPONSE_FORMAT: json_object")
+            log.info("=" * 80)
+            log.info("Copy the SYSTEM PROMPT and USER PROMPT above to test in ChatGPT")
+            log.info("=" * 80)
+            
             async with httpx.AsyncClient(timeout=timeout) as client:
-                log.info("Making single OpenAI API call to generate all questions")
+                log.info(f"[REQUEST_ID:{request_id}] Making single OpenAI API call to generate all questions")
                 request_start = time.time()
                 response = await client.post(
                     "https://api.openai.com/v1/chat/completions",
@@ -286,7 +308,7 @@ JSON structure:
                         "Authorization": f"Bearer {OPENAI_API_KEY}"
                     },
                     json={
-                        "model": "gpt-4o-mini",
+                        "model": "gpt-4o",  # Try full gpt-4o model - may be faster than gpt-4o-mini for structured tasks
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
@@ -297,7 +319,7 @@ JSON structure:
                     }
                 )
                 request_time = (time.time() - request_start) * 1000
-                log.info(f"OpenAI API request completed in {request_time:.2f}ms, status: {response.status_code}")
+                log.info(f"[REQUEST_ID:{request_id}] OpenAI API request completed in {request_time:.2f}ms, status: {response.status_code}")
                 
                 if response.status_code == 200:
                     parse_start = time.time()

@@ -67,3 +67,8 @@ class GenerateQuestionsResponse(BaseModel):
     """Response model for generated questions"""
     questions: List[Question]
 
+
+class WaveGifUrlsResponse(BaseModel):
+    """Response model for wave GIF URLs for animations"""
+    urls: List[str]
+

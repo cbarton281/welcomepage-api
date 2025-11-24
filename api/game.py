@@ -9,7 +9,7 @@ from typing import List
 from database import get_db
 from models.welcomepage_user import WelcomepageUser
 from models.team import Team
-from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question
+from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse
 from schemas.welcomepage_user import WelcomepageUserDTO
 from services.game_service import GameService
 from utils.logger_factory import new_logger
@@ -168,5 +168,78 @@ async def get_random_members(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch random members"
+        )
+
+
+@router.get("/team/{team_public_id}/wave-gif-urls", response_model=WaveGifUrlsResponse)
+async def get_wave_gif_urls(
+    team_public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get random wave GIF URLs for decorative animations.
+    
+    Returns up to 30 random wave GIF URLs from published team members.
+    If the team has fewer than 30 members with wave GIFs, returns all available.
+    This represents the broader team, not just members selected for questions.
+    """
+    import time
+    start_time = time.time()
+    log.info(f"Fetching wave GIF URLs for team {team_public_id}")
+    
+    # Resolve team_public_id to team_id
+    team_query_start = time.time()
+    team = db.query(Team).filter_by(public_id=team_public_id).first()
+    team_query_time = (time.time() - team_query_start) * 1000
+    log.info(f"Team lookup took {team_query_time:.2f}ms")
+    
+    if not team:
+        log.warning(f"Team not found: {team_public_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found"
+        )
+    
+    # Verify user has access to this team
+    user_team_id = current_user.get('team_id')
+    if user_team_id and user_team_id != team.public_id:
+        # Check if user is admin (admins can access any team)
+        user_role = current_user.get('role')
+        if user_role != 'ADMIN':
+            log.warning(f"User {current_user.get('public_id')} attempted to access team {team_public_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this team"
+            )
+    
+    try:
+        # Query for published members with wave_gif_url
+        # Only need the wave_gif_url field, so we can optimize the query
+        db_query_start = time.time()
+        eligible = db.query(WelcomepageUser.wave_gif_url)\
+            .filter(WelcomepageUser.team_id == team.id)\
+            .filter(WelcomepageUser.is_draft == False)\
+            .filter(WelcomepageUser.wave_gif_url.isnot(None))\
+            .filter(WelcomepageUser.wave_gif_url != '')\
+            .order_by(func.random())\
+            .limit(30)\
+            .all()
+        db_query_time = (time.time() - db_query_start) * 1000
+        log.info(f"Database query took {db_query_time:.2f}ms, found {len(eligible)} members with wave GIFs")
+        
+        # Extract URLs from query results (they come as tuples)
+        urls = [url[0] for url in eligible if url[0]]
+        
+        total_time = (time.time() - start_time) * 1000
+        log.info(f"Total get_wave_gif_urls time: {total_time:.2f}ms, returning {len(urls)} URLs")
+        
+        return WaveGifUrlsResponse(urls=urls)
+        
+    except Exception as e:
+        log.error(f"Error fetching wave GIF URLs: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch wave GIF URLs"
         )
 
