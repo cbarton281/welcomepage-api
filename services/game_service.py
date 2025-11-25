@@ -325,7 +325,17 @@ JSON structure:
                     parse_start = time.time()
                     data = response.json()
                     parse_time = (time.time() - parse_start) * 1000
-                    log.info(f"OpenAI response JSON parse took {parse_time:.2f}ms")
+                    log.info(f"[REQUEST_ID:{request_id}] OpenAI response JSON parse took {parse_time:.2f}ms")
+                    
+                    # Log OpenAI API usage (token consumption) for cost tracking
+                    usage = data.get("usage", {})
+                    if usage:
+                        prompt_tokens = usage.get("prompt_tokens", 0)
+                        completion_tokens = usage.get("completion_tokens", 0)
+                        total_tokens = usage.get("total_tokens", 0)
+                        log.info(f"[REQUEST_ID:{request_id}] OpenAI API Usage - prompt_tokens: {prompt_tokens}, completion_tokens: {completion_tokens}, total_tokens: {total_tokens}")
+                    else:
+                        log.warning(f"[REQUEST_ID:{request_id}] OpenAI API response missing usage information")
                     
                     content = data.get("choices", [{}])[0].get("message", {}).get("content")
                     
@@ -333,22 +343,22 @@ JSON structure:
                         json_parse_start = time.time()
                         parsed = json.loads(content)
                         json_parse_time = (time.time() - json_parse_start) * 1000
-                        log.info(f"Content JSON parse took {json_parse_time:.2f}ms")
+                        log.info(f"[REQUEST_ID:{request_id}] Content JSON parse took {json_parse_time:.2f}ms")
                         
                         question_parse_start = time.time()
                         questions = GameService._parse_questions_from_response(
                             parsed, members, member_selections
                         )
                         question_parse_time = (time.time() - question_parse_start) * 1000
-                        log.info(f"Question parsing took {question_parse_time:.2f}ms, generated {len(questions)} questions")
+                        log.info(f"[REQUEST_ID:{request_id}] Question parsing took {question_parse_time:.2f}ms, generated {len(questions)} questions")
                         return questions
                     else:
-                        log.error("OpenAI response missing content")
+                        log.error(f"[REQUEST_ID:{request_id}] OpenAI response missing content")
                 else:
                     error_text = response.text[:500] if hasattr(response, 'text') else str(response)
-                    log.error(f"OpenAI API error: {response.status_code} - {error_text}")
+                    log.error(f"[REQUEST_ID:{request_id}] OpenAI API error: {response.status_code} - {error_text}")
         except Exception as e:
-            log.error(f"Error in _generate_all_questions_single_call: {e}")
+            log.error(f"[REQUEST_ID:{request_id}] Error in _generate_all_questions_single_call: {e}")
         
         return []
     
