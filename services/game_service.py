@@ -22,12 +22,13 @@ class GameService:
     """Service for generating game questions using OpenAI"""
     
     @staticmethod
-    async def generate_questions(members: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def generate_questions(members: List[Dict[str, Any]], alternate_pool: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         """
         Generate all game questions in a single OpenAI API call.
         
         Args:
             members: List of team member dictionaries with welcomepage data
+            alternate_pool: Optional list of alternate members (minimal data) for distractors
             
         Returns:
             List of question dictionaries
@@ -72,7 +73,7 @@ class GameService:
         # Context will be minimized inside to only include members used for questions
         openai_start = time.time()
         questions = await GameService._generate_all_questions_single_call(
-            selected_members, request_id
+            selected_members, request_id, alternate_pool
         )
         openai_time = (time.time() - openai_start) * 1000
         log.info(f"OpenAI API call took {openai_time:.2f}ms")
@@ -132,7 +133,8 @@ class GameService:
     @staticmethod
     async def _generate_all_questions_single_call(
         members: List[Dict[str, Any]],
-        request_id: str = "unknown"
+        request_id: str = "unknown",
+        alternate_pool: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Generate all questions (guess-who and two-truths-lie) in a single OpenAI API call.
@@ -347,7 +349,7 @@ JSON structure:
                         
                         question_parse_start = time.time()
                         questions = GameService._parse_questions_from_response(
-                            parsed, members, member_selections
+                            parsed, members, member_selections, alternate_pool
                         )
                         question_parse_time = (time.time() - question_parse_start) * 1000
                         log.info(f"[REQUEST_ID:{request_id}] Question parsing took {question_parse_time:.2f}ms, generated {len(questions)} questions")
@@ -366,7 +368,8 @@ JSON structure:
     def _parse_questions_from_response(
         parsed: Dict[str, Any],
         members: List[Dict[str, Any]],
-        member_selections: Dict[str, List[Dict[str, Any]]]
+        member_selections: Dict[str, List[Dict[str, Any]]],
+        alternate_pool: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """Parse OpenAI response and convert to question format"""
         questions: List[Dict[str, Any]] = []
@@ -376,6 +379,14 @@ JSON structure:
         # Create lookup for pre-selected assignments
         guess_who_assignments_map = {a["name"]: a for a in member_selections.get("guess_who", [])}
         two_truths_assignments_map = {a["name"]: a for a in member_selections.get("two_truths_lie", [])}
+        
+        # Initialize usage tracker for alternates (to avoid repetition)
+        alternate_usage: Dict[str, int] = {}
+        if alternate_pool:
+            for alt in alternate_pool:
+                alt_id = alt.get("public_id")
+                if alt_id:
+                    alternate_usage[alt_id] = 0
         
         # Process guess-who questions
         guess_who_data = parsed.get("guess_who", [])
@@ -393,8 +404,10 @@ JSON structure:
             original_prompt = assignment.get("prompt", q_data.get("prompt", ""))
             original_answer = assignment.get("answer", q_data.get("answer", ""))
             
-            # Get distractors
-            distractors = GameService._get_random_distractors(members, member, 2)
+            # Get distractors (prefer alternate pool, track usage to avoid repetition)
+            distractors = GameService._get_random_distractors(
+                members, member, 2, alternate_pool, alternate_usage
+            )
             if len(distractors) < 2:
                 continue
             
@@ -477,13 +490,60 @@ JSON structure:
     def _get_random_distractors(
         members: List[Dict[str, Any]],
         exclude: Dict[str, Any],
-        count: int
+        count: int,
+        alternate_pool: Optional[List[Dict[str, Any]]] = None,
+        usage_tracker: Optional[Dict[str, int]] = None
     ) -> List[Dict[str, Any]]:
-        """Get random distractors (other members) for a question"""
+        """
+        Get random distractors (other members) for a question.
+        Prefers alternate_pool if provided, using usage_tracker to avoid repetition.
+        Falls back to members list if alternate_pool is not available or exhausted.
+        """
         exclude_id = exclude.get("public_id")
-        available = [m for m in members if m.get("public_id") != exclude_id]
-        random.shuffle(available)
-        return available[:count]
+        distractors: List[Dict[str, Any]] = []
+        
+        # Prefer alternate pool if available
+        if alternate_pool and usage_tracker is not None:
+            # Filter out the excluded member and get available alternates
+            available_alternates = [
+                alt for alt in alternate_pool
+                if alt.get("public_id") != exclude_id
+            ]
+            
+            # Sort by usage count (ascending) to prefer least-used alternates
+            available_alternates.sort(key=lambda alt: usage_tracker.get(alt.get("public_id", ""), 0))
+            
+            # Select up to count distinct alternates
+            selected_alternates = []
+            for alt in available_alternates:
+                if len(selected_alternates) >= count:
+                    break
+                alt_id = alt.get("public_id")
+                if alt_id:
+                    selected_alternates.append(alt)
+                    # Increment usage count
+                    usage_tracker[alt_id] = usage_tracker.get(alt_id, 0) + 1
+            
+            # Convert alternate format to match expected format (with profile_image)
+            for alt in selected_alternates:
+                distractors.append({
+                    "public_id": alt.get("public_id"),
+                    "name": alt.get("name"),
+                    "profile_image": alt.get("wave_gif_url")  # Use wave_gif_url as avatar fallback
+                })
+        
+        # If we still need more distractors, fall back to members list
+        if len(distractors) < count:
+            available_members = [
+                m for m in members
+                if m.get("public_id") != exclude_id
+                and not any(d.get("public_id") == m.get("public_id") for d in distractors)
+            ]
+            random.shuffle(available_members)
+            needed = count - len(distractors)
+            distractors.extend(available_members[:needed])
+        
+        return distractors[:count]
     
     @staticmethod
     def _shuffle_array(array: List[Any]) -> List[Any]:

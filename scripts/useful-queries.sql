@@ -2,7 +2,7 @@ select slack_user_id, team_id, auth_email, is_draft, auth_role, * from welcomepa
 
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  auth_email like 'charles.barton+100@gmail.com'  order by auth_email
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * from welcomepage_users where  public_id like 'bgs-0%'
-
+--171
 select is_draft, share_uuid, is_shareable,  auth_email, auth_role, team_id,  * 
 from welcomepage_users 
 where  auth_email like 'charles.barton+%@gmail.com'
@@ -90,7 +90,7 @@ order by auth_email
 
 select * from verification_codes order by id desc
 
-select * from alembic_version
+
 
 ---------------------------
 ---------------------------
@@ -99,7 +99,8 @@ select * from alembic_version
 ---------------------------
 select * from teams order by organization_name
 select * from teams where organization_name like 'IBM%'
-select sharing_settings, * from teams where public_id = 'ied3vv24li' 
+select sharing_settings, * from teams where public_id = 'bgs-team01'
+
 select subscription_status, * from teams where subscription_status is not null order by id 
 -- update teams set stripe_customer_id = null where public_id = 'ied3vv24li' 
 
@@ -183,7 +184,15 @@ SELECT query
 FROM pg_stat_statements
 WHERE queryid = '-3558060556423766990';
 
+----------------------------------------------------------------------
+-- Supporting table queries
+----------------------------------------------------------------------
 select * from page_visits order by visit_start_time desc
+select * from slack_pending_installs
+select * from alembic_version
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+
 
 SELECT id, team_id, is_draft
 FROM public.welcomepage_users
@@ -217,3 +226,4 @@ WHERE t.id = du.team_id
   );
 
 COMMIT;
+

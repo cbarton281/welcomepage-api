@@ -9,7 +9,7 @@ from typing import List
 from database import get_db
 from models.welcomepage_user import WelcomepageUser
 from models.team import Team
-from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse
+from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember
 from schemas.welcomepage_user import WelcomepageUserDTO
 from services.game_service import GameService
 from utils.logger_factory import new_logger
@@ -53,9 +53,15 @@ async def generate_questions(
         convert_time = (time.time() - convert_start) * 1000
         log.info(f"Model to dict conversion took {convert_time:.2f}ms")
         
+        # Convert alternate pool if provided
+        alternate_pool_dict = None
+        if request.alternatePool:
+            alternate_pool_dict = [alt.model_dump() for alt in request.alternatePool]
+            log.info(f"Using alternate pool with {len(alternate_pool_dict)} members for distractors")
+        
         # Generate questions using the service
         service_start = time.time()
-        questions_dict = await GameService.generate_questions(members_dict)
+        questions_dict = await GameService.generate_questions(members_dict, alternate_pool_dict)
         service_time = (time.time() - service_start) * 1000
         log.info(f"GameService.generate_questions took {service_time:.2f}ms")
         
@@ -241,5 +247,124 @@ async def get_wave_gif_urls(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch wave GIF URLs"
+        )
+
+
+@router.get("/team/{team_public_id}/game/alternate-pool", response_model=AlternatePoolResponse)
+async def get_alternate_pool(
+    team_public_id: str,
+    exclude_subjects: str = Query(None, description="Comma-separated public_ids to exclude from the pool"),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get alternate pool members for game distractors and animations.
+    
+    Returns up to 100 eligible team members with minimal data (public_id, name, wave_gif_url).
+    If team has <= 100 eligible members, returns all. If > 100, returns 100 randomly selected.
+    Excludes specified subject public_ids if provided.
+    
+    Used for:
+    - Selecting distractors for game questions (excluding question subjects)
+    - Extracting wave_gif_urls for landing page animations
+    """
+    import time
+    start_time = time.time()
+    log.info(f"Fetching alternate pool for team {team_public_id}, excluding subjects: {exclude_subjects}")
+    
+    # Resolve team_public_id to team_id
+    team_query_start = time.time()
+    team = db.query(Team).filter_by(public_id=team_public_id).first()
+    team_query_time = (time.time() - team_query_start) * 1000
+    log.info(f"Team lookup took {team_query_time:.2f}ms")
+    
+    if not team:
+        log.warning(f"Team not found: {team_public_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found"
+        )
+    
+    # Verify user has access to this team
+    user_team_id = current_user.get('team_id')
+    if user_team_id and user_team_id != team.public_id:
+        # Check if user is admin (admins can access any team)
+        user_role = current_user.get('role')
+        if user_role != 'ADMIN':
+            log.warning(f"User {current_user.get('public_id')} attempted to access team {team_public_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this team"
+            )
+    
+    try:
+        # Parse exclude_subjects if provided
+        exclude_ids = set()
+        if exclude_subjects:
+            exclude_ids = {pid.strip() for pid in exclude_subjects.split(',') if pid.strip()}
+            log.info(f"Excluding {len(exclude_ids)} subject public_ids from alternate pool")
+        
+        # First, count total eligible members
+        count_start = time.time()
+        total_count = db.query(WelcomepageUser)\
+            .filter(WelcomepageUser.team_id == team.id)\
+            .filter(WelcomepageUser.is_draft == False)\
+            .filter(
+                or_(
+                    WelcomepageUser.selected_prompts.isnot(None),
+                    WelcomepageUser.bento_widgets.isnot(None)
+                )
+            )\
+            .count()
+        count_time = (time.time() - count_start) * 1000
+        log.info(f"Count query took {count_time:.2f}ms, found {total_count} total eligible members")
+        
+        # Determine limit: if <= 100, fetch all; if > 100, fetch 100 random
+        limit = total_count if total_count <= 100 else 100
+        
+        # Query for eligible members (excluding subjects if provided)
+        db_query_start = time.time()
+        query = db.query(WelcomepageUser)\
+            .filter(WelcomepageUser.team_id == team.id)\
+            .filter(WelcomepageUser.is_draft == False)\
+            .filter(
+                or_(
+                    WelcomepageUser.selected_prompts.isnot(None),
+                    WelcomepageUser.bento_widgets.isnot(None)
+                )
+            )
+        
+        # Exclude subjects if provided
+        if exclude_ids:
+            query = query.filter(~WelcomepageUser.public_id.in_(exclude_ids))
+        
+        # Order randomly and limit
+        eligible = query.order_by(func.random()).limit(limit).all()
+        db_query_time = (time.time() - db_query_start) * 1000
+        log.info(f"Database query took {db_query_time:.2f}ms, found {len(eligible)} eligible members for alternate pool")
+        
+        # Convert to minimal AlternateMember objects
+        convert_start = time.time()
+        alternate_members = [
+            AlternateMember(
+                public_id=user.public_id,
+                name=user.name,
+                wave_gif_url=user.wave_gif_url
+            )
+            for user in eligible
+        ]
+        convert_time = (time.time() - convert_start) * 1000
+        log.info(f"Conversion to AlternateMember took {convert_time:.2f}ms")
+        
+        total_time = (time.time() - start_time) * 1000
+        log.info(f"Total get_alternate_pool time: {total_time:.2f}ms, returning {len(alternate_members)} members")
+        
+        return AlternatePoolResponse(members=alternate_members)
+        
+    except Exception as e:
+        log.error(f"Error fetching alternate pool: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch alternate pool"
         )
 

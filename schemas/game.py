@@ -58,9 +58,17 @@ class TeamMember(BaseModel):
         extra = "allow"  # Allow extra fields for flexibility
 
 
+class AlternateMember(BaseModel):
+    """Minimal member data for alternate pool (distractors and animations)"""
+    public_id: str
+    name: str
+    wave_gif_url: Optional[str] = None
+
+
 class GenerateQuestionsRequest(BaseModel):
     """Request model for generating game questions"""
     members: List[TeamMember]
+    alternatePool: Optional[List[AlternateMember]] = None  # Optional alternate pool for distractors
 
 
 class GenerateQuestionsResponse(BaseModel):
@@ -71,4 +79,9 @@ class GenerateQuestionsResponse(BaseModel):
 class WaveGifUrlsResponse(BaseModel):
     """Response model for wave GIF URLs for animations"""
     urls: List[str]
+
+
+class AlternatePoolResponse(BaseModel):
+    """Response model for alternate pool (members with minimal data)"""
+    members: List[AlternateMember]
 
