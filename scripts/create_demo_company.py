@@ -18,8 +18,8 @@ when using the same prefix and team size.
 
 Usage:
     # Create demo company:
-    python create_demo_company.py --team-name "Acme Corp" --prefix "ibm-" --initial-email "user+2000@gmail.com" --logo-url "https://example.com/logo.png" [--team-size 15]
-    python create_demo_company.py --team-name "Acme Corp" --prefix "dem1" --initial-email "user+2000@gmail.com" --logo-file "/path/to/logo.png" [--team-size 15]
+    python create_demo_company.py --team-name "Acme Corp" --prefix "ibm-" --initial-email "user+2000@gmail.com" --logo-url "https://example.com/logo.png" [--team-size 32]
+    python create_demo_company.py --team-name "Acme Corp" --prefix "dem1" --initial-email "user+2000@gmail.com" --logo-file "/path/to/logo.png" [--team-size 32]
     
     # Remove demo company:
     python create_demo_company.py --prefix "ibm-" --remove [--dry-run]
@@ -68,7 +68,7 @@ log = new_logger("create_demo_company")
 
 # Wave GIF library configuration
 WAVE_GIF_LIBRARY_BASE_URL = "https://xastkogrfeblbsvmbkew.supabase.co/storage/v1/object/public/test_wave_gif_library"
-WAVE_GIF_COUNT = 21  # We have test_wave_gif1.gif through test_wave_gif21.gif
+WAVE_GIF_COUNT = 32  # We have test_wave_gif1.gif through test_wave_gif32.gif
 
 def check_public_id_collisions(
     db: Session,
@@ -154,9 +154,9 @@ TEAM_MEMBERS = [
     (
         "Marcus Lee", "UX Designer", "Seattle, WA, USA", "Hello!", "Marcus",
         {
-            "What's your superpower at work?": "Definitely my ability to bring different perspectives together. I can usually find common ground when opinions differ.",
-            "What's your favorite way to spend a weekend?": "I'm part of a community garden and spend most weekends there. It's my meditation and social time rolled into one.",
-            "What's a skill you're currently learning?": "I'm learning to play the guitar. It's been a great way to unwind after work and exercise a different part of my brain.",
+            "What's your superpower at work?": "I have a knack for translating user pain points into elegant design solutions that feel intuitive and delightful.",
+            "What's your favorite way to spend a weekend?": "I volunteer at a local community garden and spend most weekends there. It's my meditation and social time rolled into one.",
+            "What's a skill you're currently learning?": "I'm learning to play the bass guitar. It's been a great way to unwind after work and exercise a different part of my brain.",
             "My simple pleasures…": "A perfectly brewed cup of coffee in the morning, a good book before bed, and Sunday morning farmers markets.",
         },
         False  # public_sharing flag - every 3rd user (index 2)
@@ -164,8 +164,8 @@ TEAM_MEMBERS = [
     (
         "Samuel Rivera", "DevOps Engineer", "Toronto, ON, Canada", "Hey!", "Sam",
         {
-            "What's something unexpected about you?": "I can speak five languages! I grew up in an international community and picked them up along the way.",
-            "What's your go-to productivity hack?": "The Pomodoro technique changed my life! 25 minutes of focused work followed by a 5-minute break works perfectly for my brain.",
+            "What's something unexpected about you?": "I'm trilingual and can switch between English, Spanish, and French seamlessly. I grew up in a multicultural neighborhood and picked them up naturally.",
+            "What's your go-to productivity hack?": "I use the 'time-boxing' method - setting strict time limits for tasks prevents me from overthinking and helps me move faster.",
             "What's a book/podcast that changed your perspective?": "'Atomic Habits' completely changed how I approach building new skills and breaking bad habits.",
             "What I need from teammates to do great work": "Clear requirements and context. I do my best work when I understand the 'why' behind what we're building.",
         },
@@ -224,7 +224,7 @@ TEAM_MEMBERS = [
     (
         "Brooke Thompson", "Security Engineer", "Paris, France", "Hey everyone!", "Brooke",
         {
-            "What's your superpower at work?": "I can turn complex problems into simple, actionable steps. It helps the team move forward when we're stuck on challenging projects.",
+            "What's your superpower at work?": "I can spot security vulnerabilities that others miss by thinking like an attacker and anticipating potential exploits.",
             "What's your go-to productivity hack?": "I batch similar tasks together. All my meetings in one block, all my coding in another, all my emails in another.",
             "What's a skill you're currently learning?": "I'm teaching myself woodworking. I just finished building my first bookshelf and I'm hooked!",
             "I geek out on…": "Coffee brewing methods. I'm always experimenting with different beans, grind sizes, and brewing techniques.",
@@ -244,7 +244,7 @@ TEAM_MEMBERS = [
     (
         "Amelia Smith", "Product Designer", "Dublin, Ireland", "Hello!", "Amelia",
         {
-            "What's your favorite way to spend a weekend?": "Hiking with my dog and then trying a new restaurant in the evening. Perfect balance of activity and relaxation!",
+            "What's your favorite way to spend a weekend?": "Taking long walks along the coast with my dog, then discovering a new cozy pub or restaurant in the evening.",
             "What's a book/podcast that changed your perspective?": "'Thinking, Fast and Slow' by Daniel Kahneman made me much more aware of my own cognitive biases and decision-making processes.",
             "I geek out on…": "Retro video game consoles. I collect and restore old systems, and I'm working on a complete NES library.",
             "What I need from teammates to do great work": "Time to focus without interruptions. I appreciate when people respect my 'do not disturb' hours.",
@@ -254,8 +254,8 @@ TEAM_MEMBERS = [
     (
         "Emma Brown", "Full Stack Developer", "Montreal, QC, Canada", "Hey there!", "Emma",
         {
-            "What's your superpower at work?": "I'm the team's documentation wizard! I make sure our knowledge is captured and accessible to everyone.",
-            "What's your go-to productivity hack?": "Time blocking my calendar with specific tasks rather than general 'work time'. It helps me stay focused and track progress.",
+            "What's your superpower at work?": "I'm great at debugging by systematically narrowing down issues. I can usually find the root cause faster than most.",
+            "What's your go-to productivity hack?": "I use the 'eat the frog' method - tackle the hardest task first thing in the morning when my energy is highest.",
             "My simple pleasures…": "The sound of birds in the morning, a warm shower after a long day, and laughing until my stomach hurts.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I do my best coding work in the afternoon (2-6pm). Mornings are for emails, standups, and lighter tasks.",
         },
@@ -264,9 +264,9 @@ TEAM_MEMBERS = [
     (
         "Sage Williams", "Engineering Manager", "Barcelona, Spain", "Hi everyone!", "Sage",
         {
-            "What's your superpower at work?": "Definitely my ability to bring different perspectives together. I can usually find common ground when opinions differ.",
-            "What's something unexpected about you?": "I can speak five languages! I grew up in an international community and picked them up along the way.",
-            "What's a skill you're currently learning?": "I'm learning to play the guitar. It's been a great way to unwind after work and exercise a different part of my brain.",
+            "What's your superpower at work?": "I excel at building high-performing teams by identifying each person's strengths and creating an environment where they can thrive.",
+            "What's something unexpected about you?": "I'm fluent in four languages and love using them to connect with team members from different backgrounds.",
+            "What's a skill you're currently learning?": "I'm learning to play the ukulele. It's a fun, portable instrument that brings joy to my evenings.",
             "What I need from teammates to do great work": "Trust and autonomy. Give me the problem to solve and let me figure out the best approach.",
         },
         True  # public_sharing flag
@@ -274,12 +274,182 @@ TEAM_MEMBERS = [
     (
         "Olivia Davis", "Site Reliability Engineer", "New York, NY, USA", "Hello!", "Olivia",
         {
-            "What's your favorite way to spend a weekend?": "I'm part of a community garden and spend most weekends there. It's my meditation and social time rolled into one.",
-            "What's your go-to productivity hack?": "The Pomodoro technique changed my life! 25 minutes of focused work followed by a 5-minute break works perfectly for my brain.",
+            "What's your favorite way to spend a weekend?": "I love exploring new neighborhoods in the city, trying different brunch spots, and catching up on my reading list.",
+            "What's your go-to productivity hack?": "I use the 'two-minute rule' combined with batching - if it takes less than two minutes, I do it immediately. Otherwise, I group similar tasks.",
             "My simple pleasures…": "A clean workspace, the perfect temperature in my apartment, and catching up with old friends.",
-            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm a morning person, so I do my best deep work between 7-11am. Afternoons are for collaboration and meetings.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm most productive in the early morning (6-10am) for deep technical work. Afternoons are for collaboration and meetings.",
         },
         True  # public_sharing flag - every 3rd user (index 14)
+    ),
+    (
+        "Hannah Morgan", "Customer Success Manager", "Chicago, IL, USA", "Hey there!", "Hannah",
+        {
+            "What's something unexpected about you?": "I host a tiny movie club where we watch one classic film a month and over-analyze it in a shared Notion doc.",
+            "What's your favorite way to spend a weekend?": "A long walk around the city with a podcast in my ears, then cooking a new recipe for friends on Sunday night.",
+            "I geek out on…": "Organizing systems — I have color-coded labels on everything from my pantry to my email folders.",
+            "My simple pleasures…": "Freshly baked bread, a perfectly made latte, and finishing a book in one sitting on a rainy day.",
+        },
+        False
+    ),
+    (
+        "Luca Rossi", "Sales Engineer", "Madrid, Spain", "Hi everyone!", "Luca",
+        {
+            "What's your superpower at work?": "Finding the one analogy that makes a complex product click for a customer who was completely lost five minutes earlier.",
+            "What's something unexpected about you?": "I DJ small community events on weekends and have a playlist ready for almost any mood.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm sharpest for deep work between 8-11am, and I like stacking all my demos after lunch.",
+            "When I'm not at work…": "You'll find me exploring coffee shops, sketching app ideas in a notebook, or watching European football highlights.",
+        },
+        True
+    ),
+    (
+        "Priya Nair", "Data Engineer", "Stockholm, Sweden", "Hello!", "Priya",
+        {
+            "What's your favorite way to spend a weekend?": "Batch-cooking curries while listening to long-form tech podcasts, then sharing the leftovers with neighbors.",
+            "What's a skill you're currently learning?": "I'm teaching myself generative art in Python and love seeing data turn into visuals.",
+            "I geek out on…": "Well-designed dashboards — I can spend hours debating color scales and chart types.",
+            "What I need from teammates to do great work": "Clear data definitions and early alignment on metrics so we don't have to redo pipelines later.",
+        },
+        False
+    ),
+    (
+        "Diego Alvarez", "Support Engineer", "Los Angeles, CA, USA", "Hey!", "Diego",
+        {
+            "What's something unexpected about you?": "I used to stream indie games on Twitch and still have a tiny but very enthusiastic Discord community.",
+            "What's your go-to productivity hack?": "I write down every customer problem as a one-line story, then group them to spot patterns before suggesting fixes.",
+            "When I'm not at work…": "I'm usually trying new taco spots, tinkering with my home office setup, or learning new guitar riffs.",
+            "My simple pleasures…": "A perfectly timed punchline in a group chat and that quiet moment right before a live concert starts.",
+        },
+        True
+    ),
+    (
+        "Nora Fischer", "People Operations Partner", "Zurich, Switzerland", "Hi there!", "Nora",
+        {
+            "What's your superpower at work?": "Creating calm and structure when everything feels chaotic, especially during hiring sprints and reorgs.",
+            "What's a book/podcast that changed your perspective?": "A series on workplace psychology that reshaped how I think about feedback and burnout.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "Late mornings are for deep work on programs; I save 1-4pm for 1:1s and coaching conversations.",
+            "When I'm not at work…": "I'm usually biking around the city, browsing small bookstores, or planning my next weekend trip.",
+        },
+        False
+    ),
+    (
+        "Jason Lee", "Full Stack Developer", "Rome, Italy", "Hey!", "Jason",
+        {
+            "What's your favorite way to spend a weekend?": "A long hike followed by takeout and a co-op game night with friends.",
+            "What's a skill you're currently learning?": "I'm learning to design pixel art so I can eventually build a tiny game from scratch.",
+            "I geek out on…": "Front-end performance audits and weird edge cases in browser behavior.",
+            "What I need from teammates to do great work": "Clear priorities, thoughtful PR reviews, and room to experiment with new tools when it makes sense.",
+        },
+        True
+    ),
+    (
+        "Maya Patel", "Cloud Architect", "Sydney, Australia", "G'day!", "Maya",
+        {
+            "What's your superpower at work?": "I can design scalable systems that handle millions of requests without breaking a sweat.",
+            "What's your favorite way to spend a weekend?": "Beach volleyball in the morning, then exploring new neighborhoods and trying local food spots.",
+            "What's a skill you're currently learning?": "I'm getting into sailing and just completed my basic certification.",
+            "I geek out on…": "Cloud infrastructure patterns and distributed systems architecture.",
+        },
+        False
+    ),
+    (
+        "Kenji Tanaka", "Machine Learning Engineer", "Tokyo, Japan", "Konnichiwa!", "Kenji",
+        {
+            "What's something unexpected about you?": "I'm a certified tea ceremony master and host monthly sessions for friends.",
+            "What's your go-to productivity hack?": "I use the 'deep work' method with 90-minute focused blocks and strict no-distraction rules.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "Early mornings (6-9am) are for deep ML model work. Afternoons are for team syncs and code reviews.",
+            "My simple pleasures…": "A perfectly brewed matcha, finding a new ramen spot, and watching cherry blossoms in spring.",
+        },
+        True
+    ),
+    (
+        "Isabella Chen", "Product Designer", "Singapore", "Hello!", "Bella",
+        {
+            "What's your superpower at work?": "I can translate complex user needs into intuitive designs that feel effortless.",
+            "What's your favorite way to spend a weekend?": "Exploring hawker centers for new food discoveries, then relaxing at the beach with a good book.",
+            "What's a book/podcast that changed your perspective?": "'The Design of Everyday Things' completely changed how I approach user experience.",
+            "What I need from teammates to do great work": "Early collaboration and honest feedback. I'd rather iterate on ideas than polish something in the wrong direction.",
+        },
+        False
+    ),
+    (
+        "Arjun Singh", "DevOps Engineer", "Mumbai, India", "Namaste!", "Arjun",
+        {
+            "What's something unexpected about you?": "I'm a competitive chess player and have competed in several regional tournaments.",
+            "What's your go-to productivity hack?": "I automate everything repetitive so I can focus on solving new problems.",
+            "When I'm not at work…": "I'm usually exploring street food markets, playing cricket with friends, or working on my side project.",
+            "I geek out on…": "Container orchestration, CI/CD pipelines, and infrastructure as code.",
+        },
+        True
+    ),
+    (
+        "Camila Silva", "Frontend Developer", "São Paulo, Brazil", "Oi!", "Camila",
+        {
+            "What's your favorite way to spend a weekend?": "Dancing samba at local festivals, then catching up on the latest tech talks over coffee.",
+            "What's a skill you're currently learning?": "I'm learning Portuguese sign language to make our apps more accessible.",
+            "My simple pleasures…": "Fresh açai bowls, discovering new music, and that moment when code finally works after debugging.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm most productive mid-morning (10am-1pm) for coding. Afternoons are for design reviews and planning.",
+        },
+        False
+    ),
+    (
+        "Carlos Mendez", "Backend Developer", "Mexico City, Mexico", "¡Hola!", "Carlos",
+        {
+            "What's your superpower at work?": "I can debug complex distributed systems by tracing requests across multiple services.",
+            "What's something unexpected about you?": "I'm a trained mariachi musician and play at local events on weekends.",
+            "What's your go-to productivity hack?": "I use time-boxing with strict limits. If something takes longer than expected, I reassess the approach.",
+            "What I need from teammates to do great work": "Clear API contracts and good documentation. It saves hours of back-and-forth.",
+        },
+        True
+    ),
+    (
+        "Emma Nielsen", "UX Researcher", "Copenhagen, Denmark", "Hej!", "Emma",
+        {
+            "What's your favorite way to spend a weekend?": "Biking around the city, visiting design museums, and cozying up with a book at a café.",
+            "What's a book/podcast that changed your perspective?": "'Don't Make Me Think' by Steve Krug revolutionized how I think about usability testing.",
+            "I geek out on…": "User journey mapping and analyzing behavioral patterns in user studies.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "Mornings are for analyzing research data. Afternoons are for user interviews and stakeholder presentations.",
+        },
+        False
+    ),
+    (
+        "Felix Mueller", "Security Engineer", "Vienna, Austria", "Servus!", "Felix",
+        {
+            "What's your superpower at work?": "I can spot security vulnerabilities that others miss by thinking like an attacker.",
+            "What's something unexpected about you?": "I'm a classical music enthusiast and play the violin in a local orchestra.",
+            "What's your go-to productivity hack?": "I use threat modeling frameworks to systematically assess security risks.",
+            "When I'm not at work…": "I'm usually hiking in the Alps, attending concerts, or reading about cryptography.",
+        },
+        True
+    ),
+    (
+        "Sophie Dubois", "Data Analyst", "Brussels, Belgium", "Bonjour!", "Sophie",
+        {
+            "What's your favorite way to spend a weekend?": "Exploring art galleries, trying new chocolate shops, and long walks through historic neighborhoods.",
+            "What's a skill you're currently learning?": "I'm learning advanced statistical modeling techniques to improve my analysis skills.",
+            "I geek out on…": "Data visualization and finding hidden patterns in datasets.",
+            "What I need from teammates to do great work": "Access to clean, well-documented data sources and clear questions about what insights are needed.",
+        },
+        False
+    ),
+    (
+        "Rajesh Kumar", "QA Engineer", "Mumbai, India", "Namaste!", "Rajesh",
+        {
+            "What's your superpower at work?": "I can break any feature by thinking of edge cases others never consider.",
+            "What's your go-to productivity hack?": "I write test cases before features are built, which helps catch issues early.",
+            "When I'm not at work…": "I'm usually watching cricket matches, trying new street food, or working on my photography hobby.",
+            "My simple pleasures…": "A perfectly executed test plan, finding a critical bug before production, and good chai.",
+        },
+        True
+    ),
+    (
+        "Luna Rodriguez", "Content Strategist", "São Paulo, Brazil", "Oi!", "Luna",
+        {
+            "What's something unexpected about you?": "I'm conversational in six languages and love learning new ones through immersion and conversation.",
+            "What's your favorite way to spend a weekend?": "Attending cultural festivals, writing in coffee shops, and exploring local markets.",
+            "What's a book/podcast that changed your perspective?": "'Made to Stick' by Chip and Dan Heath changed how I approach content creation.",
+            "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I write best in quiet mornings (8-11am). Afternoons are for brainstorming sessions and stakeholder reviews.",
+        },
+        False
     ),
 ]
 
@@ -290,40 +460,138 @@ TEAM_MEMBERS = [
 # Use tracks and albums primarily - they're more likely to be public and accessible
 # Playlists can be private and return 404, so we use fewer of them
 SAMPLE_SPOTIFY_URLS = [
+    # 1
     "https://open.spotify.com/track/3bE5slaVEfaDreqARl6k4M",  # Pearl Jam - Yellow Ledbetter
+    # 2
     "https://open.spotify.com/track/5VSCgNlSmTV2Yq5lB40Eaw",  # Popular track
+    # 3
     "https://open.spotify.com/album/1ATL5GLyefJaxhQzSPVrLX",  # Popular album
+    # 4
     "https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp",  # Eminem - Lose Yourself
+    # 5
     "https://open.spotify.com/album/7xXWOU9SOmwwPBDBdCdlIX",  # Post Malone
+    # 6
     "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC",  # Rick Astley - Never Gonna Give You Up 
+    # 7
     "https://open.spotify.com/album/4yP0hdKOZ4sh7Nk7ZMVlvm",  # Popular album 
+    # 8
     "https://open.spotify.com/track/1Je1IMUlBXcx1Fz0WE7oPT",  # Popular track
+    # 9
     "https://open.spotify.com/album/0E4xv5gPjykrwBgBZzI8XG",  # Amy Winehouse
+    # 10
     "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj",  # The Beatles – Abbey Road 
+    # 11
     "https://open.spotify.com/track/2VxeLyX666F8uXCJ0dZF8B",  # Sia – Chandelier
+    # 12
     "https://open.spotify.com/show/6ZcvVBPQ2ToLXEWVbaw59P",   # The Rewatchables – movie podcast (new replacement)
+    # 13
     "https://open.spotify.com/album/2noRn2Aes5aoNVsU6iWThc",  # Michael Jackson – Thriller 
+    # 14
     "https://open.spotify.com/album/3OxfaVgvTxUTy7276t7SPU",  # Amy Winehouse - Back to Black
+    # 15
     "https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy",  # Adele – 25 
+    # 16
+    "https://open.spotify.com/track/2KH16WveTQWT6KOG9Rg6e2",  # Survivor – Eye of the Tiger
+    # 17
+    "https://open.spotify.com/album/0BwWUstDMUbgq2NYONRqlu",  # Fleetwood Mac – Rumours
+    # 18
+    "https://open.spotify.com/track/77NNZQSqzLNqh2A9JhLRkg",  # Journey – Don't Stop Believin'
+    # 19
+    "https://open.spotify.com/track/4xkOaSrkexMciUUogZKVTS",  # Eminem – 'Till I Collapse
+    # 20
+    "https://open.spotify.com/track/54bm2e3tk8cliUz3VSdCPZ",  # Metallica – Master of Puppets
+    # 21
+    "https://open.spotify.com/show/2hqSzWW1GFAyugtjNxfgcR?",  # the science of everything podcast
+    # 22
+    "https://open.spotify.com/show/1bJRgaFZHuzifad4IAApFR",  # masters of scale poscast
+    # 23
+    "https://open.spotify.com/playlist/161TzGqTamHMQqCp6Sf6x9",  # Disco playlist
+    # 24
+    "https://open.spotify.com/show/3IM0lmZxpFAY7CwMuv9H4g",  # NYT the daily
+    # 25
+    "https://open.spotify.com/playlist/37i9dQZF1EQn2GRFTFMl2A",  # 90's mix
+    # 26
+    "https://open.spotify.com/album/5UXQXC4bPBBxaJk0dehwIg",  # 2000's playlist
+    # 27
+    "https://open.spotify.com/playlist/5jOfCiOSLgXbVj3UlbPZBs",  # Springsteen
+    # 28
+    "https://open.spotify.com/playlist/37i9dQZF1EIcZuVzFmiIZ9",  # funk playlist
+    # 29
+    "https://open.spotify.com/playlist/37i9dQZF1EIh2VfN7fHcsP",  # electronic playlist
+    # 30
+    "https://open.spotify.com/artist/45dkTj5sMRSjrmBSBeiHym",  # tate mccrae
+    # 31
+    "https://open.spotify.com/playlist/37i9dQZF1DX5gMBaRFQjOY",  # classic country playlist
+    # 32
+    "https://open.spotify.com/playlist/39rRww1hqREuCEzM5NQW3i",  # INXS
 ]
 
 # Sample YouTube URLs - one per user
 SAMPLE_YOUTUBE_URLS = [
+    # 1
     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # Rick Astley – Never Gonna Give You Up
+    # 2
     "https://www.youtube.com/watch?v=9bZkp7q19f0",  # PSY – Gangnam Style
+    # 3
     "https://www.youtube.com/watch?v=kJQP7kiw5Fk",  # Luis Fonsi – Despacito
+    # 4
     "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",  # Queen – Bohemian Rhapsody
+    # 5
     "https://www.youtube.com/watch?v=OPf0YbXqDm0",  # Mark Ronson – Uptown Funk
+    # 6
     "https://www.youtube.com/watch?v=LXb3EKWsInQ",  # 4K Nature Relaxation
+    # 7
     "https://www.youtube.com/watch?v=ZbZSe6N_BXs",  # Maroon 5 – Sugar
+    # 8
     "https://www.youtube.com/watch?v=2Vv-BfVoq4g",  # Ed Sheeran – Perfect
+    # 9
     "https://www.youtube.com/watch?v=YQHsXMglC9A",  # Adele – Hello
+    # 10
     "https://www.youtube.com/watch?v=FTQbiNvZqaY",  # Toto – Africa
+    # 11
     "https://www.youtube.com/watch?v=CevxZvSJLk8",  # Katy Perry – Roar (replacement for placeholder #1)
+    # 12
     "https://www.youtube.com/watch?v=JGwWNGJdvx8",  # Ed Sheeran – Shape of You (replacement for placeholder #2)
+    # 13
     "https://www.youtube.com/watch?v=3tmd-ClpJxA",  # Imagine Dragons – Believer
+    # 14
     "https://www.youtube.com/watch?v=hT_nvWreIhg",  # OneRepublic – Counting Stars
+    # 15
     "https://www.youtube.com/watch?v=ktvTqknDobU",  # Imagine Dragons – Radioactive
+    # 16
+    "https://www.youtube.com/watch?v=uelHwf8o7_U",  # Eminem – Love The Way You Lie
+    # 17
+    "https://www.youtube.com/watch?v=60ItHLz5WEA",  # Alan Walker – Faded
+    # 18
+    "https://www.youtube.com/watch?v=kXYiU_JCYtU",  # Linkin Park – Numb
+    # 19
+    "https://www.youtube.com/watch?v=RubBzkZzpUA",  # Drake - Started From the Bottom
+    # 20
+    "https://www.youtube.com/watch?v=3AtDnEC4zak",  # Charlie Puth – Attention
+    # 21
+    "https://www.youtube.com/watch?v=YykjpeuMNEk",  # Coldplay – Hymn For The Weekend
+    # 22
+    "https://www.youtube.com/shorts/d1JLMQ9WNd4",  # Snowboard carving
+    # 23
+    "https://www.youtube.com/watch?v=oygrmJFKYZY",  # Dua Lipa – Don't Start Now
+    # 24
+    "https://www.youtube.com/watch?v=aisAPO3CVoI",  # Billie Eilish – bad guy
+    # 25
+    "https://www.youtube.com/watch?v=B592loS65uU",  # Seinfeld bloopers
+    # 26
+    "https://www.youtube.com/watch?v=PNbBDrceCy8",  # The Who - Who Are You
+    # 27
+    "https://www.youtube.com/watch?v=R_Gd5wyD6sM",  # Taylor Swift – opening number
+    # 28
+    "https://www.youtube.com/watch?v=eRyq3oGqXTQ",  # Chris Stapleton
+    # 29
+    "https://www.youtube.com/watch?v=KbyahTnzbKA",  # Apple pie recipe
+    # 30
+    "https://www.youtube.com/watch?v=8hujqOm-XUA",  # Hobbie cat sailing
+    # 31
+    "https://www.youtube.com/watch?v=Wu-aMClCsNc",  # Diving a whale
+    # 32
+    "https://www.youtube.com/watch?v=fq2wwYT4Bvc",  # Great white shark
 ]
 
 # City coordinates for location widgets
@@ -344,6 +612,21 @@ CITY_COORDINATES = {
     "Montreal, QC, Canada": (45.5017, -73.5673),
     "Barcelona, Spain": (41.3851, 2.1734),
     "New York, NY, USA": (40.7128, -74.0060),
+    "Chicago, IL, USA": (41.8781, -87.6298),
+    "Madrid, Spain": (40.4168, -3.7038),
+    "Stockholm, Sweden": (59.3293, 18.0686),
+    "Los Angeles, CA, USA": (34.0522, -118.2437),
+    "Zurich, Switzerland": (47.3769, 8.5417),
+    "Rome, Italy": (41.9028, 12.4964),
+    "Sydney, Australia": (-33.8688, 151.2093),
+    "Tokyo, Japan": (35.6762, 139.6503),
+    "Singapore": (1.3521, 103.8198),
+    "Mumbai, India": (19.0760, 72.8777),
+    "São Paulo, Brazil": (-23.5505, -46.6333),
+    "Mexico City, Mexico": (19.4326, -99.1332),
+    "Copenhagen, Denmark": (55.6761, 12.5683),
+    "Vienna, Austria": (48.2082, 16.3738),
+    "Brussels, Belgium": (50.8503, 4.3517),
 }
 
 # Nearby cities within ~300km for "born and raised" locations
@@ -424,6 +707,81 @@ NEARBY_CITIES = {
         ("Jersey City, NJ, USA", 40.7178, -74.0431),
         ("Yonkers, NY, USA", 40.9312, -73.8988),
     ],
+    "Chicago, IL, USA": [
+        ("Naperville, IL, USA", 41.7508, -88.1535),
+        ("Aurora, IL, USA", 41.7606, -88.3201),
+        ("Joliet, IL, USA", 41.5250, -88.0817),
+    ],
+    "Madrid, Spain": [
+        ("Toledo, Spain", 39.8628, -4.0273),
+        ("Segovia, Spain", 40.9429, -4.1088),
+        ("Guadalajara, Spain", 40.6289, -3.1616),
+    ],
+    "Stockholm, Sweden": [
+        ("Uppsala, Sweden", 59.8586, 17.6389),
+        ("Södertälje, Sweden", 59.1955, 17.6252),
+        ("Västerås, Sweden", 59.6099, 16.5448),
+    ],
+    "Los Angeles, CA, USA": [
+        ("Long Beach, CA, USA", 33.7701, -118.1937),
+        ("Santa Monica, CA, USA", 34.0195, -118.4912),
+        ("Pasadena, CA, USA", 34.1478, -118.1445),
+    ],
+    "Zurich, Switzerland": [
+        ("Winterthur, Switzerland", 47.5056, 8.7241),
+        ("Baden, Switzerland", 47.4733, 8.3056),
+        ("Lucerne, Switzerland", 47.0502, 8.3093),
+    ],
+    "Rome, Italy": [
+        ("Florence, Italy", 43.7696, 11.2558),
+        ("Naples, Italy", 40.8518, 14.2681),
+        ("Tivoli, Italy", 41.9604, 12.7978),
+    ],
+    "Sydney, Australia": [
+        ("Newcastle, Australia", -32.9283, 151.7817),
+        ("Wollongong, Australia", -34.4278, 150.8931),
+        ("Canberra, Australia", -35.2809, 149.1300),
+    ],
+    "Tokyo, Japan": [
+        ("Yokohama, Japan", 35.4437, 139.6380),
+        ("Chiba, Japan", 35.6074, 140.1065),
+        ("Saitama, Japan", 35.8617, 139.6455),
+    ],
+    "Singapore": [
+        ("Johor Bahru, Malaysia", 1.4927, 103.7414),
+        ("Batam, Indonesia", 1.0456, 104.0305),
+        ("Malacca, Malaysia", 2.1896, 102.2501),
+    ],
+    "Mumbai, India": [
+        ("Pune, India", 18.5204, 73.8567),
+        ("Thane, India", 19.2183, 72.9781),
+        ("Navi Mumbai, India", 19.0330, 73.0297),
+    ],
+    "São Paulo, Brazil": [
+        ("Campinas, Brazil", -22.9056, -47.0608),
+        ("Guarulhos, Brazil", -23.4538, -46.5331),
+        ("Santos, Brazil", -23.9608, -46.3332),
+    ],
+    "Mexico City, Mexico": [
+        ("Puebla, Mexico", 19.0414, -98.2063),
+        ("Toluca, Mexico", 19.2926, -99.6532),
+        ("Cuernavaca, Mexico", 18.9242, -99.2216),
+    ],
+    "Copenhagen, Denmark": [
+        ("Malmö, Sweden", 55.6059, 13.0007),
+        ("Roskilde, Denmark", 55.6415, 12.0803),
+        ("Helsingør, Denmark", 56.0361, 12.6136),
+    ],
+    "Vienna, Austria": [
+        ("Bratislava, Slovakia", 48.1486, 17.1077),
+        ("Brno, Czech Republic", 49.1951, 16.6068),
+        ("Graz, Austria", 47.0707, 15.4395),
+    ],
+    "Brussels, Belgium": [
+        ("Antwerp, Belgium", 51.2194, 4.4025),
+        ("Ghent, Belgium", 51.0543, 3.7174),
+        ("Leuven, Belgium", 50.8798, 4.7009),
+    ],
 }
 
 def get_location_data(location: str) -> dict:
@@ -476,7 +834,7 @@ def get_wave_gif_url_for_user(user_index: int) -> str:
     # Use user_index to deterministically select a GIF
     # User 1 (index 0) gets test_wave_gif1.gif, user 10 (index 9) gets test_wave_gif10.gif, etc.
     # If user_index exceeds available GIFs, wrap around
-    gif_number = (user_index % WAVE_GIF_COUNT) + 1  # +1 to get range 1-21
+    gif_number = (user_index % WAVE_GIF_COUNT) + 1  # +1 to get range 1-32
     return f"{WAVE_GIF_LIBRARY_BASE_URL}/test_wave_gif{gif_number}.gif"
 
 def get_photo_v2_url_for_user(user_index: int) -> str:
@@ -488,15 +846,28 @@ def get_photo_v2_url_for_user(user_index: int) -> str:
 
 def get_photo_v2_caption(user_index: int) -> str:
     """Get the appropriate caption for the photo-v2 widget based on user index."""
-    # Pet types: 1-4 = dogs, 5-8 = cats, 9-12 = aquarium fish, 13-15 = pet birds
+    # Image types:
+    # 1-4   = dogs           (demo001-demo004)
+    # 5-8   = cats           (demo005-demo008)
+    # 9-12  = aquarium fish  (demo009-demo012)
+    # 13-15 = pet birds      (demo013-demo015)
+    # 16-21 = horses         (demo016-demo021)
+    # 22-27 = gardens        (demo022-demo027)
+    # 28-32 = sailing        (demo028-demo032)
     if user_index < 4:  # 0-3 (demo001-demo004)
         return "My favorite dogs"
     elif user_index < 8:  # 4-7 (demo005-demo008)
         return "My favorite cats"
     elif user_index < 12:  # 8-11 (demo009-demo012)
         return "My aquarium fish"
-    else:  # 12-14 (demo013-demo015)
+    elif user_index < 15:  # 12-14 (demo013-demo015)
         return "My pet birds"
+    elif user_index < 21:  # 15-20 (demo016-demo021)
+        return "My favorite horses"
+    elif user_index < 27:  # 21-26 (demo022-demo027)
+        return "My garden in the summer"
+    else:  # 27-31 (demo028-demo032)
+        return "My sail boat"
 
 def download_wave_gif(gif_url: str) -> bytes:
     """Download a wave GIF from the library."""
@@ -1575,7 +1946,7 @@ async def main_async():
     parser.add_argument("--prefix", required=True, help="4-character prefix for public IDs (e.g., 'ibm-' or 'dem1')")
     parser.add_argument("--logo-url", help="URL to the company logo (will be downloaded and uploaded to Supabase)")
     parser.add_argument("--logo-file", help="Path to local logo file (will be uploaded to Supabase)")
-    parser.add_argument("--team-size", type=int, default=15, help="Number of team members to create (2-15, default: 15). Not used with --remove.")
+    parser.add_argument("--team-size", type=int, default=32, help="Number of team members to create (2-32, default: 32). Not used with --remove.")
     parser.add_argument("--initial-email", help="Initial Gmail address with +number pattern (e.g., fred.smith+2000@gmail.com). Required for creation, not for removal.")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be created/deleted without actually doing it")
     parser.add_argument("--remove", action="store_true", help="Remove the demo company instead of creating it. Deletes team, users, and all associated files from database and Supabase storage.")
@@ -1627,8 +1998,8 @@ async def main_async():
         log.info(f"Starting demo company creation: team_name={args.team_name}, prefix={args.prefix}, team_public_id={team_public_id}, logo_url={args.logo_url}, logo_file={args.logo_file}, team_size={args.team_size}, initial_email={args.initial_email}, dry_run={args.dry_run}")
         
         # Validate team size (only for creation)
-        if args.team_size < 2 or args.team_size > 15:
-            log.error("Team size must be between 2 and 15")
+        if args.team_size < 2 or args.team_size > 32:
+            log.error("Team size must be between 2 and 32")
             sys.exit(1)
         
         if args.team_size > len(TEAM_MEMBERS):
