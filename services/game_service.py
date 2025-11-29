@@ -144,40 +144,13 @@ class GameService:
             log.warning(f"Not enough members for question generation: {len(members)} (need at least 10)")
             return []
         
-        # Pre-select specific prompt/answer pairs for each question
-        def select_prompt_answer_pair(member: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-            """Select one random prompt/answer pair from a member"""
-            selected_prompts = member.get("selectedPrompts", [])
-            answers = member.get("answers", {})
-            
-            if not selected_prompts:
-                return None
-            
-            # Randomly select one prompt that has an answer
-            available_prompts = [
-                p for p in selected_prompts 
-                if isinstance(answers, dict) and answers.get(p, {}).get("text")
-            ]
-            
-            if not available_prompts:
-                return None
-            
-            selected_prompt = random.choice(available_prompts)
-            answer_data = answers.get(selected_prompt, {})
-            answer_text = answer_data.get("text", "") if isinstance(answer_data, dict) else ""
-            
-            return {
-                "prompt": selected_prompt,
-                "answer": answer_text
-            }
-        
         # Select 10 UNIQUE members as subjects, ensuring each has valid content
         # Track used subject IDs to prevent duplicates across question types
         used_subject_ids = set()
         selected_subjects = []
         shuffled = GameService._shuffle_array(members)
         
-        # First, collect members with valid content
+        # Collect members with valid content (any prompt/answer pair)
         for member in shuffled:
             if len(selected_subjects) >= 10:
                 break
@@ -186,11 +159,19 @@ class GameService:
             if not member_id or member_id in used_subject_ids:
                 continue
             
-            # Check if member has valid content
-            pair = select_prompt_answer_pair(member)
-            if pair:
-                selected_subjects.append(member)
-                used_subject_ids.add(member_id)
+            # Check if member has valid content (any prompt with an answer)
+            selected_prompts = member.get("selectedPrompts", [])
+            answers = member.get("answers", {})
+            
+            if selected_prompts and isinstance(answers, dict):
+                # Check if member has at least one prompt with an answer
+                has_content = any(
+                    isinstance(answers.get(p, {}), dict) and answers.get(p, {}).get("text")
+                    for p in selected_prompts
+                )
+                if has_content:
+                    selected_subjects.append(member)
+                    used_subject_ids.add(member_id)
         
         # Validate we have exactly 10 unique subjects with valid content
         if len(selected_subjects) < 10:
@@ -211,60 +192,73 @@ class GameService:
         guess_who_members = selected_subjects[:6]
         two_truths_members = selected_subjects[6:10]
         
-        # Build question assignments with pre-selected prompt/answer pairs
+        # Build member assignments (without pre-selecting prompts - OpenAI will choose)
         guess_who_assignments = []
         for member in guess_who_members:
-            pair = select_prompt_answer_pair(member)  # Should always succeed since we validated
-            if pair:
-                guess_who_assignments.append({
-                    "name": member.get("name"),
-                    "public_id": member.get("public_id"),
-                    "prompt": pair["prompt"],
-                    "answer": pair["answer"]
-                })
+            guess_who_assignments.append({
+                "name": member.get("name"),
+                "public_id": member.get("public_id"),
+            })
         
         two_truths_assignments = []
         for member in two_truths_members:
-            pair = select_prompt_answer_pair(member)  # Should always succeed since we validated
-            if pair:
-                two_truths_assignments.append({
-                    "name": member.get("name"),
-                    "public_id": member.get("public_id"),
-                    "nickname": member.get("nickname"),
-                    "prompt": pair["prompt"],
-                    "answer": pair["answer"]
-                })
+            two_truths_assignments.append({
+                "name": member.get("name"),
+                "public_id": member.get("public_id"),
+                "nickname": member.get("nickname"),
+            })
         
-        # Ensure we have enough assignments (should always be true after validation)
-        if len(guess_who_assignments) < 6 or len(two_truths_assignments) < 4:
-            log.warning(f"Insufficient prompt/answer pairs: guess-who={len(guess_who_assignments)}, two-truths={len(two_truths_assignments)}")
-            return []
-        
-        # Create ultra-minimal context - only the specific prompt/answer pairs we'll use
+        # Create context with ALL prompts/answers for each member
+        # OpenAI will select the best prompt for each question type
         context_parts = []
-        for assignment in guess_who_assignments[:6]:
-            name = assignment["name"]
-            prompt = assignment["prompt"]
-            answer = assignment["answer"]
-            # Truncate long answers
-            if len(answer) > 150:
-                answer = answer[:150] + "..."
-            context_parts.append(f"{name}: Q: {prompt[:50]} A: {answer}")
         
-        for assignment in two_truths_assignments[:4]:
-            name = assignment["name"]
-            prompt = assignment["prompt"]
-            answer = assignment["answer"]
-            # Truncate long answers
-            if len(answer) > 150:
-                answer = answer[:150] + "..."
-            context_parts.append(f"{name}: Q: {prompt[:50]} A: {answer}")
+        # Add guess-who members with all their prompts/answers
+        for member in guess_who_members:
+            name = member.get("name", "Unknown")
+            selected_prompts = member.get("selectedPrompts", [])
+            answers = member.get("answers", {})
+            
+            member_context = f"{name}:"
+            if selected_prompts and isinstance(answers, dict):
+                for prompt in selected_prompts:
+                    answer_data = answers.get(prompt, {})
+                    if isinstance(answer_data, dict):
+                        answer_text = answer_data.get("text", "")
+                        if answer_text:
+                            # Truncate very long answers to save tokens
+                            if len(answer_text) > 200:
+                                answer_text = answer_text[:200] + "..."
+                            member_context += f"\n  Q: {prompt}\n  A: {answer_text}"
+            
+            if member_context != f"{name}:":
+                context_parts.append(member_context)
         
-        minimized_context = "\n".join(context_parts)
-        context_size = len(minimized_context)
-        log.info(f"Ultra-minimal context: {context_size} characters (only 1 prompt/answer per member for 10 questions)")
+        # Add two-truths-lie members with all their prompts/answers
+        for member in two_truths_members:
+            name = member.get("name", "Unknown")
+            selected_prompts = member.get("selectedPrompts", [])
+            answers = member.get("answers", {})
+            
+            member_context = f"{name}:"
+            if selected_prompts and isinstance(answers, dict):
+                for prompt in selected_prompts:
+                    answer_data = answers.get(prompt, {})
+                    if isinstance(answer_data, dict):
+                        answer_text = answer_data.get("text", "")
+                        if answer_text:
+                            # Truncate very long answers to save tokens
+                            if len(answer_text) > 200:
+                                answer_text = answer_text[:200] + "..."
+                            member_context += f"\n  Q: {prompt}\n  A: {answer_text}"
+            
+            if member_context != f"{name}:":
+                context_parts.append(member_context)
         
-        # Store assignments for later use in parsing
+        full_context = "\n\n".join(context_parts)
+        context_size = len(full_context)
+        log.info(f"Full context with all prompts: {context_size} characters ({len(guess_who_members)} guess-who + {len(two_truths_members)} two-truths members)")
+        
+        # Store member assignments for later use in parsing (without pre-selected prompts)
         member_selections = {
             "guess_who": guess_who_assignments[:6],
             "two_truths_lie": two_truths_assignments[:4]
@@ -272,17 +266,24 @@ class GameService:
         
         system_prompt = """Generate team-building game questions from member data. Be concise and creative.
 
+IMPORTANT: For each member, you have access to multiple prompt/answer pairs. Select the BEST prompt/answer pair for each question type:
+- Guess-who: Choose prompts that reveal interesting, distinctive traits or behaviors that make good "guess who" questions
+- Two-truths-lie: Choose prompts that have interesting, believable content that can be rephrased as truths and used to create convincing lies
+
 Rules:
-- Guess-who: Synthesize info into creative questions (max 80 chars). Don't include names.
-- Two-truths-lie: Rephrase 1 truth, create 2 believable lies (max 50 chars each). Add relevant emojis.
-- Return JSON only with the exact structure specified."""
+- Guess-who: Synthesize info into creative questions (max 80 chars). Don't include names. Pick the most distinctive/interesting prompt for each person.
+- Two-truths-lie: Rephrase 1 truth, create 2 believable lies (max 50 chars each). Add relevant emojis. Pick the most interesting prompt that will create engaging statements.
+- Return JSON only with the exact structure specified.
+- Include the exact prompt text and answer text you selected in your response."""
 
         user_prompt = f"""Data:
-{minimized_context}
+{full_context}
 
-Generate 10 questions using the above prompt/answer pairs:
-- 6 guess-who questions (one per person in first 6 lines)
-- 4 two-truths-lie questions (one per person in last 4 lines)
+Generate 10 questions by selecting the BEST prompt/answer pair for each member:
+- 6 guess-who questions (one per person from the first 6 members listed above)
+- 4 two-truths-lie questions (one per person from the last 4 members listed above)
+
+For each member, review ALL their available prompt/answer pairs and select the one that will create the most engaging question for that question type.
 
 JSON structure:
 {{
@@ -416,7 +417,7 @@ JSON structure:
         
         # Create lookup maps
         member_map = {m.get("name"): m for m in members}
-        # Create lookup for pre-selected assignments
+        # Create lookup for member assignments (without pre-selected prompts - OpenAI chose them)
         guess_who_assignments_map = {a["name"]: a for a in member_selections.get("guess_who", [])}
         two_truths_assignments_map = {a["name"]: a for a in member_selections.get("two_truths_lie", [])}
         
@@ -477,10 +478,23 @@ JSON structure:
             # Mark this subject as used
             used_subject_ids.add(member_id)
             
-            # Use the pre-selected prompt/answer from assignment
-            # OpenAI might have rephrased, but we use our original for consistency
-            original_prompt = assignment.get("prompt", q_data.get("prompt", ""))
-            original_answer = assignment.get("answer", q_data.get("answer", ""))
+            # Use the prompt/answer that OpenAI selected (from the response)
+            # OpenAI chose the best prompt for this question type
+            original_prompt = q_data.get("prompt", "")
+            original_answer = q_data.get("answer", "")
+            
+            # If OpenAI didn't include prompt/answer in response, try to find it from member data
+            if not original_prompt or not original_answer:
+                selected_prompts = member.get("selectedPrompts", [])
+                answers = member.get("answers", {})
+                # Try to match based on the question content or use first available
+                if selected_prompts and isinstance(answers, dict):
+                    for prompt in selected_prompts:
+                        answer_data = answers.get(prompt, {})
+                        if isinstance(answer_data, dict) and answer_data.get("text"):
+                            original_prompt = prompt
+                            original_answer = answer_data.get("text", "")
+                            break
             
             # Get distractors (prefer alternate pool, track usage to avoid repetition)
             # Exclude ALL subjects (not just this one) to prevent subjects from being alternates
@@ -500,20 +514,35 @@ JSON structure:
                 continue
             
             question_id = f"synthesized-{member.get('public_id')}-{int(time.time() * 1000)}-{random.random()}"
+            
+            # Build options array with correct answer and distractors
+            options_array = [
+                {
+                    "id": member.get("public_id"),
+                    "name": member.get("name"),
+                    "avatar": member.get("profile_image")
+                },
+                *[{"id": m.get("public_id"), "name": m.get("name"), "avatar": m.get("profile_image")} for m in distractors]
+            ]
+            
+            # Shuffle to randomize position of correct answer
+            shuffled_options = GameService._shuffle_array(options_array)
+            
+            # Find the position of the correct answer after shuffling (0=left, 1=center, 2=right)
+            correct_answer_position = next(
+                (i for i, opt in enumerate(shuffled_options) if opt.get("id") == member.get("public_id")),
+                -1
+            )
+            position_names = ["left", "center", "right"]
+            position_name = position_names[correct_answer_position] if 0 <= correct_answer_position < 3 else "unknown"
+            
             question = {
                 "id": question_id,
                 "type": "guess-who",
                 "question": q_data.get("question", "").strip('"\''),
                 "correctAnswer": member.get("name"),
                 "correctAnswerId": member.get("public_id"),
-                "options": GameService._shuffle_array([
-                    {
-                        "id": member.get("public_id"),
-                        "name": member.get("name"),
-                        "avatar": member.get("profile_image")
-                    },
-                    *[{"id": m.get("public_id"), "name": m.get("name"), "avatar": m.get("profile_image")} for m in distractors]
-                ]),
+                "options": shuffled_options,
                 "promptText": original_prompt,
                 "answerText": original_answer,
                 "additionalInfo": f'{member.get("name")} said: "{original_prompt}: {original_answer}"'
@@ -524,7 +553,7 @@ JSON structure:
             # Log question details for debugging
             distractor_names = [d.get("name") for d in distractors]
             distractor_ids = [d.get("public_id") for d in distractors]
-            log.info(f"[QUESTION {len(questions)}] Type: guess-who | Subject: {member.get('name')} (ID: {member_id}) | Alternates: {distractor_names} (IDs: {distractor_ids})")
+            log.info(f"[QUESTION {len(questions)}] Type: guess-who | Subject: {member.get('name')} (ID: {member_id}) | Alternates: {distractor_names} (IDs: {distractor_ids}) | Correct answer position: {position_name} ({correct_answer_position})")
         
         log.info(f"Guess-who questions: {guess_who_processed} processed, {guess_who_skipped} skipped out of {len(guess_who_data)} received")
         
@@ -556,9 +585,23 @@ JSON structure:
             # Mark this subject as used
             used_subject_ids.add(member_id)
             
-            # Use the pre-selected prompt/answer from assignment
-            original_prompt = assignment.get("prompt", q_data.get("prompt", ""))
-            original_answer = assignment.get("answer", q_data.get("answer", ""))
+            # Use the prompt/answer that OpenAI selected (from the response)
+            # OpenAI chose the best prompt for this question type
+            original_prompt = q_data.get("prompt", "")
+            original_answer = q_data.get("answer", "")
+            
+            # If OpenAI didn't include prompt/answer in response, try to find it from member data
+            if not original_prompt or not original_answer:
+                selected_prompts = member.get("selectedPrompts", [])
+                answers = member.get("answers", {})
+                # Try to match based on the question content or use first available
+                if selected_prompts and isinstance(answers, dict):
+                    for prompt in selected_prompts:
+                        answer_data = answers.get(prompt, {})
+                        if isinstance(answer_data, dict) and answer_data.get("text"):
+                            original_prompt = prompt
+                            original_answer = answer_data.get("text", "")
+                            break
             
             # Filter bad emojis
             bad_emojis = ["✅", "✓", "✔", "❌", "✗", "✖"]
