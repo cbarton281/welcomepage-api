@@ -55,9 +55,16 @@ async def generate_questions(
         
         # Convert alternate pool if provided
         alternate_pool_dict = None
-        if request.alternatePool:
+        log.info(f"Request alternatePool provided: {request.alternatePool is not None}, length: {len(request.alternatePool) if request.alternatePool else 0}")
+        if request.alternatePool and len(request.alternatePool) > 0:
             alternate_pool_dict = [alt.model_dump() for alt in request.alternatePool]
             log.info(f"Using alternate pool with {len(alternate_pool_dict)} members for distractors")
+            log.info(f"Alternate pool IDs: {[alt.get('public_id') for alt in alternate_pool_dict[:5]]}... (showing first 5)")
+        else:
+            if request.alternatePool is not None and len(request.alternatePool) == 0:
+                log.info("Alternate pool provided but empty - will fall back to members list for distractors")
+            else:
+                log.warning("No alternatePool provided in request - distractors will fall back to members list")
         
         # Generate questions using the service
         service_start = time.time()

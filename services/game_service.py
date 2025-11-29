@@ -144,13 +144,6 @@ class GameService:
             log.warning(f"Not enough members for question generation: {len(members)} (need at least 10)")
             return []
         
-        # Select members and their specific prompt/answer pairs for each question
-        # This dramatically reduces payload - we only send ONE prompt/answer per member
-        shuffled = GameService._shuffle_array(members)
-        members_to_use = shuffled[:10]
-        guess_who_members = members_to_use[:6]
-        two_truths_members = members_to_use[6:10]
-        
         # Pre-select specific prompt/answer pairs for each question
         def select_prompt_answer_pair(member: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             """Select one random prompt/answer pair from a member"""
@@ -178,10 +171,50 @@ class GameService:
                 "answer": answer_text
             }
         
+        # Select 10 UNIQUE members as subjects, ensuring each has valid content
+        # Track used subject IDs to prevent duplicates across question types
+        used_subject_ids = set()
+        selected_subjects = []
+        shuffled = GameService._shuffle_array(members)
+        
+        # First, collect members with valid content
+        for member in shuffled:
+            if len(selected_subjects) >= 10:
+                break
+            
+            member_id = member.get("public_id")
+            if not member_id or member_id in used_subject_ids:
+                continue
+            
+            # Check if member has valid content
+            pair = select_prompt_answer_pair(member)
+            if pair:
+                selected_subjects.append(member)
+                used_subject_ids.add(member_id)
+        
+        # Validate we have exactly 10 unique subjects with valid content
+        if len(selected_subjects) < 10:
+            log.warning(f"Not enough members with valid content: {len(selected_subjects)} (need 10)")
+            return []
+        
+        # Verify uniqueness
+        subject_ids = [m.get("public_id") for m in selected_subjects]
+        if len(subject_ids) != len(set(subject_ids)):
+            log.error("Duplicate subject IDs detected! This should not happen.")
+            return []
+        
+        log.info(f"Selected {len(selected_subjects)} unique subjects with valid content")
+        
+        # Split into guess-who (6) and two-truths-lie (4) subjects
+        # Shuffle again to randomize which members go to which question type
+        selected_subjects = GameService._shuffle_array(selected_subjects)
+        guess_who_members = selected_subjects[:6]
+        two_truths_members = selected_subjects[6:10]
+        
         # Build question assignments with pre-selected prompt/answer pairs
         guess_who_assignments = []
         for member in guess_who_members:
-            pair = select_prompt_answer_pair(member)
+            pair = select_prompt_answer_pair(member)  # Should always succeed since we validated
             if pair:
                 guess_who_assignments.append({
                     "name": member.get("name"),
@@ -192,7 +225,7 @@ class GameService:
         
         two_truths_assignments = []
         for member in two_truths_members:
-            pair = select_prompt_answer_pair(member)
+            pair = select_prompt_answer_pair(member)  # Should always succeed since we validated
             if pair:
                 two_truths_assignments.append({
                     "name": member.get("name"),
@@ -202,7 +235,7 @@ class GameService:
                     "answer": pair["answer"]
                 })
         
-        # Ensure we have enough assignments
+        # Ensure we have enough assignments (should always be true after validation)
         if len(guess_who_assignments) < 6 or len(two_truths_assignments) < 4:
             log.warning(f"Insufficient prompt/answer pairs: guess-who={len(guess_who_assignments)}, two-truths={len(two_truths_assignments)}")
             return []
@@ -347,6 +380,13 @@ JSON structure:
                         json_parse_time = (time.time() - json_parse_start) * 1000
                         log.info(f"[REQUEST_ID:{request_id}] Content JSON parse took {json_parse_time:.2f}ms")
                         
+                        # Log the structure of OpenAI response for debugging
+                        log.info(f"[REQUEST_ID:{request_id}] OpenAI response structure: {list(parsed.keys())}")
+                        if "guess_who" in parsed:
+                            log.info(f"[REQUEST_ID:{request_id}] guess_who count: {len(parsed.get('guess_who', []))}")
+                        if "two_truths_lie" in parsed:
+                            log.info(f"[REQUEST_ID:{request_id}] two_truths_lie count: {len(parsed.get('two_truths_lie', []))}")
+                        
                         question_parse_start = time.time()
                         questions = GameService._parse_questions_from_response(
                             parsed, members, member_selections, alternate_pool
@@ -380,24 +420,62 @@ JSON structure:
         guess_who_assignments_map = {a["name"]: a for a in member_selections.get("guess_who", [])}
         two_truths_assignments_map = {a["name"]: a for a in member_selections.get("two_truths_lie", [])}
         
+        # Track used subject IDs to ensure uniqueness across all question types
+        used_subject_ids = set()
+        
+        # Collect all subject IDs first (from both question types) to exclude from alternates
+        all_subject_ids = set()
+        for assignment in member_selections.get("guess_who", []):
+            subject_id = assignment.get("public_id")
+            if subject_id:
+                all_subject_ids.add(subject_id)
+        for assignment in member_selections.get("two_truths_lie", []):
+            subject_id = assignment.get("public_id")
+            if subject_id:
+                all_subject_ids.add(subject_id)
+        
+        log.info(f"All subject IDs to exclude from alternates: {sorted(all_subject_ids)}")
+        
         # Initialize usage tracker for alternates (to avoid repetition)
         alternate_usage: Dict[str, int] = {}
         if alternate_pool:
+            log.info(f"Initializing alternate_usage tracker with {len(alternate_pool)} alternates")
             for alt in alternate_pool:
                 alt_id = alt.get("public_id")
                 if alt_id:
                     alternate_usage[alt_id] = 0
+            log.info(f"Alternate pool IDs: {sorted([alt.get('public_id') for alt in alternate_pool])}")
+        else:
+            log.warning("No alternate_pool provided - will fall back to members list for distractors")
         
         # Process guess-who questions
         guess_who_data = parsed.get("guess_who", [])
+        log.info(f"OpenAI returned {len(guess_who_data)} guess-who questions in response")
+        if not guess_who_data:
+            log.warning("No guess-who questions found in OpenAI response! Check OpenAI response structure.")
+            log.warning(f"Available keys in parsed response: {list(parsed.keys())}")
+        
+        guess_who_processed = 0
+        guess_who_skipped = 0
         for q_data in guess_who_data[:6]:  # Limit to 6
             member_name = q_data.get("member_name")
             member = member_map.get(member_name)
             assignment = guess_who_assignments_map.get(member_name)
             
             if not member or not assignment:
-                log.warning(f"Member or assignment not found: {member_name}")
+                log.warning(f"Member or assignment not found for guess-who: {member_name}")
+                guess_who_skipped += 1
                 continue
+            
+            # Ensure subject uniqueness - check if this member was already used
+            member_id = member.get("public_id")
+            if member_id in used_subject_ids:
+                log.warning(f"Subject {member_name} (ID: {member_id}) already used in another question, skipping to maintain uniqueness")
+                guess_who_skipped += 1
+                continue
+            
+            # Mark this subject as used
+            used_subject_ids.add(member_id)
             
             # Use the pre-selected prompt/answer from assignment
             # OpenAI might have rephrased, but we use our original for consistency
@@ -405,10 +483,20 @@ JSON structure:
             original_answer = assignment.get("answer", q_data.get("answer", ""))
             
             # Get distractors (prefer alternate pool, track usage to avoid repetition)
+            # Exclude ALL subjects (not just this one) to prevent subjects from being alternates
+            log.info(f"Getting distractors for guess-who question about {member.get('name')} (ID: {member_id})")
+            log.info(f"  - alternate_pool provided: {alternate_pool is not None}, size: {len(alternate_pool) if alternate_pool else 0}")
+            log.info(f"  - alternate_usage tracker size: {len(alternate_usage)}")
+            log.info(f"  - all_subject_ids to exclude: {len(all_subject_ids)} subjects")
             distractors = GameService._get_random_distractors(
-                members, member, 2, alternate_pool, alternate_usage
+                members, member, 2, alternate_pool, alternate_usage, all_subject_ids
             )
+            log.info(f"  - Got {len(distractors)} distractors: {[d.get('name') for d in distractors]}")
             if len(distractors) < 2:
+                # If we can't get distractors, remove this subject from used set and skip
+                used_subject_ids.discard(member_id)
+                log.warning(f"Could not get 2 distractors for guess-who question about {member.get('name')}, skipping")
+                guess_who_skipped += 1
                 continue
             
             question_id = f"synthesized-{member.get('public_id')}-{int(time.time() * 1000)}-{random.random()}"
@@ -431,17 +519,42 @@ JSON structure:
                 "additionalInfo": f'{member.get("name")} said: "{original_prompt}: {original_answer}"'
             }
             questions.append(question)
+            guess_who_processed += 1
+            
+            # Log question details for debugging
+            distractor_names = [d.get("name") for d in distractors]
+            distractor_ids = [d.get("public_id") for d in distractors]
+            log.info(f"[QUESTION {len(questions)}] Type: guess-who | Subject: {member.get('name')} (ID: {member_id}) | Alternates: {distractor_names} (IDs: {distractor_ids})")
+        
+        log.info(f"Guess-who questions: {guess_who_processed} processed, {guess_who_skipped} skipped out of {len(guess_who_data)} received")
         
         # Process two-truths-lie questions
         two_truths_data = parsed.get("two_truths_lie", [])
+        log.info(f"OpenAI returned {len(two_truths_data)} two-truths-lie questions in response")
+        if not two_truths_data:
+            log.warning("No two-truths-lie questions found in OpenAI response!")
+        
+        two_truths_processed = 0
+        two_truths_skipped = 0
         for q_data in two_truths_data[:4]:  # Limit to 4
             member_name = q_data.get("member_name")
             member = member_map.get(member_name)
             assignment = two_truths_assignments_map.get(member_name)
             
             if not member or not assignment:
-                log.warning(f"Member or assignment not found: {member_name}")
+                log.warning(f"Member or assignment not found for two-truths-lie: {member_name}")
+                two_truths_skipped += 1
                 continue
+            
+            # Ensure subject uniqueness - check if this member was already used
+            member_id = member.get("public_id")
+            if member_id in used_subject_ids:
+                log.warning(f"Subject {member_name} (ID: {member_id}) already used in another question, skipping to maintain uniqueness")
+                two_truths_skipped += 1
+                continue
+            
+            # Mark this subject as used
+            used_subject_ids.add(member_id)
             
             # Use the pre-selected prompt/answer from assignment
             original_prompt = assignment.get("prompt", q_data.get("prompt", ""))
@@ -483,6 +596,85 @@ JSON structure:
                 "memberNickname": display_name
             }
             questions.append(question)
+            two_truths_processed += 1
+            
+            # Log question details for debugging (two-truths-lie has no alternates, just statements)
+            log.info(f"[QUESTION {len(questions)}] Type: two-truths-lie | Subject: {member.get('name')} (ID: {member_id}) | Alternates: N/A (statements only)")
+        
+        log.info(f"Two-truths-lie questions: {two_truths_processed} processed, {two_truths_skipped} skipped out of {len(two_truths_data)} received")
+        
+        # Final validation and comprehensive logging
+        log.info("=" * 80)
+        log.info("QUESTION GENERATION SUMMARY")
+        log.info("=" * 80)
+        
+        subject_ids = []
+        subject_names = []
+        all_alternate_ids = []
+        all_alternate_names = []
+        
+        for idx, q in enumerate(questions, 1):
+            # For guess-who questions, correctAnswerId is the member's public_id
+            # For two-truths-lie questions, correctAnswerId is "truth", so use memberPublicId
+            if q.get("type") == "two-truths-lie":
+                subject_id = q.get("memberPublicId")
+                subject_name = q.get("memberNickname") or q.get("correctAnswer", "Unknown")
+                alternates = []  # Two-truths-lie has no alternates
+            else:
+                subject_id = q.get("correctAnswerId")
+                subject_name = q.get("correctAnswer", "Unknown")
+                # Extract alternates from options (exclude the subject)
+                options = q.get("options", [])
+                alternates = [opt for opt in options if opt.get("id") != subject_id]
+                alternate_ids = [alt.get("id") for alt in alternates]
+                alternate_names = [alt.get("name") for alt in alternates]
+                all_alternate_ids.extend(alternate_ids)
+                all_alternate_names.extend(alternate_names)
+            
+            if subject_id:
+                subject_ids.append(subject_id)
+                subject_names.append(subject_name)
+            
+            # Log each question with full details
+            if q.get("type") == "guess-who":
+                log.info(f"Q{idx}: {q.get('type')} | Subject: {subject_name} (ID: {subject_id}) | Alternates: {alternate_names} (IDs: {alternate_ids})")
+            else:
+                log.info(f"Q{idx}: {q.get('type')} | Subject: {subject_name} (ID: {subject_id}) | Alternates: N/A")
+        
+        log.info("-" * 80)
+        log.info(f"Total Questions: {len(questions)}")
+        log.info(f"Unique Subjects: {len(set(subject_ids))} / {len(subject_ids)}")
+        log.info(f"Subject Names: {subject_names}")
+        log.info(f"Subject IDs: {subject_ids}")
+        log.info(f"Total Alternates Used: {len(all_alternate_ids)}")
+        log.info(f"Unique Alternates: {len(set(all_alternate_ids))} / {len(all_alternate_ids)}")
+        log.info(f"Alternate Names: {all_alternate_names}")
+        log.info(f"Alternate IDs: {all_alternate_ids}")
+        
+        # Check for duplicates
+        if len(subject_ids) != len(set(subject_ids)):
+            log.error(f"❌ DUPLICATE SUBJECTS DETECTED! Found {len(subject_ids)} questions but only {len(set(subject_ids))} unique subjects.")
+            log.error(f"Duplicate subject IDs: {[sid for sid in subject_ids if subject_ids.count(sid) > 1]}")
+        
+        # Check if any subjects appear as alternates
+        subject_ids_set = set(subject_ids)
+        subjects_as_alternates = subject_ids_set.intersection(set(all_alternate_ids))
+        if subjects_as_alternates:
+            log.error(f"❌ SUBJECTS FOUND AS ALTERNATES! Subject IDs that appear as alternates: {list(subjects_as_alternates)}")
+            # Find which questions have subjects as alternates
+            for idx, q in enumerate(questions, 1):
+                if q.get("type") == "guess-who":
+                    options = q.get("options", [])
+                    for opt in options:
+                        if opt.get("id") in subjects_as_alternates:
+                            log.error(f"  → Q{idx} has subject {opt.get('name')} (ID: {opt.get('id')}) as an alternate")
+        else:
+            log.info("✅ No subjects found as alternates - validation passed")
+        
+        if len(questions) < 10:
+            log.warning(f"⚠️  Generated only {len(questions)} questions instead of 10. This may be due to duplicate subjects or missing content.")
+        
+        log.info("=" * 80)
         
         return questions
     
@@ -492,37 +684,64 @@ JSON structure:
         exclude: Dict[str, Any],
         count: int,
         alternate_pool: Optional[List[Dict[str, Any]]] = None,
-        usage_tracker: Optional[Dict[str, int]] = None
+        usage_tracker: Optional[Dict[str, int]] = None,
+        all_subject_ids: Optional[set] = None
     ) -> List[Dict[str, Any]]:
         """
         Get random distractors (other members) for a question.
         Prefers alternate_pool if provided, using usage_tracker to avoid repetition.
+        Ensures distractors are unique within the question.
+        Excludes ALL subjects (not just the current question's subject) to prevent subjects from being alternates.
         Falls back to members list if alternate_pool is not available or exhausted.
         """
         exclude_id = exclude.get("public_id")
         distractors: List[Dict[str, Any]] = []
+        used_distractor_ids = set()  # Track IDs used in this specific question
+        
+        # Combine current exclude_id with all subject IDs to exclude
+        excluded_ids = set()
+        if exclude_id:
+            excluded_ids.add(exclude_id)
+        if all_subject_ids:
+            excluded_ids.update(all_subject_ids)
         
         # Prefer alternate pool if available
         if alternate_pool and usage_tracker is not None:
-            # Filter out the excluded member and get available alternates
+            log.info(f"[_get_random_distractors] Using alternate_pool with {len(alternate_pool)} members, excluding {len(excluded_ids)} subject IDs")
+            log.info(f"[_get_random_distractors] Excluded subject IDs: {sorted(excluded_ids)}")
+            # Filter out ALL subjects (not just current exclude) and get available alternates
             available_alternates = [
                 alt for alt in alternate_pool
-                if alt.get("public_id") != exclude_id
+                if alt.get("public_id") not in excluded_ids
+                and alt.get("public_id") not in used_distractor_ids
             ]
+            
+            log.info(f"[_get_random_distractors] Found {len(available_alternates)} available alternates after filtering (excluded {len(excluded_ids)} subjects)")
+            
+            if len(available_alternates) < count:
+                log.warning(f"[_get_random_distractors] Only {len(available_alternates)} available alternates, need {count} for question about {exclude.get('name', 'Unknown')}")
+                log.warning(f"[_get_random_distractors] Excluded IDs: {sorted(excluded_ids)}")
+                alternate_pool_ids = [alt.get("public_id") for alt in alternate_pool]
+                log.warning(f"[_get_random_distractors] Alternate pool IDs ({len(alternate_pool_ids)} total): {sorted(alternate_pool_ids)}")
+                available_ids = [alt.get("public_id") for alt in available_alternates]
+                log.warning(f"[_get_random_distractors] Available alternate IDs: {sorted(available_ids)}")
             
             # Sort by usage count (ascending) to prefer least-used alternates
             available_alternates.sort(key=lambda alt: usage_tracker.get(alt.get("public_id", ""), 0))
             
-            # Select up to count distinct alternates
+            # Select up to count distinct alternates (unique within this question)
             selected_alternates = []
             for alt in available_alternates:
                 if len(selected_alternates) >= count:
                     break
                 alt_id = alt.get("public_id")
-                if alt_id:
+                if alt_id and alt_id not in used_distractor_ids:
                     selected_alternates.append(alt)
+                    used_distractor_ids.add(alt_id)
                     # Increment usage count
                     usage_tracker[alt_id] = usage_tracker.get(alt_id, 0) + 1
+            
+            log.info(f"[_get_random_distractors] Selected {len(selected_alternates)} alternates from alternate pool: {[alt.get('name') for alt in selected_alternates]}")
             
             # Convert alternate format to match expected format (with profile_image)
             for alt in selected_alternates:
@@ -531,17 +750,46 @@ JSON structure:
                     "name": alt.get("name"),
                     "profile_image": alt.get("wave_gif_url")  # Use wave_gif_url as avatar fallback
                 })
+        else:
+            log.warning(f"[_get_random_distractors] Not using alternate_pool: alternate_pool={alternate_pool is not None}, usage_tracker={usage_tracker is not None}")
+            if alternate_pool is None:
+                log.warning(f"[_get_random_distractors] alternate_pool is None!")
+            if usage_tracker is None:
+                log.warning(f"[_get_random_distractors] usage_tracker is None!")
         
         # If we still need more distractors, fall back to members list
         if len(distractors) < count:
             available_members = [
                 m for m in members
-                if m.get("public_id") != exclude_id
+                if m.get("public_id") not in excluded_ids
+                and m.get("public_id") not in used_distractor_ids
                 and not any(d.get("public_id") == m.get("public_id") for d in distractors)
             ]
             random.shuffle(available_members)
             needed = count - len(distractors)
-            distractors.extend(available_members[:needed])
+            for member in available_members[:needed]:
+                member_id = member.get("public_id")
+                if member_id and member_id not in used_distractor_ids:
+                    distractors.append({
+                        "public_id": member_id,
+                        "name": member.get("name"),
+                        "profile_image": member.get("profile_image")
+                    })
+                    used_distractor_ids.add(member_id)
+        
+        # Final validation: ensure all distractors are unique
+        distractor_ids = [d.get("public_id") for d in distractors if d.get("public_id")]
+        if len(distractor_ids) != len(set(distractor_ids)):
+            log.warning(f"Duplicate distractor IDs detected! Removing duplicates.")
+            # Remove duplicates, keeping first occurrence
+            seen = set()
+            unique_distractors = []
+            for d in distractors:
+                d_id = d.get("public_id")
+                if d_id and d_id not in seen:
+                    unique_distractors.append(d)
+                    seen.add(d_id)
+            distractors = unique_distractors
         
         return distractors[:count]
     
