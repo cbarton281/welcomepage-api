@@ -126,10 +126,11 @@ def check_auth_email_collisions(
     return len(collisions) > 0, collisions
 
 # Hardcoded team member data for consistency
-# Each entry: (name, role, location, greeting, nickname, prompts_dict)
+# Each entry: (name, role, location, greeting, nickname, prompts_dict, public_sharing, gender)
 # Note: Public IDs are now constructed from prefix + index (e.g., {prefix}001, {prefix}002, etc.)
 # Locations include USA, Canada, and Western Europe
 # Prompts and answers are hardcoded for complete determinism
+# Gender matches the wave GIF gender assignment (male or female)
 TEAM_MEMBERS = [
     (
         "Alex Chen", "Senior Software Engineer", "San Francisco, CA, USA", "Hey there!", "Alex",
@@ -139,7 +140,8 @@ TEAM_MEMBERS = [
             "What's your go-to productivity hack?": "Time blocking my calendar with specific tasks rather than general 'work time'. It helps me stay focused and track progress.",
             "I geek out on…": "Vintage synthesizers and electronic music production. I have a small home studio with some classic gear.",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "male"  # gender (GIF 1)
     ),
     (
         "Sarah Taylor", "Product Manager", "London, UK", "Hi everyone!", "Sarah",
@@ -149,7 +151,8 @@ TEAM_MEMBERS = [
             "What's a book/podcast that changed your perspective?": "The 'How I Built This' podcast showed me that every successful company started with someone just trying to solve a problem.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm a morning person, so I do my best deep work between 7-11am. Afternoons are for collaboration and meetings.",
         },
-        True  # public_sharing flag
+        True,  # public_sharing flag
+        "female"  # gender (GIF 2)
     ),
     (
         "Marcus Lee", "UX Designer", "Seattle, WA, USA", "Hello!", "Marcus",
@@ -159,7 +162,8 @@ TEAM_MEMBERS = [
             "What's a skill you're currently learning?": "I'm learning to play the bass guitar. It's been a great way to unwind after work and exercise a different part of my brain.",
             "My simple pleasures…": "A perfectly brewed cup of coffee in the morning, a good book before bed, and Sunday morning farmers markets.",
         },
-        False  # public_sharing flag - every 3rd user (index 2)
+        False,  # public_sharing flag - every 3rd user (index 2)
+        "male"  # gender (GIF 3)
     ),
     (
         "Samuel Rivera", "DevOps Engineer", "Toronto, ON, Canada", "Hey!", "Sam",
@@ -169,7 +173,8 @@ TEAM_MEMBERS = [
             "What's a book/podcast that changed your perspective?": "'Atomic Habits' completely changed how I approach building new skills and breaking bad habits.",
             "What I need from teammates to do great work": "Clear requirements and context. I do my best work when I understand the 'why' behind what we're building.",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "male"  # gender (GIF 4)
     ),
     (
         "Sophia Kim", "Frontend Developer", "Amsterdam, Netherlands", "Hi there!", "Sophia",
@@ -179,7 +184,8 @@ TEAM_MEMBERS = [
             "I geek out on…": "Astrophotography. I love capturing images of deep space objects with my telescope and camera setup.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I need complete silence for focused work, so I block 2-4pm every day for heads-down coding. Mornings are for standups and planning.",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "female"  # gender (GIF 5)
     ),
     (
         "Jessica Patel", "Backend Developer", "Boston, MA, USA", "Hello everyone!", "Jessica",
@@ -189,7 +195,8 @@ TEAM_MEMBERS = [
             "What's a book/podcast that changed your perspective?": "'The Design of Everyday Things' opened my eyes to how important good UX is in everything we interact with.",
             "What I need from teammates to do great work": "Quick responses to questions. I'd rather ask a quick question than spend hours going down the wrong path.",
         },
-        True  # public_sharing flag - every 3rd user (index 5)
+        True,  # public_sharing flag - every 3rd user (index 5)
+        "female"  # gender (GIF 6)
     ),
     (
         "Katherine Wong", "Data Scientist", "Berlin, Germany", "Hey!", "Katherine",
@@ -199,7 +206,8 @@ TEAM_MEMBERS = [
             "What's a skill you're currently learning?": "I'm learning Spanish through Duolingo. My goal is to be conversational by the end of the year.",
             "My simple pleasures…": "The smell of rain on hot pavement, finding a new favorite song, and that first bite of a really good sandwich.",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "female"  # gender (GIF 7)
     ),
     (
         "Ryan Johnson", "QA Engineer", "Vancouver, BC, Canada", "Hi!", "Ryan",
@@ -209,7 +217,8 @@ TEAM_MEMBERS = [
             "I geek out on…": "Mechanical keyboards. I've built several custom keyboards and love the sound and feel of different switches.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm most productive late at night (10pm-2am). During the day, I'm better at meetings and collaborative work.",
         },
-        True  # public_sharing flag
+        True,  # public_sharing flag
+        "male"  # gender (GIF 8)
     ),
     (
         "Quentin Martinez", "Technical Writer", "Portland, OR, USA", "Hello there!", "Quentin",
@@ -219,7 +228,8 @@ TEAM_MEMBERS = [
             "What's a book/podcast that changed your perspective?": "The 'Freakonomics' podcast made me think differently about cause and effect in the world around us.",
             "What I need from teammates to do great work": "Honest feedback, especially early in the process. It's much easier to pivot early than to redo work later.",
         },
-        True  # public_sharing flag - every 3rd user (index 8)
+        True,  # public_sharing flag - every 3rd user (index 8)
+        "male"  # gender (GIF 9)
     ),
     (
         "Brooke Thompson", "Security Engineer", "Paris, France", "Hey everyone!", "Brooke",
@@ -229,7 +239,8 @@ TEAM_MEMBERS = [
             "What's a skill you're currently learning?": "I'm teaching myself woodworking. I just finished building my first bookshelf and I'm hooked!",
             "I geek out on…": "Coffee brewing methods. I'm always experimenting with different beans, grind sizes, and brewing techniques.",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "female"  # gender (GIF 10)
     ),
     (
         "Drew Garcia", "Mobile Developer", "Austin, TX, USA", "Hi!", "Drew",
@@ -239,7 +250,8 @@ TEAM_MEMBERS = [
             "My simple pleasures…": "Watching the sunset from my balcony, fresh sheets on the bed, and unexpected compliments from strangers.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I split my day: deep work in the morning (9am-12pm), meetings in the afternoon (1-4pm), then more focused work (4-6pm).",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "male"  # gender (GIF 11)
     ),
     (
         "Amelia Smith", "Product Designer", "Dublin, Ireland", "Hello!", "Amelia",
@@ -249,7 +261,8 @@ TEAM_MEMBERS = [
             "I geek out on…": "Retro video game consoles. I collect and restore old systems, and I'm working on a complete NES library.",
             "What I need from teammates to do great work": "Time to focus without interruptions. I appreciate when people respect my 'do not disturb' hours.",
         },
-        True  # public_sharing flag - every 3rd user (index 11)
+        True,  # public_sharing flag - every 3rd user (index 11)
+        "female"  # gender (GIF 12)
     ),
     (
         "Emma Brown", "Full Stack Developer", "Montreal, QC, Canada", "Hey there!", "Emma",
@@ -259,17 +272,19 @@ TEAM_MEMBERS = [
             "My simple pleasures…": "The sound of birds in the morning, a warm shower after a long day, and laughing until my stomach hurts.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I do my best coding work in the afternoon (2-6pm). Mornings are for emails, standups, and lighter tasks.",
         },
-        False  # public_sharing flag
+        False,  # public_sharing flag
+        "female"  # gender (GIF 13)
     ),
     (
-        "Sage Williams", "Engineering Manager", "Barcelona, Spain", "Hi everyone!", "Sage",
+        "Sebastian Williams", "Engineering Manager", "Barcelona, Spain", "Hi everyone!", "Sebastian",
         {
             "What's your superpower at work?": "I excel at building high-performing teams by identifying each person's strengths and creating an environment where they can thrive.",
             "What's something unexpected about you?": "I'm fluent in four languages and love using them to connect with team members from different backgrounds.",
             "What's a skill you're currently learning?": "I'm learning to play the ukulele. It's a fun, portable instrument that brings joy to my evenings.",
             "What I need from teammates to do great work": "Trust and autonomy. Give me the problem to solve and let me figure out the best approach.",
         },
-        True  # public_sharing flag
+        True,  # public_sharing flag
+        "male"  # gender (GIF 14)
     ),
     (
         "Olivia Davis", "Site Reliability Engineer", "New York, NY, USA", "Hello!", "Olivia",
@@ -279,7 +294,8 @@ TEAM_MEMBERS = [
             "My simple pleasures…": "A clean workspace, the perfect temperature in my apartment, and catching up with old friends.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm most productive in the early morning (6-10am) for deep technical work. Afternoons are for collaboration and meetings.",
         },
-        True  # public_sharing flag - every 3rd user (index 14)
+        True,  # public_sharing flag - every 3rd user (index 14)
+        "female"  # gender (GIF 15)
     ),
     (
         "Hannah Morgan", "Customer Success Manager", "Chicago, IL, USA", "Hey there!", "Hannah",
@@ -289,17 +305,19 @@ TEAM_MEMBERS = [
             "I geek out on…": "Organizing systems — I have color-coded labels on everything from my pantry to my email folders.",
             "My simple pleasures…": "Freshly baked bread, a perfectly made latte, and finishing a book in one sitting on a rainy day.",
         },
-        False
+        False,  # public_sharing flag
+        "female"  # gender (GIF 16)
     ),
     (
-        "Luca Rossi", "Sales Engineer", "Madrid, Spain", "Hi everyone!", "Luca",
+        "Lucas Rossi", "Sales Engineer", "Madrid, Spain", "Hi everyone!", "Lucas",
         {
             "What's your superpower at work?": "Finding the one analogy that makes a complex product click for a customer who was completely lost five minutes earlier.",
             "What's something unexpected about you?": "I DJ small community events on weekends and have a playlist ready for almost any mood.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm sharpest for deep work between 8-11am, and I like stacking all my demos after lunch.",
             "When I'm not at work…": "You'll find me exploring coffee shops, sketching app ideas in a notebook, or watching European football highlights.",
         },
-        True
+        True,  # public_sharing flag
+        "male"  # gender (GIF 17)
     ),
     (
         "Priya Nair", "Data Engineer", "Stockholm, Sweden", "Hello!", "Priya",
@@ -309,7 +327,8 @@ TEAM_MEMBERS = [
             "I geek out on…": "Well-designed dashboards — I can spend hours debating color scales and chart types.",
             "What I need from teammates to do great work": "Clear data definitions and early alignment on metrics so we don't have to redo pipelines later.",
         },
-        False
+        False,  # public_sharing flag
+        "female"  # gender (GIF 18)
     ),
     (
         "Diego Alvarez", "Support Engineer", "Los Angeles, CA, USA", "Hey!", "Diego",
@@ -319,7 +338,8 @@ TEAM_MEMBERS = [
             "When I'm not at work…": "I'm usually trying new taco spots, tinkering with my home office setup, or learning new guitar riffs.",
             "My simple pleasures…": "A perfectly timed punchline in a group chat and that quiet moment right before a live concert starts.",
         },
-        True
+        True,  # public_sharing flag
+        "male"  # gender (GIF 19)
     ),
     (
         "Nora Fischer", "People Operations Partner", "Zurich, Switzerland", "Hi there!", "Nora",
@@ -329,7 +349,8 @@ TEAM_MEMBERS = [
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "Late mornings are for deep work on programs; I save 1-4pm for 1:1s and coaching conversations.",
             "When I'm not at work…": "I'm usually biking around the city, browsing small bookstores, or planning my next weekend trip.",
         },
-        False
+        False,  # public_sharing flag
+        "female"  # gender (GIF 20)
     ),
     (
         "Jason Lee", "Full Stack Developer", "Rome, Italy", "Hey!", "Jason",
@@ -339,7 +360,8 @@ TEAM_MEMBERS = [
             "I geek out on…": "Front-end performance audits and weird edge cases in browser behavior.",
             "What I need from teammates to do great work": "Clear priorities, thoughtful PR reviews, and room to experiment with new tools when it makes sense.",
         },
-        True
+        True,  # public_sharing flag
+        "male"  # gender (GIF 21)
     ),
     (
         "Maya Patel", "Cloud Architect", "Sydney, Australia", "G'day!", "Maya",
@@ -349,7 +371,8 @@ TEAM_MEMBERS = [
             "What's a skill you're currently learning?": "I'm getting into sailing and just completed my basic certification.",
             "I geek out on…": "Cloud infrastructure patterns and distributed systems architecture.",
         },
-        False
+        False,  # public_sharing flag
+        "female"  # gender (GIF 22)
     ),
     (
         "Kenji Tanaka", "Machine Learning Engineer", "Tokyo, Japan", "Konnichiwa!", "Kenji",
@@ -359,27 +382,30 @@ TEAM_MEMBERS = [
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "Early mornings (6-9am) are for deep ML model work. Afternoons are for team syncs and code reviews.",
             "My simple pleasures…": "A perfectly brewed matcha, finding a new ramen spot, and watching cherry blossoms in spring.",
         },
-        True
+        True,  # public_sharing flag
+        "male"  # gender (GIF 23)
     ),
     (
-        "Isabella Chen", "Product Designer", "Singapore", "Hello!", "Bella",
+        "Isaac Chen", "Product Designer", "Singapore", "Hello!", "Isaac",
         {
             "What's your superpower at work?": "I can translate complex user needs into intuitive designs that feel effortless.",
             "What's your favorite way to spend a weekend?": "Exploring hawker centers for new food discoveries, then relaxing at the beach with a good book.",
             "What's a book/podcast that changed your perspective?": "'The Design of Everyday Things' completely changed how I approach user experience.",
             "What I need from teammates to do great work": "Early collaboration and honest feedback. I'd rather iterate on ideas than polish something in the wrong direction.",
         },
-        False
+        False,  # public_sharing flag
+        "male"  # gender (GIF 24)
     ),
     (
-        "Arjun Singh", "DevOps Engineer", "Mumbai, India", "Namaste!", "Arjun",
+        "Aria Singh", "DevOps Engineer", "Mumbai, India", "Namaste!", "Aria",
         {
             "What's something unexpected about you?": "I'm a competitive chess player and have competed in several regional tournaments.",
             "What's your go-to productivity hack?": "I automate everything repetitive so I can focus on solving new problems.",
             "When I'm not at work…": "I'm usually exploring street food markets, playing cricket with friends, or working on my side project.",
             "I geek out on…": "Container orchestration, CI/CD pipelines, and infrastructure as code.",
         },
-        True
+        True,  # public_sharing flag
+        "female"  # gender (GIF 25)
     ),
     (
         "Camila Silva", "Frontend Developer", "São Paulo, Brazil", "Oi!", "Camila",
@@ -389,17 +415,19 @@ TEAM_MEMBERS = [
             "My simple pleasures…": "Fresh açai bowls, discovering new music, and that moment when code finally works after debugging.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I'm most productive mid-morning (10am-1pm) for coding. Afternoons are for design reviews and planning.",
         },
-        False
+        False,  # public_sharing flag
+        "female"  # gender (GIF 26)
     ),
     (
-        "Carlos Mendez", "Backend Developer", "Mexico City, Mexico", "¡Hola!", "Carlos",
+        "Carla Mendez", "Backend Developer", "Mexico City, Mexico", "¡Hola!", "Carla",
         {
             "What's your superpower at work?": "I can debug complex distributed systems by tracing requests across multiple services.",
             "What's something unexpected about you?": "I'm a trained mariachi musician and play at local events on weekends.",
             "What's your go-to productivity hack?": "I use time-boxing with strict limits. If something takes longer than expected, I reassess the approach.",
             "What I need from teammates to do great work": "Clear API contracts and good documentation. It saves hours of back-and-forth.",
         },
-        True
+        True,  # public_sharing flag
+        "female"  # gender (GIF 27)
     ),
     (
         "Emma Nielsen", "UX Researcher", "Copenhagen, Denmark", "Hej!", "Emma",
@@ -409,47 +437,52 @@ TEAM_MEMBERS = [
             "I geek out on…": "User journey mapping and analyzing behavioral patterns in user studies.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "Mornings are for analyzing research data. Afternoons are for user interviews and stakeholder presentations.",
         },
-        False
+        False,  # public_sharing flag
+        "female"  # gender (GIF 28)
     ),
     (
-        "Felix Mueller", "Security Engineer", "Vienna, Austria", "Servus!", "Felix",
+        "Felicia Mueller", "Security Engineer", "Vienna, Austria", "Servus!", "Felicia",
         {
             "What's your superpower at work?": "I can spot security vulnerabilities that others miss by thinking like an attacker.",
             "What's something unexpected about you?": "I'm a classical music enthusiast and play the violin in a local orchestra.",
             "What's your go-to productivity hack?": "I use threat modeling frameworks to systematically assess security risks.",
             "When I'm not at work…": "I'm usually hiking in the Alps, attending concerts, or reading about cryptography.",
         },
-        True
+        True,  # public_sharing flag
+        "female"  # gender (GIF 29)
     ),
     (
-        "Sophie Dubois", "Data Analyst", "Brussels, Belgium", "Bonjour!", "Sophie",
+        "Simon Dubois", "Data Analyst", "Brussels, Belgium", "Bonjour!", "Simon",
         {
             "What's your favorite way to spend a weekend?": "Exploring art galleries, trying new chocolate shops, and long walks through historic neighborhoods.",
             "What's a skill you're currently learning?": "I'm learning advanced statistical modeling techniques to improve my analysis skills.",
             "I geek out on…": "Data visualization and finding hidden patterns in datasets.",
             "What I need from teammates to do great work": "Access to clean, well-documented data sources and clear questions about what insights are needed.",
         },
-        False
+        False,  # public_sharing flag
+        "male"  # gender (GIF 30)
     ),
     (
-        "Rajesh Kumar", "QA Engineer", "Mumbai, India", "Namaste!", "Rajesh",
+        "Rohan Kumar", "QA Engineer", "Mumbai, India", "Namaste!", "Rohan",
         {
             "What's your superpower at work?": "I can break any feature by thinking of edge cases others never consider.",
             "What's your go-to productivity hack?": "I write test cases before features are built, which helps catch issues early.",
             "When I'm not at work…": "I'm usually watching cricket matches, trying new street food, or working on my photography hobby.",
             "My simple pleasures…": "A perfectly executed test plan, finding a critical bug before production, and good chai.",
         },
-        True
+        True,  # public_sharing flag
+        "male"  # gender (GIF 31)
     ),
     (
-        "Luna Rodriguez", "Content Strategist", "São Paulo, Brazil", "Oi!", "Luna",
+        "Lucas Rodriguez", "Content Strategist", "São Paulo, Brazil", "Oi!", "Lucas",
         {
             "What's something unexpected about you?": "I'm conversational in six languages and love learning new ones through immersion and conversation.",
             "What's your favorite way to spend a weekend?": "Attending cultural festivals, writing in coffee shops, and exploring local markets.",
             "What's a book/podcast that changed your perspective?": "'Made to Stick' by Chip and Dan Heath changed how I approach content creation.",
             "When I do my best work (deep‑work hours vs. collaboration and meetings)": "I write best in quiet mornings (8-11am). Afternoons are for brainstorming sessions and stakeholder reviews.",
         },
-        False
+        False,  # public_sharing flag
+        "male"  # gender (GIF 32)
     ),
 ]
 
@@ -2114,7 +2147,7 @@ async def main_async():
         for i in range(args.team_size):
             member_data = TEAM_MEMBERS[i]
             public_id = user_public_ids[i]  # Use constructed public ID from prefix
-            name, role, location, greeting, nickname, prompts_dict, public_sharing = member_data
+            name, role, location, greeting, nickname, prompts_dict, public_sharing, gender = member_data
             log.info(f"Processing user {i+1}/{args.team_size}: {name} (ID: {public_id})")
             
             # Get wave GIF (deterministic based on user index)
