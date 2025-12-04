@@ -591,20 +591,34 @@ async def upsert_team(
     current_user=Depends(require_roles("ADMIN", "PRE_SIGNUP"))
 ):
     log = new_logger("upsert_team")
+    log.info(f"POST /teams/ endpoint called - organization_name: {organization_name}, public_id: {public_id}")
     logo_blob_url = None
-    if company_logo:
-        content = await company_logo.read()
-        logo_blob_url = await upload_to_supabase_storage(
-            file_content=content,
-            filename=f"{public_id or organization_name}-company-logo",
-            content_type=company_logo.content_type or "image/png"
+    try:
+        if company_logo:
+            log.info(f"Uploading company logo for team: {public_id or organization_name}")
+            content = await company_logo.read()
+            logo_blob_url = await upload_to_supabase_storage(
+                file_content=content,
+                filename=f"{public_id or organization_name}-company-logo",
+                content_type=company_logo.content_type or "image/png"
+            )
+            log.info(f"Logo uploaded successfully: {logo_blob_url}")
+        
+        user_role = current_user.get('role') if isinstance(current_user, dict) else None
+        log.info(f"Calling upsert_team_db_logic with user_role: {user_role}")
+        team = await run_in_threadpool(
+            upsert_team_db_logic,
+            organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role
         )
-    user_role = current_user.get('role') if isinstance(current_user, dict) else None
-    team = await run_in_threadpool(
-        upsert_team_db_logic,
-        organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role
-    )
-    return TeamRead.model_validate(team)
+        log.info(f"Team upserted successfully: {team.public_id if team else 'None'}")
+        return TeamRead.model_validate(team)
+    except HTTPException as e:
+        # Log HTTPExceptions before re-raising
+        log.error(f"HTTPException in upsert_team endpoint: {e.status_code} - {e.detail}")
+        raise
+    except Exception as e:
+        log.error(f"Error in upsert_team endpoint: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to upsert team: {str(e)}")
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 from sqlalchemy.exc import OperationalError
@@ -622,15 +636,29 @@ def upsert_team_db_logic(
     # Upsert team record (update if exists, else create)
     team = None
     team_lookup_id = None
-    if public_id:
-        team = fetch_team_by_public_id(db, public_id)
+    try:
+        if public_id:
+            log.info(f"Looking up team with public_id: {public_id}")
+            team = fetch_team_by_public_id(db, public_id)
+            if team:
+                log.info(f"Team found: {team.public_id}")
+            else:
+                log.info(f"Team not found, will use provided public_id: {public_id}")
+                team_lookup_id = public_id
         if not team:
-            team_lookup_id = public_id
-    if not team:
-        from utils.short_id import generate_short_id_with_collision_check
-        generated_short_id = generate_short_id_with_collision_check(db, Team, "team")
+            log.info("Generating new team ID...")
+            from utils.short_id import generate_short_id_with_collision_check
+            generated_short_id = generate_short_id_with_collision_check(db, Team, "team")
+            log.info(f"Generated team ID: {generated_short_id}")
 
-    effective_public_id = team.public_id if team else (team_lookup_id if team_lookup_id else generated_short_id)
+        effective_public_id = team.public_id if team else (team_lookup_id if team_lookup_id else generated_short_id)
+        log.info(f"Effective public_id: {effective_public_id}")
+    except Exception as e:
+        import traceback
+        log.error(f"Error before main try block: {type(e).__name__}: {str(e)}")
+        log.error(f"Full traceback:\n{traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to prepare team upsert: {str(e)}")
 
     # --- PRE_SIGNUP logic enforcement ---
     if user_role == 'PRE_SIGNUP':
@@ -702,8 +730,10 @@ def upsert_team_db_logic(
     except Exception as e:
         # Only catch non-retryable exceptions here
         db.rollback()
-        log.error(f"Non-retryable DB error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to upsert team")
+        import traceback
+        log.error(f"Non-retryable DB error in upsert_team_db_logic: {type(e).__name__}: {str(e)}")
+        log.error(f"Full traceback:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to upsert team: {str(e)}")
 
 
 # Team invitation endpoints

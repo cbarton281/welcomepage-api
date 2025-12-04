@@ -599,7 +599,7 @@ def run_sample_explains(engine):
         # Get a sample user
         user_result = conn.execute(text("""
             SELECT public_id, auth_email, team_id 
-            FROM welcomepage_users 
+            FROM welcomepage.welcomepage_users 
             LIMIT 1;
         """))
         user_row = user_result.fetchone()
@@ -615,11 +615,11 @@ def run_sample_explains(engine):
         # Sample queries
         queries = [
             (
-                f"SELECT * FROM welcomepage_users WHERE public_id = '{user_public_id}';",
+                f"SELECT * FROM welcomepage.welcomepage_users WHERE public_id = '{user_public_id}';",
                 "User lookup by public_id"
             ),
             (
-                f"SELECT * FROM welcomepage_users WHERE auth_email = '{user_email}';",
+                f"SELECT * FROM welcomepage.welcomepage_users WHERE auth_email = '{user_email}';",
                 "User lookup by auth_email"
             ),
         ]
@@ -627,11 +627,11 @@ def run_sample_explains(engine):
         if team_id:
             queries.extend([
                 (
-                    f"SELECT * FROM welcomepage_users WHERE team_id = {team_id};",
+                    f"SELECT * FROM welcomepage.welcomepage_users WHERE team_id = {team_id};",
                     "Users by team_id"
                 ),
                 (
-                    f"SELECT COUNT(*) FROM welcomepage_users WHERE team_id = {team_id} AND is_draft = false;",
+                    f"SELECT COUNT(*) FROM welcomepage.welcomepage_users WHERE team_id = {team_id} AND is_draft = false;",
                     "Published count by team"
                 ),
             ])

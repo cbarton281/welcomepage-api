@@ -5,6 +5,7 @@ Base = declarative_base()
 
 class VerificationCode(Base):
     __tablename__ = "verification_codes"
+    __table_args__ = {'schema': 'welcomepage'}
     id = Column(Integer, primary_key=True)
     email = Column(String, index=True, nullable=False)
     code = Column(String(6), nullable=False)

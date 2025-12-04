@@ -7,6 +7,7 @@ from utils.short_id import generate_short_id
 
 class Team(Base):
     __tablename__ = "teams"
+    __table_args__ = {'schema': 'welcomepage'}
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(10), unique=True, index=True, nullable=False)

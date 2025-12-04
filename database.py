@@ -14,8 +14,12 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
+    # Configure schema search path for PostgreSQL connections
+    # This ensures all queries use the welcomepage schema by default
+    connect_args = {"options": "-csearch_path=welcomepage,public"}
     engine = create_engine(
         DATABASE_URL,
+        connect_args=connect_args,
         pool_size=5,          # modest pool to reduce wait timeouts
         max_overflow=5,       # allow short bursts
         pool_pre_ping=True,   # recycle dead/stale connections automatically

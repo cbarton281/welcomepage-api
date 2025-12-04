@@ -13,12 +13,15 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '507ccf8e06d8'
-down_revision = None
+down_revision = '20250101'  # Now depends on initial schema setup
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Ensure we're using the welcomepage schema (set by previous migration)
+    op.execute("SET search_path TO welcomepage, public")
+    
     op.create_table(
         'teams',
         sa.Column('id', sa.Integer, primary_key=True, index=True),
@@ -28,6 +31,7 @@ def upgrade() -> None:
         sa.Column('color_scheme', sa.String, nullable=False),
         sa.Column('color_scheme_data', sa.JSON, nullable=True),
         sa.Column('is_draft', sa.Boolean, nullable=False, server_default='1'),
+        schema='welcomepage',
     )
 
     op.create_table(
@@ -50,10 +54,11 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime, server_default=sa.func.now(), nullable=True),
         sa.Column('updated_at', sa.DateTime, server_default=sa.func.now(), onupdate=sa.func.now(), nullable=True),
         sa.Column('is_draft', sa.Boolean, nullable=True, server_default='1'),
+        schema='welcomepage',
     )
 
 def downgrade() -> None:
-    op.drop_table('welcomepage_users')
-    op.drop_table('teams')
+    op.drop_table('welcomepage_users', schema='welcomepage')
+    op.drop_table('teams', schema='welcomepage')
     
 

@@ -6,6 +6,7 @@ import os
 import sys
 from sqlalchemy import create_engine
 from sqlalchemy import pool
+import sqlalchemy as sa
 
 default_dotenv_path = '../.env'
 dotenv_path = default_dotenv_path
@@ -85,6 +86,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,  # Include non-default schemas in autogenerate
+        version_table_schema='welcomepage',  # Store alembic_version table in welcomepage schema
     )
 
     with context.begin_transaction():
@@ -113,13 +116,50 @@ def run_migrations_online() -> None:
     #     poolclass=pool.NullPool,
     # )
 
+    # For pgbouncer/connection pooling, ensure proper transaction handling
+    # First, check schema with a separate connection to avoid transaction conflicts
+    with connectable.connect() as check_conn:
+        schema_check = check_conn.execute(sa.text("""
+            SELECT EXISTS(
+                SELECT 1 FROM information_schema.schemata 
+                WHERE schema_name = 'welcomepage'
+            )
+        """)).scalar()
+        check_conn.commit()  # Commit the check query
+    
+    # Only use welcomepage schema for version table if schema already exists
+    # Otherwise, use public schema initially (first migration will create welcomepage schema)
+    version_table_schema = 'welcomepage' if schema_check else None
+    
+    log.info(f"Schema check result: {schema_check}, using version_table_schema: {version_table_schema}")
+    log.info(f"Connection URL: postgresql://{db_owner}:***@{db_host}:{db_port}/{db_name}")
+    
+    # Now use a fresh connection for migrations
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,  # Include non-default schemas in autogenerate
+            version_table_schema=version_table_schema,  # Use welcomepage if exists, else public
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        # Run migrations - use single transaction for all migrations
+        # For pgbouncer, we need to ensure the transaction commits properly
+        log.info("Starting migrations...")
+        try:
+            # Use context.begin_transaction() - it should handle commit/rollback
+            with context.begin_transaction():
+                log.info("Transaction started, running migrations...")
+                # Set search path within the transaction
+                connection.execute(sa.text("SET LOCAL search_path TO welcomepage, public"))
+                context.run_migrations()
+                log.info("All migrations executed, transaction should commit...")
+            log.info("Migrations completed successfully - transaction committed")
+        except Exception as e:
+            log.error(f"Migration failed with error: {e}", exc_info=True)
+            import traceback
+            log.error(f"Full traceback: {traceback.format_exc()}")
+            raise
 
 
 if context.is_offline_mode():

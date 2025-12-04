@@ -196,7 +196,7 @@ def update_search_vector(db, user):
     
     db.execute(
         text("""
-            UPDATE welcomepage_users 
+            UPDATE welcomepage.welcomepage_users 
             SET search_vector = to_tsvector('english', :search_text)
             WHERE id = :user_id
         """),

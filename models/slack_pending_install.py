@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 
 class SlackPendingInstall(Base):
     __tablename__ = "slack_pending_installs"
+    __table_args__ = {'schema': 'welcomepage'}
 
     id = Column(Integer, primary_key=True, index=True)
     nonce = Column(String(255), unique=True, index=True, nullable=False)

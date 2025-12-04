@@ -10,6 +10,7 @@ from utils.short_id import generate_short_id
 
 class WelcomepageUser(Base):
     __tablename__ = 'welcomepage_users'
+    __table_args__ = {'schema': 'welcomepage'}
     id = Column(Integer, primary_key=True)
     public_id = Column(String(10), unique=True, index=True,nullable=False)
     name = Column(String, nullable=False)
@@ -35,7 +36,7 @@ class WelcomepageUser(Base):
 
     created_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), server_default=func.now(), onupdate=func.now())
-    team_id = Column(Integer, ForeignKey('teams.id'))
+    team_id = Column(Integer, ForeignKey('welcomepage.teams.id'))
     is_draft = Column(Boolean, nullable=False, default=True, server_default='1')  # True for draft/pre-signup, False for finalized
     auth_role = Column(String(32), nullable=True)  # Authorization role (admin, user, pre-signup, etc)
     auth_email = Column(String(256), nullable=True)  # Authorization email, distinct from profile email

@@ -26,11 +26,12 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column('expires_at', sa.DateTime(), nullable=False),
         sa.Column('consumed', sa.Boolean(), nullable=False, server_default=sa.false()),
+        schema='welcomepage',
     )
-    op.create_index('ix_slack_pending_installs_id', 'slack_pending_installs', ['id'], unique=False)
-    op.create_index('ix_slack_pending_installs_nonce', 'slack_pending_installs', ['nonce'], unique=True)
+    op.create_index('ix_slack_pending_installs_id', 'slack_pending_installs', ['id'], unique=False, schema='welcomepage')
+    op.create_index('ix_slack_pending_installs_nonce', 'slack_pending_installs', ['nonce'], unique=True, schema='welcomepage')
 
 def downgrade():
-    op.drop_index('ix_slack_pending_installs_nonce', table_name='slack_pending_installs')
-    op.drop_index('ix_slack_pending_installs_id', table_name='slack_pending_installs')
-    op.drop_table('slack_pending_installs')
+    op.drop_index('ix_slack_pending_installs_nonce', table_name='slack_pending_installs', schema='welcomepage')
+    op.drop_index('ix_slack_pending_installs_id', table_name='slack_pending_installs', schema='welcomepage')
+    op.drop_table('slack_pending_installs', schema='welcomepage')

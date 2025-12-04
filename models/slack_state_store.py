@@ -8,6 +8,7 @@ from typing import Optional
 
 class SlackStateStore(Base):
     __tablename__ = "slack_state_store"
+    __table_args__ = {'schema': 'welcomepage'}
 
     id = Column(Integer, primary_key=True, index=True)
     state = Column(String(255), unique=True, index=True, nullable=False)

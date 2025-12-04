@@ -20,16 +20,18 @@ def upgrade():
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False),
         sa.Column('used', sa.Boolean, nullable=False, server_default=sa.text('false')),
-        sa.Column('public_id', sa.String, nullable=True, index=True),
+        sa.Column('public_id', sa.String, nullable=True),
+        schema='welcomepage',
     )
     # Add indexes for efficient search
-    op.create_index('idx_verification_codes_email', 'verification_codes', ['email'])
-    op.create_index('idx_verification_codes_code', 'verification_codes', ['code'])
-    op.create_index('idx_verification_codes_email_code', 'verification_codes', ['email', 'code'])
-    op.create_index('idx_verification_codes_public_id', 'verification_codes', ['public_id'])
+    op.create_index('idx_verification_codes_email', 'verification_codes', ['email'], schema='welcomepage')
+    op.create_index('idx_verification_codes_code', 'verification_codes', ['code'], schema='welcomepage')
+    op.create_index('idx_verification_codes_email_code', 'verification_codes', ['email', 'code'], schema='welcomepage')
+    op.create_index('idx_verification_codes_public_id', 'verification_codes', ['public_id'], schema='welcomepage')
 
 def downgrade():
-    op.drop_index('idx_verification_codes_email_code', table_name='verification_codes')
-    op.drop_index('idx_verification_codes_code', table_name='verification_codes')
-    op.drop_index('idx_verification_codes_email', table_name='verification_codes')
-    op.drop_table('verification_codes')
+    op.drop_index('idx_verification_codes_email_code', table_name='verification_codes', schema='welcomepage')
+    op.drop_index('idx_verification_codes_code', table_name='verification_codes', schema='welcomepage')
+    op.drop_index('idx_verification_codes_email', table_name='verification_codes', schema='welcomepage')
+    op.drop_index('idx_verification_codes_public_id', table_name='verification_codes', schema='welcomepage')
+    op.drop_table('verification_codes', schema='welcomepage')

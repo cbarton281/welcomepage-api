@@ -186,11 +186,14 @@ async def upload_to_supabase_storage(file_content: bytes, filename: str, content
     except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException, httpx.WriteError,
             httpcore.ReadError, httpcore.ConnectError, httpcore.TimeoutException, httpcore.WriteError) as e:
         # These are retryable network errors - should have been retried already
+        logging.getLogger("supabase_storage").error(f"Supabase upload failed after retries due to network error: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Supabase upload failed after retries due to network error: {str(e)}")
     except Exception as e:
         # Check if it's an SSL/network error that should have been retried
         error_str = str(e).lower()
         if any(keyword in error_str for keyword in ['ssl', 'bad record mac', 'connection', 'timeout', 'writeerror', 'broken pipe']):
             # This should have been caught by retry, but if it wasn't, raise with context
+            logging.getLogger("supabase_storage").error(f"Supabase upload failed due to SSL/network error: {type(e).__name__}: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Supabase upload failed due to SSL/network error: {str(e)}")
+        logging.getLogger("supabase_storage").error(f"Supabase upload failed: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Supabase upload failed: {str(e)}")

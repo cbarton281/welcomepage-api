@@ -5,6 +5,7 @@ from database import Base
 
 class PageVisit(Base):
     __tablename__ = 'page_visits'
+    __table_args__ = {'schema': 'welcomepage'}
     
     id = Column(Integer, primary_key=True)
     visited_user_id = Column(Integer, nullable=False)  # Reference to visited user ID

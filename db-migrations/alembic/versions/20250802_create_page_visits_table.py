@@ -32,22 +32,23 @@ def upgrade():
         sa.Column('user_agent', sa.String(512), nullable=True),
         sa.Column('session_id', sa.String(64), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.PrimaryKeyConstraint('id')
+        sa.PrimaryKeyConstraint('id'),
+        schema='welcomepage',
     )
     
     # Create indexes for efficient queries
-    op.create_index('idx_page_visits_visited_user_id', 'page_visits', ['visited_user_id'])
-    op.create_index('idx_page_visits_visitor_public_id', 'page_visits', ['visitor_public_id'])
-    op.create_index('idx_page_visits_visit_start_time', 'page_visits', ['visit_start_time'])
-    op.create_index('idx_page_visits_user_agent', 'page_visits', ['user_agent'])
+    op.create_index('idx_page_visits_visited_user_id', 'page_visits', ['visited_user_id'], schema='welcomepage')
+    op.create_index('idx_page_visits_visitor_public_id', 'page_visits', ['visitor_public_id'], schema='welcomepage')
+    op.create_index('idx_page_visits_visit_start_time', 'page_visits', ['visit_start_time'], schema='welcomepage')
+    op.create_index('idx_page_visits_user_agent', 'page_visits', ['user_agent'], schema='welcomepage')
 
 
 def downgrade():
     # Drop indexes
-    op.drop_index('idx_page_visits_user_agent', 'page_visits')
-    op.drop_index('idx_page_visits_visit_start_time', 'page_visits')
-    op.drop_index('idx_page_visits_visitor_public_id', 'page_visits')
-    op.drop_index('idx_page_visits_visited_user_id', 'page_visits')
+    op.drop_index('idx_page_visits_user_agent', 'page_visits', schema='welcomepage')
+    op.drop_index('idx_page_visits_visit_start_time', 'page_visits', schema='welcomepage')
+    op.drop_index('idx_page_visits_visitor_public_id', 'page_visits', schema='welcomepage')
+    op.drop_index('idx_page_visits_visited_user_id', 'page_visits', schema='welcomepage')
     
     # Drop table
-    op.drop_table('page_visits')
+    op.drop_table('page_visits', schema='welcomepage')
