@@ -17,9 +17,9 @@ from welcomepage.welcomepage_users
 where auth_email like 'charles.barton+%@gmail.com'
 order by auth_email;
 
-select auth_email, * 
+select auth_email, public_id,  * 
 from welcomepage.welcomepage_users 
-where team_id = 146;
+where team_id in (select id from welcomepage.teams where public_id = 'bgs-team01')
 
 select name, auth_email, is_shareable, share_uuid, * 
 from welcomepage.welcomepage_users 
@@ -266,3 +266,10 @@ WHERE t.id = du.team_id
 
 COMMIT;
 
+select * from welcomepage.welcomepage_users where team_id = 43
+
+select * from welcomepage.teams where public_id = '1pnmg02dju'
+select * from welcomepage.teams where organization_name like 'A2X%'
+select * from welcomepage.welcomepage_users where  auth_email = 'charles@a2xaccounting.com'
+select * from welcomepage.welcomepage_users where  public_id = 'x3p6kf1k6g'
+select auth_email,* from welcomepage.welcomepage_users where  auth_email like '%x%'
