@@ -172,6 +172,53 @@ def generate_verification_email(
                 log.info(f"User exists but already has auth_email: {potential_new_user.auth_email}")
             else:
                 log.info(f"No user found for public_id: {payload.public_id}")
+                # Check if this is a PRE_SIGNUP user with team_id (team invitation signup flow)
+                user_role = current_user.get('role') if isinstance(current_user, dict) else None
+                jwt_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+                if user_role == 'PRE_SIGNUP' and jwt_team_id:
+                    # This is a legitimate team invitation signup - create user if it doesn't exist
+                    target_team = db.query(Team).filter_by(public_id=jwt_team_id).first()
+                    if target_team:
+                        # Check team signup limits before creating user
+                        from utils.team_limits import check_team_signup_allowed
+                        is_allowed, reason = check_team_signup_allowed(db, target_team.id)
+                        if not is_allowed:
+                            log.warning(f"Team signup blocked for team {jwt_team_id}: {reason}")
+                            raise HTTPException(status_code=403, detail=reason)
+                        
+                        # Create user record for team invitation signup
+                        new_user = WelcomepageUser(
+                            public_id=payload.public_id,
+                            name="",
+                            role="",
+                            auth_role="PRE_SIGNUP",
+                            auth_email=None,  # Will be set after email verification
+                            team_id=target_team.id,
+                            is_draft=True,
+                            created_at=datetime.now(timezone.utc),
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                        db.add(new_user)
+                        try:
+                            db.commit()
+                            db.refresh(new_user)
+                            log.info(f"Created user record for PRE_SIGNUP team invitation signup: {payload.email} (public_id: {payload.public_id}, team: {jwt_team_id})")
+                        except Exception as e:
+                            db.rollback()
+                            # If user already exists (race condition), that's fine - continue
+                            existing_user = db.query(WelcomepageUser).filter_by(public_id=payload.public_id).first()
+                            if existing_user:
+                                log.info(f"User already exists (race condition): {payload.public_id}")
+                            else:
+                                log.exception(f"Failed to create user record: {e}")
+                                raise HTTPException(status_code=500, detail="Failed to create user record.")
+                        
+                        should_send_email = True
+                        user_type = "team_invitation_signup"
+                        log.info(f"PRE_SIGNUP user with team_id {jwt_team_id} - sending verification email for team invitation signup: {payload.email}")
+                    else:
+                        log.warning(f"Team not found for team_id: {jwt_team_id}")
+                        raise HTTPException(status_code=404, detail="Team not found")
     else:
         log.info(f"No public_id provided for email: {payload.email}")
     
