@@ -24,6 +24,7 @@ class GenerateCodeRequest(BaseModel):
     email: str
     public_id: Optional[str] = None
     intended_auth_role: Optional[str] = "USER"  # Default to USER role
+    team_id: Optional[str] = None  # Team ID from URL (takes precedence over JWT team_id)
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, before_sleep_log
 import logging
@@ -175,15 +176,20 @@ def generate_verification_email(
                 # Check if this is a PRE_SIGNUP user with team_id (team invitation signup flow)
                 user_role = current_user.get('role') if isinstance(current_user, dict) else None
                 jwt_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
-                if user_role == 'PRE_SIGNUP' and jwt_team_id:
+                # Prioritize team_id from payload (URL) over JWT team_id (cookie) for team join flow
+                effective_team_id = payload.team_id if payload.team_id else jwt_team_id
+                if user_role == 'PRE_SIGNUP' and effective_team_id:
                     # This is a legitimate team invitation signup - create user if it doesn't exist
-                    target_team = db.query(Team).filter_by(public_id=jwt_team_id).first()
+                    # Use team_id from URL (payload) if provided, otherwise fall back to JWT team_id
+                    if payload.team_id and payload.team_id != jwt_team_id:
+                        log.info(f"Using team_id from URL ({payload.team_id}) instead of JWT team_id ({jwt_team_id})")
+                    target_team = db.query(Team).filter_by(public_id=effective_team_id).first()
                     if target_team:
                         # Check team signup limits before creating user
                         from utils.team_limits import check_team_signup_allowed
                         is_allowed, reason = check_team_signup_allowed(db, target_team.id)
                         if not is_allowed:
-                            log.warning(f"Team signup blocked for team {jwt_team_id}: {reason}")
+                            log.warning(f"Team signup blocked for team {effective_team_id}: {reason}")
                             raise HTTPException(status_code=403, detail=reason)
                         
                         # Create user record for team invitation signup
@@ -202,7 +208,7 @@ def generate_verification_email(
                         try:
                             db.commit()
                             db.refresh(new_user)
-                            log.info(f"Created user record for PRE_SIGNUP team invitation signup: {payload.email} (public_id: {payload.public_id}, team: {jwt_team_id})")
+                            log.info(f"Created user record for PRE_SIGNUP team invitation signup: {payload.email} (public_id: {payload.public_id}, team: {effective_team_id})")
                         except Exception as e:
                             db.rollback()
                             # If user already exists (race condition), that's fine - continue
@@ -215,9 +221,9 @@ def generate_verification_email(
                         
                         should_send_email = True
                         user_type = "team_invitation_signup"
-                        log.info(f"PRE_SIGNUP user with team_id {jwt_team_id} - sending verification email for team invitation signup: {payload.email}")
+                        log.info(f"PRE_SIGNUP user with team_id {effective_team_id} - sending verification email for team invitation signup: {payload.email}")
                     else:
-                        log.warning(f"Team not found for team_id: {jwt_team_id}")
+                        log.warning(f"Team not found for team_id: {effective_team_id}")
                         raise HTTPException(status_code=404, detail="Team not found")
     else:
         log.info(f"No public_id provided for email: {payload.email}")
