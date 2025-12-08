@@ -590,6 +590,30 @@ async def upsert_user(
     # Parse the answers JSON to get the base structure
     try:
         answers_dict = json.loads(answers or "{}")
+        # Convert imageUrl fields to image objects for backward compatibility
+        # Frontend sends imageUrl as a string, but backend expects image as an object
+        log.info(f"Processing answers_dict with {len(answers_dict)} prompts")
+        for prompt, answer_data in answers_dict.items():
+            if isinstance(answer_data, dict):
+                # If answer has imageUrl but no image object, convert it
+                image_url = answer_data.get('imageUrl')
+                log.info(f"Prompt '{prompt}': imageUrl={image_url}, has_image_key={'image' in answer_data}, image_value={answer_data.get('image')}")
+                if image_url and not answer_data.get('image'):
+                    # Remove imageUrl and create image object
+                    answer_data.pop('imageUrl', None)
+                    answer_data['image'] = {
+                        "url": image_url,
+                        "filename": None,  # Not available from imageUrl
+                        "contentType": None,  # Not available from imageUrl
+                        "size": None  # Not available from imageUrl
+                    }
+                    log.info(f"Converted imageUrl to image object for prompt: '{prompt}'")
+                elif 'imageUrl' in answer_data and not image_url:
+                    # Remove empty/null imageUrl and explicitly set image to None
+                    # This indicates the user intentionally removed the image
+                    answer_data.pop('imageUrl', None)
+                    answer_data['image'] = None
+                    log.info(f"Explicitly removed image for prompt: '{prompt}' (imageUrl was null)")
     except Exception as e:
         log.warning(f"Invalid answers JSON: {answers!r}. Using empty dict. Error: {e}")
         answers_dict = {}
@@ -824,6 +848,39 @@ def upsert_user_db_logic(
             db_user.handwave_emoji = handwave_emoji
             db_user.handwave_emoji_url = handwave_emoji_url
             db_user.selected_prompts = selected_prompts_list
+            
+            # Preserve existing images from database for prompts not in answers_dict
+            # This is a safety net in case the frontend doesn't send all answers
+            # BUT: respect explicit removals (image: None) and new uploads
+            if db_user.answers:
+                existing_answers = db_user.answers if isinstance(db_user.answers, dict) else json.loads(db_user.answers) if isinstance(db_user.answers, str) else {}
+                for prompt, existing_answer in existing_answers.items():
+                    if prompt not in answers_dict:
+                        # Prompt not in new answers, preserve it
+                        answers_dict[prompt] = existing_answer
+                        log.info(f"Preserved entire answer for prompt '{prompt}' from database (not in new answers)")
+                    elif isinstance(existing_answer, dict) and isinstance(answers_dict[prompt], dict):
+                        # Prompt exists in both - preserve image if new answer doesn't have one
+                        # Only preserve if 'image' key is missing entirely (not if it's explicitly None/null)
+                        existing_image = existing_answer.get('image')
+                        new_image = answers_dict[prompt].get('image')
+                        has_image_key = 'image' in answers_dict[prompt]
+                        log.info(f"Preservation check for prompt '{prompt}': existing_image={bool(existing_image)}, new_image={new_image}, has_image_key={has_image_key}")
+                        # Don't preserve if:
+                        # 1. New answer explicitly sets image to None (user removed it) - 'image' key exists with None value
+                        # 2. New answer has an image (user uploaded a new one or it was converted from imageUrl)
+                        # Only preserve if image key is missing entirely (frontend didn't send it at all)
+                        if existing_image and not has_image_key:
+                            # Image key is missing - preserve from database (safety net)
+                            answers_dict[prompt]['image'] = existing_image
+                            log.info(f"Preserved existing image for prompt '{prompt}' from database (image key was missing)")
+                        elif new_image is None and has_image_key:
+                            # Image was explicitly set to None (user removed it), don't preserve
+                            log.info(f"Respecting explicit image removal for prompt '{prompt}' (not preserving from database, image=None)")
+                        elif new_image:
+                            # New image exists (uploaded or converted), use it
+                            log.info(f"Using new image for prompt '{prompt}' (not preserving from database)")
+            
             db_user.answers = answers_dict
             db_user.bento_widgets = bento_widgets_list
             db_user.team_id = team_id

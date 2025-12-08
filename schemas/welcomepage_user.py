@@ -20,9 +20,9 @@ class HandwaveEmoji(BaseModel):
         from_attributes = True
 
 class AnswerImage(BaseModel):
-    filename: str
-    content_type: str = Field(..., alias="contentType")
-    size: int
+    filename: Optional[str] = None
+    content_type: Optional[str] = Field(None, alias="contentType")
+    size: Optional[int] = None
     url: str
 
     class Config:
