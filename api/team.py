@@ -300,16 +300,18 @@ async def get_team_members_view(
         raise HTTPException(status_code=403, detail="Access denied: You can only view members of your own team")
     
     # Build base query - only include registered users (with auth_email and USER/ADMIN roles)
+    # AND only include published users (is_draft == False) - draft pages should not be visible
     query = db.query(WelcomepageUser).filter(
         WelcomepageUser.team_id == team.id,
         WelcomepageUser.auth_email.isnot(None),
         WelcomepageUser.auth_email != '',
-        WelcomepageUser.auth_role.in_(['USER', 'ADMIN'])
+        WelcomepageUser.auth_role.in_(['USER', 'ADMIN']),
+        WelcomepageUser.is_draft == False  # Only show published pages
     )
     
     # Log base query count before search
     base_count = query.count()
-    log.info(f"Base query (team_id={team.id}, with auth filters) returned {base_count} users")
+    log.info(f"Base query (team_id={team.id}, with auth filters and is_draft=False) returned {base_count} users")
     
     # Apply full-text search filter if provided
     if search:
@@ -344,23 +346,26 @@ async def get_team_members_view(
         search_count = query.count()
         log.info(f"After search filter '{sanitize_for_logging(search)}', query returned {search_count} users")
         
-        # Debug: Check if search_vector is NULL for any users in this team
+        # Debug: Check if search_vector is NULL for any published users in this team
         null_vector_count = db.query(WelcomepageUser).filter(
             WelcomepageUser.team_id == team.id,
+            WelcomepageUser.is_draft == False,  # Only check published users
             WelcomepageUser.search_vector.is_(None)
         ).count()
         if null_vector_count > 0:
-            log.warning(f"Found {null_vector_count} users in team {team.id} with NULL search_vector")
+            log.warning(f"Found {null_vector_count} published users in team {team.id} with NULL search_vector")
         
-        # Debug: Test search without other filters
+        # Debug: Test search without other filters (but still with is_draft filter for consistency)
         search_only_count = db.query(WelcomepageUser).filter(
-            WelcomepageUser.team_id == team.id
+            WelcomepageUser.team_id == team.id,
+            WelcomepageUser.is_draft == False  # Only count published users
         ).filter(search_filter).count()
-        log.info(f"Search '{sanitize_for_logging(search)}' on team_id={team.id} (without auth filters) returned {search_only_count} users")
+        log.info(f"Search '{sanitize_for_logging(search)}' on team_id={team.id} (published users only, without auth filters) returned {search_only_count} users")
         
-        # Debug: Check users excluded by auth filters
+        # Debug: Check users excluded by auth filters (but only published users)
         excluded_by_auth = db.query(WelcomepageUser).filter(
             WelcomepageUser.team_id == team.id,
+            WelcomepageUser.is_draft == False,  # Only check published users
             or_(
                 WelcomepageUser.auth_email.is_(None),
                 WelcomepageUser.auth_email == '',
@@ -368,7 +373,7 @@ async def get_team_members_view(
             )
         ).filter(search_filter).count()
         if excluded_by_auth > 0:
-            log.info(f"Search '{sanitize_for_logging(search)}' matched {excluded_by_auth} users excluded by auth filters (no auth_email or wrong role)")
+            log.info(f"Search '{sanitize_for_logging(search)}' matched {excluded_by_auth} published users excluded by auth filters (no auth_email or wrong role)")
     else:
         log.info("No search term provided, returning all filtered users")
     
