@@ -74,6 +74,7 @@ class GenerateQuestionsRequest(BaseModel):
 class GenerateQuestionsResponse(BaseModel):
     """Response model for generated questions"""
     questions: List[Question]
+    eligible_count: Optional[int] = None  # Total count of eligible members for the team
 
 
 class WaveGifUrlsResponse(BaseModel):
@@ -84,4 +85,9 @@ class WaveGifUrlsResponse(BaseModel):
 class AlternatePoolResponse(BaseModel):
     """Response model for alternate pool (members with minimal data)"""
     members: List[AlternateMember]
+
+
+class EligibleCountResponse(BaseModel):
+    """Response model for eligible member count for game"""
+    eligible_count: int
 

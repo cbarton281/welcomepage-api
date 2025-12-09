@@ -9,7 +9,7 @@ from typing import List
 from database import get_db
 from models.welcomepage_user import WelcomepageUser
 from models.team import Team
-from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember
+from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember, EligibleCountResponse
 from schemas.welcomepage_user import WelcomepageUserDTO
 from services.game_service import GameService
 from utils.logger_factory import new_logger
@@ -78,10 +78,34 @@ async def generate_questions(
         pydantic_time = (time.time() - pydantic_start) * 1000
         log.info(f"Dict to Pydantic conversion took {pydantic_time:.2f}ms")
         
+        # Calculate eligible count for the team
+        eligible_count = None
+        try:
+            team_public_id = current_user.get('team_id')
+            if team_public_id:
+                count_start = time.time()
+                team = db.query(Team).filter_by(public_id=team_public_id).first()
+                if team:
+                    eligible_count = db.query(WelcomepageUser)\
+                        .filter(WelcomepageUser.team_id == team.id)\
+                        .filter(WelcomepageUser.is_draft == False)\
+                        .filter(
+                            or_(
+                                WelcomepageUser.selected_prompts.isnot(None),
+                                WelcomepageUser.bento_widgets.isnot(None)
+                            )
+                        )\
+                        .count()
+                    count_time = (time.time() - count_start) * 1000
+                    log.info(f"Eligible count query took {count_time:.2f}ms, found {eligible_count} eligible members")
+        except Exception as e:
+            log.warning(f"Failed to calculate eligible count: {e}")
+            # Continue without eligible_count - it's optional
+        
         total_time = (time.time() - start_time) * 1000
         log.info(f"Generated {len(questions)} questions in {total_time:.2f}ms total")
         
-        return GenerateQuestionsResponse(questions=questions)
+        return GenerateQuestionsResponse(questions=questions, eligible_count=eligible_count)
         
     except ValueError as e:
         # Handle missing API key or other configuration errors
@@ -373,5 +397,77 @@ async def get_alternate_pool(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch alternate pool"
+        )
+
+
+@router.get("/team/{team_public_id}/game/eligible-count", response_model=EligibleCountResponse)
+async def get_eligible_count(
+    team_public_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Get the total count of eligible team members for game question generation.
+    
+    Returns the count of published team members who have welcomepage content
+    (selectedPrompts or bentoWidgets). This matches the eligibility logic used
+    by the game service for question generation.
+    """
+    import time
+    start_time = time.time()
+    log.info(f"Fetching eligible member count for team {team_public_id}")
+    
+    # Resolve team_public_id to team_id
+    team_query_start = time.time()
+    team = db.query(Team).filter_by(public_id=team_public_id).first()
+    team_query_time = (time.time() - team_query_start) * 1000
+    log.info(f"Team lookup took {team_query_time:.2f}ms")
+    
+    if not team:
+        log.warning(f"Team not found: {team_public_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team not found"
+        )
+    
+    # Verify user has access to this team
+    user_team_id = current_user.get('team_id')
+    if user_team_id and user_team_id != team.public_id:
+        # Check if user is admin (admins can access any team)
+        user_role = current_user.get('role')
+        if user_role != 'ADMIN':
+            log.warning(f"User {current_user.get('public_id')} attempted to access team {team_public_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this team"
+            )
+    
+    try:
+        # Count eligible members (same logic as get_random_members and game service)
+        # Published (is_draft=False) AND has content (selectedPrompts or bentoWidgets)
+        db_query_start = time.time()
+        eligible_count = db.query(WelcomepageUser)\
+            .filter(WelcomepageUser.team_id == team.id)\
+            .filter(WelcomepageUser.is_draft == False)\
+            .filter(
+                or_(
+                    WelcomepageUser.selected_prompts.isnot(None),
+                    WelcomepageUser.bento_widgets.isnot(None)
+                )
+            )\
+            .count()
+        db_query_time = (time.time() - db_query_start) * 1000
+        log.info(f"Database query took {db_query_time:.2f}ms, found {eligible_count} eligible members")
+        
+        total_time = (time.time() - start_time) * 1000
+        log.info(f"Total get_eligible_count time: {total_time:.2f}ms")
+        
+        return EligibleCountResponse(eligible_count=eligible_count)
+        
+    except Exception as e:
+        log.error(f"Error fetching eligible count: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch eligible count"
         )
 
