@@ -179,12 +179,13 @@ def generate_verification_email(
                 # Prioritize team_id from payload (URL) over JWT team_id (cookie) for team join flow
                 effective_team_id = payload.team_id if payload.team_id else jwt_team_id
                 if user_role == 'PRE_SIGNUP' and effective_team_id:
-                    # This is a legitimate team invitation signup - create user if it doesn't exist
+                    # This is a potential team invitation signup - verify team exists before proceeding
                     # Use team_id from URL (payload) if provided, otherwise fall back to JWT team_id
                     if payload.team_id and payload.team_id != jwt_team_id:
                         log.info(f"Using team_id from URL ({payload.team_id}) instead of JWT team_id ({jwt_team_id})")
                     target_team = db.query(Team).filter_by(public_id=effective_team_id).first()
                     if target_team:
+                        # Valid team found - proceed with team invitation signup
                         # Check team signup limits before creating user
                         from utils.team_limits import check_team_signup_allowed
                         is_allowed, reason = check_team_signup_allowed(db, target_team.id)
@@ -223,8 +224,13 @@ def generate_verification_email(
                         user_type = "team_invitation_signup"
                         log.info(f"PRE_SIGNUP user with team_id {effective_team_id} - sending verification email for team invitation signup: {payload.email}")
                     else:
-                        log.warning(f"Team not found for team_id: {effective_team_id}")
-                        raise HTTPException(status_code=404, detail="Team not found")
+                        # Team not found - this could be:
+                        # 1. Invalid team_id in JWT/cookie (stale data)
+                        # 2. Invalid team_id in URL
+                        # 3. Regular login attempt with unrecognized email
+                        # For anti-enumeration, treat as unrecognized email and continue gracefully
+                        log.info(f"Team not found for team_id: {effective_team_id} - treating as unrecognized email (anti-enumeration)")
+                        # Don't throw error - let it fall through to should_send_email = False path
     else:
         log.info(f"No public_id provided for email: {payload.email}")
     
