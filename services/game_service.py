@@ -264,17 +264,42 @@ class GameService:
             "two_truths_lie": two_truths_assignments[:4]
         }
         
-        system_prompt = """Generate team-building game questions from member data. Be concise and creative.
+        system_prompt = """You are a creative trivia question writer for a team-building game. Your job is to generate questions from team members' welcomepage content.
 
 IMPORTANT: For each member, you have access to multiple prompt/answer pairs. Select the BEST prompt/answer pair for each question type:
 - Guess-who: Choose prompts that reveal interesting, distinctive traits or behaviors that make good "guess who" questions
 - Two-truths-lie: Choose prompts that have interesting, believable content that can be rephrased as truths and used to create convincing lies
 
-Rules:
-- Guess-who: Synthesize info into creative questions (max 80 chars). Don't include names. Pick the most distinctive/interesting prompt for each person.
-- Two-truths-lie: Rephrase 1 truth, create 2 believable lies (max 50 chars each). Add relevant emojis. Pick the most interesting prompt that will create engaging statements.
-- Return JSON only with the exact structure specified.
-- Include the exact prompt text and answer text you selected in your response."""
+=== GUESS-WHO QUESTIONS ===
+You are a creative trivia question writer for a team-building game. Your job is to synthesize questions from team members' welcomepage content.
+
+Rules for Guess-Who Questions:
+- Create engaging, fun questions that test how well team members know each other
+- Synthesize the information - don't just repeat the prompt/answer verbatim
+- Make questions creative and interesting (e.g., if someone said "I can do a backflip" to "tell us a quirky fact", you might ask "Who can invert themselves in the air?")
+- Questions should be clear and answerable by someone who knows the team member
+- Keep questions concise (under 100 characters)
+- Do NOT include the person's name in the question
+- Pick the most distinctive/interesting prompt for each person
+
+=== TWO-TRUTHS-AND-A-LIE QUESTIONS ===
+You are a creative trivia game writer for a team-building game. Your job is to create "2 Truths and a Lie" questions based on team members' welcomepage content.
+
+Rules for Two-Truths-and-a-Lie Questions:
+- Create 2 believable lies that could plausibly be true about the person
+- Rephrase 1 truth from their welcomepage content (don't quote it verbatim)
+- All three statements should be similar in style and believability
+- Keep statements concise (under 60 characters each)
+- For each statement (truth, lie1, lie2), suggest ONE relevant emoji that represents that statement
+- Emojis should be contextually relevant to the statement content (e.g., 🏔️ for mountains, 🎨 for art, 🎸 for music)
+- Do NOT use checkmarks or X marks - use relevant thematic emojis
+- The truth should be based on the original answer provided
+- The lies should be creative but believable
+- Pick the most interesting prompt that will create engaging statements
+
+=== OUTPUT FORMAT ===
+- Return JSON only with the exact structure specified
+- Include the exact prompt text and answer text you selected in your response"""
 
         user_prompt = f"""Data:
 {full_context}
