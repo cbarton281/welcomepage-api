@@ -82,9 +82,9 @@ class GameService:
             log.warning("Failed to generate questions, returning empty list")
             return []
         
-        # Shuffle to mix question types
+        # Shuffle to mix question types with balanced distribution
         shuffle_start = time.time()
-        shuffled = GameService._shuffle_array(questions)
+        shuffled = GameService._balanced_shuffle_questions(questions)
         shuffle_time = (time.time() - shuffle_start) * 1000
         log.info(f"Question shuffling took {shuffle_time:.2f}ms")
         
@@ -842,3 +842,65 @@ JSON structure:
         shuffled = array.copy()
         random.shuffle(shuffled)
         return shuffled
+    
+    @staticmethod
+    def _balanced_shuffle_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Shuffle questions using balanced distribution algorithm to prevent clustering.
+        
+        This algorithm ensures questions are evenly spaced based on their type ratio,
+        preventing consecutive questions of the same type from clustering together.
+        
+        Args:
+            questions: List of question dictionaries with 'type' field
+            
+        Returns:
+            Shuffled list with balanced distribution of question types
+        """
+        if len(questions) <= 1:
+            return questions.copy()
+        
+        def type_func(item: Dict[str, Any]) -> str:
+            """Return 'T' for two-truths-lie, 'G' for guess-who"""
+            return 'T' if item.get("type") == "two-truths-lie" else 'G'
+        
+        # Step 1: Separate and shuffle by type
+        T_items = [x for x in questions if type_func(x) == 'T']
+        G_items = [x for x in questions if type_func(x) == 'G']
+        
+        random.shuffle(T_items)
+        random.shuffle(G_items)
+        
+        nT = len(T_items)
+        nG = len(G_items)
+        N = nT + nG
+        
+        # Step 2: Build evenly spaced T-pattern
+        pattern = []
+        prev_floor = 0
+        for k in range(1, N + 1):
+            cur_floor = (k * nT) // N  # floor division
+            if cur_floor > prev_floor:
+                pattern.append('T')
+            else:
+                pattern.append('G')
+            prev_floor = cur_floor
+        
+        # Step 3: Random rotation of the pattern
+        offset = random.randint(0, N - 1)
+        rotated_pattern = [pattern[(i + offset) % N] for i in range(N)]
+        
+        # Step 4: Fill with shuffled items
+        result = []
+        t_idx = 0
+        g_idx = 0
+        for kind in rotated_pattern:
+            if kind == 'T':
+                result.append(T_items[t_idx])
+                t_idx += 1
+            else:
+                result.append(G_items[g_idx])
+                g_idx += 1
+        
+        log.info(f"Balanced shuffle: {nT} two-truths-lie, {nG} guess-who questions distributed")
+        return result
