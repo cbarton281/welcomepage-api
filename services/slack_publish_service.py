@@ -52,6 +52,16 @@ class SlackPublishService:
         
         try:
             # Get user and team data
+            # CRITICAL: Use expire_all() before querying to ensure we see the latest 
+            # committed data from other transactions. This fixes a race condition where:
+            # 1. Publish endpoint commits is_draft=False (separate HTTP request)
+            # 2. This Slack service queries immediately after and might see stale data
+            # 3. Result: Blank Slack messages and "Unspecified Name" on /myteam page
+            # 
+            # Note: expire_all() clears session cache but doesn't affect database queries.
+            # The query will hit the database and get fresh data. We then refresh the
+            # user object to ensure all attributes are loaded from the database.
+            db.expire_all()
             user = db.query(WelcomepageUser).filter_by(public_id=user_public_id).first()
             if not user:
                 log.error(f"User not found: {user_public_id}")
@@ -60,6 +70,9 @@ class SlackPublishService:
                     "error": "User not found",
                     "message": "The specified user could not be found"
                 }
+            # Refresh to ensure we have the latest committed data (including is_draft, name, etc.)
+            # This is important because the query might return a cached object from the session
+            db.refresh(user)
             log.info(f"user: {user.to_dict()}")
 
             # Note: is_draft check removed - we allow re-sharing of already published pages

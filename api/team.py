@@ -301,6 +301,10 @@ async def get_team_members_view(
     
     # Build base query - only include registered users (with auth_email and USER/ADMIN roles)
     # AND only include published users (is_draft == False) - draft pages should not be visible
+    # CRITICAL: Expire all cached objects to ensure we see the latest committed data
+    # This fixes a race condition where publish endpoint commits but this query
+    # might see stale data, resulting in "Unspecified Name" or missing users
+    db.expire_all()
     query = db.query(WelcomepageUser).filter(
         WelcomepageUser.team_id == team.id,
         WelcomepageUser.auth_email.isnot(None),
