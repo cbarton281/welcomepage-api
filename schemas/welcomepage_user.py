@@ -69,6 +69,7 @@ class WelcomepageUserDTO(BaseModel):
     profile_photo_url: Optional[str] = Field(None, alias="profilePhotoUrl")
     wave_gif: Optional[FileMeta] = Field(None, alias="waveGif")
     wave_gif_url: Optional[str] = Field(None, alias="waveGifUrl")
+    pronunciation_text: Optional[str] = Field(None, alias="pronunciationText")
     pronunciation_recording: Optional[FileMeta] = Field(None, alias="pronunciationRecording")
     pronunciation_recording_url: Optional[str] = Field(None, alias="pronunciationRecordingUrl")
     selected_prompts: Optional[List[str]] = Field(None, alias="selectedPrompts")

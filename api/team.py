@@ -301,6 +301,10 @@ async def get_team_members_view(
     
     # Build base query - only include registered users (with auth_email and USER/ADMIN roles)
     # AND only include published users (is_draft == False) - draft pages should not be visible
+    # CRITICAL: Expire all cached objects to ensure we see the latest committed data
+    # This fixes a race condition where publish endpoint commits but this query
+    # might see stale data, resulting in "Unspecified Name" or missing users
+    db.expire_all()
     query = db.query(WelcomepageUser).filter(
         WelcomepageUser.team_id == team.id,
         WelcomepageUser.auth_email.isnot(None),
@@ -1587,6 +1591,9 @@ class CustomPromptResponse(BaseModel):
 class CustomPromptsListResponse(BaseModel):
     prompts: List[CustomPromptResponse]
 
+class CustomPromptUsageResponse(BaseModel):
+    page_count: int
+
 
 @router.get("/teams/{public_id}/custom-prompts", response_model=CustomPromptsListResponse)
 async def get_custom_prompts(
@@ -1812,6 +1819,98 @@ async def update_custom_prompt(
         raise HTTPException(status_code=500, detail="Failed to update custom prompt")
 
 
+@router.get("/teams/{public_id}/custom-prompts/{prompt_id}/usage", response_model=CustomPromptUsageResponse)
+async def get_custom_prompt_usage(
+    public_id: str,
+    prompt_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("ADMIN"))
+):
+    """
+    Get usage count for a custom prompt (number of pages using it).
+    Only ADMIN users can check prompt usage.
+    Returns the number of team members who have answered this prompt.
+    """
+    log = new_logger("get_custom_prompt_usage")
+    log.info(f"Getting usage count for custom prompt {prompt_id} in team: {public_id}")
+    
+    # Get current user info
+    user_public_id = current_user.get('public_id') if isinstance(current_user, dict) else None
+    user_team_id = current_user.get('team_id') if isinstance(current_user, dict) else None
+    
+    if not user_public_id:
+        log.error("No user public_id found in current_user")
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    # Verify target team exists
+    team = fetch_team_by_public_id(db, public_id)
+    if not team:
+        log.warning(f"Team not found: {public_id}")
+        raise HTTPException(status_code=404, detail="Team not found")
+    
+    # Verify current user belongs to this team (for security)
+    if user_team_id != team.public_id:
+        log.warning(f"User {user_public_id} attempted to check usage for custom prompt in team {public_id} but belongs to team {user_team_id}")
+        raise HTTPException(status_code=403, detail="Access denied: You can only check usage for custom prompts in your own team")
+    
+    try:
+        # Get existing custom_prompts or initialize empty dict
+        existing_prompts = team.custom_prompts or {}
+        if not isinstance(existing_prompts, dict):
+            existing_prompts = {}
+        
+        prompts_list = existing_prompts.get("prompts", [])
+        if not isinstance(prompts_list, list):
+            prompts_list = []
+        
+        # Find the prompt to get its text
+        prompt_found = None
+        for prompt in prompts_list:
+            if isinstance(prompt, dict) and prompt.get("id") == prompt_id:
+                prompt_found = prompt
+                break
+        
+        if not prompt_found:
+            log.warning(f"Custom prompt {prompt_id} not found for team {public_id}")
+            raise HTTPException(status_code=404, detail="Custom prompt not found")
+        
+        prompt_text = prompt_found.get("text")
+        if not prompt_text:
+            log.warning(f"Custom prompt {prompt_id} has no text field")
+            raise HTTPException(status_code=400, detail="Invalid custom prompt: missing text")
+        
+        # Count users in the team who have answered this prompt
+        # Query users where:
+        # 1. The prompt text appears in their selected_prompts JSONB array, OR
+        # 2. The prompt text appears as a key in their answers JSONB dict
+        log.info(f"Counting usage of prompt '{prompt_text}' in team {public_id}")
+        
+        # PostgreSQL JSONB query to check if prompt is in selected_prompts array or answers dict
+        # For array: selected_prompts @> '["prompt text"]'::jsonb checks if array contains the value
+        # For object: answers ? 'prompt text' checks if the key exists
+        page_count = db.query(WelcomepageUser).filter(
+            WelcomepageUser.team_id == team.id,
+            or_(
+                # Check if prompt text is in selected_prompts array
+                text("selected_prompts @> :prompt_json").bindparams(
+                    prompt_json=json.dumps([prompt_text])
+                ),
+                # Check if prompt text is a key in answers dict
+                text("answers ? :prompt_text").bindparams(prompt_text=prompt_text)
+            )
+        ).count()
+        
+        log.info(f"Prompt '{prompt_text}' (id: {prompt_id}) is used by {page_count} page(s) in team {public_id}")
+        
+        return CustomPromptUsageResponse(page_count=page_count)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to get usage count for custom prompt {prompt_id} in team {public_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get prompt usage count")
+
+
 @router.delete("/teams/{public_id}/custom-prompts/{prompt_id}")
 async def delete_custom_prompt(
     public_id: str,
@@ -1871,35 +1970,12 @@ async def delete_custom_prompt(
             log.warning(f"Custom prompt {prompt_id} has no text field")
             raise HTTPException(status_code=400, detail="Invalid custom prompt: missing text")
         
-        # Check if any users in the team have answered this prompt
-        # Query users where:
-        # 1. The prompt text appears in their selected_prompts JSONB array, OR
-        # 2. The prompt text appears as a key in their answers JSONB dict
-        log.info(f"Checking if prompt '{prompt_text}' is being used by team members")
-        
-        # PostgreSQL JSONB query to check if prompt is in selected_prompts array or answers dict
-        # For array: selected_prompts @> '["prompt text"]'::jsonb checks if array contains the value
-        # For object: answers ? 'prompt text' checks if the key exists
-        users_with_prompt = db.query(WelcomepageUser).filter(
-            WelcomepageUser.team_id == team.id,
-            or_(
-                # Check if prompt text is in selected_prompts array
-                text("selected_prompts @> :prompt_json").bindparams(
-                    prompt_json=json.dumps([prompt_text])
-                ),
-                # Check if prompt text is a key in answers dict
-                text("answers ? :prompt_text").bindparams(prompt_text=prompt_text)
-            )
-        ).count()
-        
-        if users_with_prompt > 0:
-            log.warning(f"Cannot delete custom prompt '{prompt_text}' (id: {prompt_id}): {users_with_prompt} team member(s) have already answered it")
-            raise HTTPException(
-                status_code=400,
-                detail=f"This prompt cannot be deleted because {users_with_prompt} team member{'s have' if users_with_prompt > 1 else ' has'} already answered it. Please remove all answers before deleting the prompt."
-            )
-        
-        log.info(f"Prompt '{prompt_text}' is not in use, proceeding with deletion")
+        # Note: We allow deletion even when prompts are in use.
+        # The prompt text is stored directly in user data (selected_prompts and answers),
+        # so deleting the prompt from the team's custom_prompts list does not affect
+        # existing pages that already use it. The frontend will show a warning if the
+        # prompt is in use (via the /usage endpoint), but deletion is still allowed.
+        log.info(f"Proceeding with deletion of prompt '{prompt_text}' (id: {prompt_id})")
         
         # Remove the prompt from the list
         updated_prompts = [
