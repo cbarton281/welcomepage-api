@@ -1369,6 +1369,8 @@ class PublicTeamPagesResponse(BaseModel):
 def get_public_team_pages(
     share_uuid: str, 
     search: Optional[str] = Query(None, description="Full-text search query"),
+    sort_by: str = Query("name", description="Sort field: name, date_created"),
+    sort_order: str = Query("asc", description="Sort order: asc or desc"),
     db: Session = Depends(get_db), 
     current_user=Depends(require_roles("PUBLIC", "PRE_SIGNUP", "USER", "ADMIN"))
 ):
@@ -1379,7 +1381,7 @@ def get_public_team_pages(
     Supports full-text search across all user data.
     """
     log = new_logger("get_public_team_pages")
-    log.info(f"Fetching public team pages with share_uuid: {share_uuid}, search: {sanitize_for_logging(search) if search else None}")
+    log.info(f"Fetching public team pages with share_uuid: {share_uuid}, search: {sanitize_for_logging(search) if search else None}, sort_by: {sort_by}, sort_order: {sort_order}")
     
     try:
         # Find team by sharing UUID using PostgreSQL JSONB query for efficient lookup with GIN index
@@ -1427,6 +1429,20 @@ def get_public_team_pages(
                 search_query_str = "plainto_tsquery('english', :search_term)"
             
             query = query.filter(text(f"search_vector @@ ({search_query_str})").bindparams(search_term=search))
+        
+        # Apply sorting (same logic as members-view endpoint)
+        sort_column = None
+        if sort_by == "name":
+            sort_column = WelcomepageUser.name
+        elif sort_by == "date_created":
+            sort_column = WelcomepageUser.created_at
+        else:
+            sort_column = WelcomepageUser.name  # default
+        
+        if sort_order.lower() == "asc":
+            query = query.order_by(asc(sort_column))
+        else:
+            query = query.order_by(desc(sort_column))
         
         shared_pages = query.all()
         

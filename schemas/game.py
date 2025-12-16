@@ -91,3 +91,10 @@ class EligibleCountResponse(BaseModel):
     """Response model for eligible member count for game"""
     eligible_count: int
 
+
+class EstimateTimeResponse(BaseModel):
+    """Response model for generation time estimate"""
+    estimated_seconds: float
+    prompt_tokens_estimate: Optional[int] = None
+    expected_output_tokens: Optional[int] = None
+
