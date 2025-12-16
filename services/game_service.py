@@ -6,10 +6,27 @@ import json
 import random
 import httpx
 import time
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from utils.logger_factory import new_logger
 
 log = new_logger("game_service")
+
+# -----------------------------
+# Latency estimate (calibrated from production logs)
+# -----------------------------
+REQUEST_OVERHEAD_SEC = 0.6
+
+# Prompt ingestion is fast; this term is usually small but include it
+INPUT_TOKENS_PER_SEC = 4000
+
+# Calibrated from actual logs: Output token rate varies significantly
+# Latest observed rates: 70-75 tokens/sec (from most recent runs)
+# Using 70 tokens/sec as balanced estimate (slightly conservative to avoid underestimating)
+OUTPUT_TOKENS_PER_SEC = 70
+
+# Calibrated from production logs: actual completion_tokens are ~1268-1278
+# Using 1280 as default (matches actual average closely)
+DEFAULT_EXPECTED_OUTPUT_TOKENS = 1280
 
 # Get OpenAI API key from environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -102,6 +119,348 @@ class GameService:
         )
 
         return shuffled[:10]  # Return exactly 10 questions
+
+    @staticmethod
+    def _count_tokens_for_model(text: str, model: str = "gpt-4o") -> int:
+        """
+        Count tokens for a given text using tiktoken.
+        Falls back to character-based estimation if tiktoken is unavailable.
+        """
+        try:
+            import tiktoken
+            enc = tiktoken.encoding_for_model(model)
+            return len(enc.encode(text))
+        except Exception as e:
+            log.warning(f"Failed to use tiktoken for token counting: {e}, using fallback")
+            # Fallback: ~4 chars/token is a reasonable approximation
+            return max(1, len(text) // 4)
+
+    @staticmethod
+    def _estimate_openai_seconds(prompt_tokens: int, expected_output_tokens: int) -> float:
+        """
+        Estimate OpenAI API call duration based on token counts.
+        
+        Args:
+            prompt_tokens: Number of input tokens
+            expected_output_tokens: Expected number of output tokens
+            
+        Returns:
+            Estimated duration in seconds
+        """
+        return (
+            REQUEST_OVERHEAD_SEC
+            + (prompt_tokens / INPUT_TOKENS_PER_SEC)
+            + (expected_output_tokens / OUTPUT_TOKENS_PER_SEC)
+        )
+
+    @staticmethod
+    def _get_system_prompt() -> str:
+        """
+        Get the system prompt template for OpenAI question generation.
+        This is the single source of truth for the system prompt.
+        """
+        return """You are an expert trivia and social game designer for a team-building product called Welcomepage.
+
+Each person at the company creates a Welcomepage about themselves. Your job is to turn that content into fun, memorable game questions that help teammates recognize each other.
+
+Your primary goal is to create questions that trigger moments of:
+"Oh — that's totally them."
+
+You will be given multiple prompt/answer pairs per person. You must evaluate all of them and select the ONE that will create the most engaging game content for the required question type.
+
+==================================================
+CORE CREATIVE RULES (CRITICAL)
+==================================================
+
+❌ DISALLOWED:
+- Repeating or lightly rephrasing the original answer
+- Reusing the same key nouns or verbs unless unavoidable
+- Generic questions that could apply to multiple people
+- Survey-style or HR-style wording
+
+✅ REQUIRED:
+- Abstract, metaphorical, or indirect phrasing
+- Implication over description
+- Specificity that would make teammates recognize the person
+- A playful, clever, or vivid angle
+
+If a question sounds like it belongs in a form or survey, rewrite it.
+
+==================================================
+INTERNAL REASONING (NOT USER-FACING)
+==================================================
+
+Before writing each question, internally decide:
+1. What makes this fact distinctive?
+2. Why would teammates remember this about the person?
+3. What playful or clever angle could test recognition?
+
+If the fact is common (e.g., likes coffee, biking, books), you must elevate it or discard it.
+
+==================================================
+GUESS-WHO QUESTIONS
+==================================================
+
+Create engaging "Guess Who" questions that test how well teammates know each other.
+
+Rules:
+- Rotate question styles across people:
+  • Metaphor
+  • Scenario
+  • Superlative
+  • Contrast
+  • Insider signal
+- Synthesize the information — do not restate it
+- Do NOT include the person's name
+- Keep questions concise (50–80 characters)
+- Each question must feel specific to one person
+
+==================================================
+TWO TRUTHS AND A LIE
+==================================================
+
+Create a "2 Truths and a Lie" set for each selected person.
+
+Rules:
+- Rephrase ONE true statement from their content
+- Invent TWO believable lies that are ADJACENT to the truth (same domain/vibe)
+- Lies should feel like "that sounds right for them"
+- Avoid obvious exaggerations or opposites
+- Keep each statement 35–55 characters
+- For each statement, include ONE relevant emoji
+- Emojis must be thematic (no ✔️ or ❌)
+
+==================================================
+FINAL QUALITY CHECK (MANDATORY)
+==================================================
+
+Before finalizing each item:
+- Would at least one teammate instantly recognize this person?
+- Could this apply to more than one person?
+If yes, rewrite.
+
+==================================================
+OUTPUT FORMAT
+==================================================
+
+Return JSON only, using the exact structure requested.
+
+Notes:
+- Include the exact prompt and answer text you selected in fields named "prompt" and "answer"
+- You MAY include an optional "_meta" object for non-user-facing debug info
+- Never put _meta text into user-facing fields (question/truth/lie1/lie2)
+"""
+
+    @staticmethod
+    def _get_user_prompt_template(full_context: str) -> str:
+        """
+        Get the user prompt template for OpenAI question generation.
+        This is the single source of truth for the user prompt format.
+        
+        Args:
+            full_context: The formatted context string with member data
+            
+        Returns:
+            The formatted user prompt string
+        """
+        return f"""Data:
+{full_context}
+
+Generate 10 questions by selecting the BEST prompt/answer pair for each member:
+- 6 guess-who questions (one per person from the first 6 members listed above)
+- 4 two-truths-lie questions (one per person from the last 4 members listed above)
+
+For each member, review ALL their available prompt/answer pairs and select the one that will create the most engaging question for that question type.
+
+Return JSON only with this exact structure (you MAY include optional _meta fields as shown):
+
+{{
+  "guess_who": [
+    {{
+      "member_name": "Member Name",
+      "prompt": "Exact original prompt text you selected",
+      "answer": "Exact original answer text you selected",
+      "question": "User-facing guess-who question (50–80 chars)",
+      "_meta": {{
+        "why_interesting": "Short non-user-facing explanation",
+        "question_style": "Metaphor|Scenario|Superlative|Contrast|Insider signal"
+      }}
+    }}
+  ],
+  "two_truths_lie": [
+    {{
+      "member_name": "Member Name",
+      "prompt": "Exact original prompt text you selected",
+      "answer": "Exact original answer text you selected",
+      "truth": "Rephrased true statement (35–55 chars)",
+      "lie1": "Believable adjacent lie (35–55 chars)",
+      "lie2": "Believable adjacent lie (35–55 chars)",
+      "emojis": {{
+        "truth": "emoji",
+        "lie1": "emoji",
+        "lie2": "emoji"
+      }},
+      "_meta": {{
+        "why_interesting": "Short non-user-facing explanation",
+        "lie_strategy": "How the lies were made plausible"
+      }}
+    }}
+  ]
+}}"""
+
+    @staticmethod
+    def _build_prompts_for_estimation(
+        members: List[Dict[str, Any]]
+    ) -> Tuple[str, str]:
+        """
+        Build system and user prompts for estimation (same logic as actual generation).
+        Returns (system_prompt, user_prompt) tuple.
+        """
+        # Validate we have enough members
+        if len(members) < 10:
+            # Use what we have, but estimation will be less accurate
+            selected_subjects = members[:min(10, len(members))]
+        else:
+            # Select 10 UNIQUE members as subjects, ensuring each has valid content
+            used_subject_ids = set()
+            selected_subjects = []
+            shuffled = GameService._shuffle_array(members)
+
+            # Collect members with valid content (any prompt/answer pair)
+            for member in shuffled:
+                if len(selected_subjects) >= 10:
+                    break
+
+                member_id = member.get("public_id")
+                if not member_id or member_id in used_subject_ids:
+                    continue
+
+                selected_prompts = member.get("selectedPrompts", [])
+                answers = member.get("answers", {})
+
+                if selected_prompts and isinstance(answers, dict):
+                    has_content = any(
+                        isinstance(answers.get(p, {}), dict) and answers.get(p, {}).get("text")
+                        for p in selected_prompts
+                    )
+                    if has_content:
+                        selected_subjects.append(member)
+                        used_subject_ids.add(member_id)
+
+        if len(selected_subjects) < 3:
+            # Not enough members, return empty prompts
+            return "", ""
+
+        # Split into guess-who (6) and two-truths-lie (4) subjects
+        selected_subjects = GameService._shuffle_array(selected_subjects)
+        guess_who_members = selected_subjects[:min(6, len(selected_subjects))]
+        two_truths_members = selected_subjects[6:10] if len(selected_subjects) > 6 else []
+
+        # Create context with ALL prompts/answers for each member
+        context_parts = []
+
+        # Add guess-who members with all their prompts/answers
+        for member in guess_who_members:
+            name = member.get("name", "Unknown")
+            selected_prompts = member.get("selectedPrompts", [])
+            answers = member.get("answers", {})
+
+            member_context = f"{name}:"
+            if selected_prompts and isinstance(answers, dict):
+                for prompt in selected_prompts:
+                    answer_data = answers.get(prompt, {})
+                    if isinstance(answer_data, dict):
+                        answer_text = answer_data.get("text", "")
+                        if answer_text:
+                            if len(answer_text) > 200:
+                                answer_text = answer_text[:200] + "..."
+                            member_context += f"\n  Q: {prompt}\n  A: {answer_text}"
+
+            if member_context != f"{name}:":
+                context_parts.append(member_context)
+
+        # Add two-truths-lie members with all their prompts/answers
+        for member in two_truths_members:
+            name = member.get("name", "Unknown")
+            selected_prompts = member.get("selectedPrompts", [])
+            answers = member.get("answers", {})
+
+            member_context = f"{name}:"
+            if selected_prompts and isinstance(answers, dict):
+                for prompt in selected_prompts:
+                    answer_data = answers.get(prompt, {})
+                    if isinstance(answer_data, dict):
+                        answer_text = answer_data.get("text", "")
+                        if answer_text:
+                            if len(answer_text) > 200:
+                                answer_text = answer_text[:200] + "..."
+                            member_context += f"\n  Q: {prompt}\n  A: {answer_text}"
+
+            if member_context != f"{name}:":
+                context_parts.append(member_context)
+
+        full_context = "\n\n".join(context_parts)
+
+        # Use shared prompt methods (single source of truth)
+        system_prompt = GameService._get_system_prompt()
+        user_prompt = GameService._get_user_prompt_template(full_context)
+
+        return system_prompt, user_prompt
+
+    @staticmethod
+    def estimate_generation_time(
+        members: List[Dict[str, Any]],
+        request_id: str = "unknown"
+    ) -> float:
+        """
+        Estimate the time it will take to generate questions for the given members.
+        This is a lightweight operation that doesn't make any OpenAI API calls.
+        
+        Args:
+            members: List of team member dictionaries with welcomepage data
+            request_id: Optional request ID for logging
+            
+        Returns:
+            Estimated duration in seconds
+        """
+        if not members or len(members) < 3:
+            log.warning(f"[REQUEST_ID:{request_id}] Not enough members for estimation: {len(members) if members else 0}")
+            return 10.0  # Default fallback estimate
+        
+        try:
+            # Build prompts (same logic as actual generation)
+            system_prompt, user_prompt = GameService._build_prompts_for_estimation(members)
+            
+            if not system_prompt or not user_prompt:
+                log.warning(f"[REQUEST_ID:{request_id}] Failed to build prompts for estimation")
+                return 10.0  # Default fallback estimate
+            
+            # Combine prompts
+            combined_prompt = system_prompt + "\n\n" + user_prompt
+            
+            # Count tokens
+            model_name = "gpt-4o"
+            prompt_tokens_est = GameService._count_tokens_for_model(combined_prompt, model_name)
+            
+            # Estimate output tokens (cap at max_tokens)
+            expected_out = min(DEFAULT_EXPECTED_OUTPUT_TOKENS, 1500)
+            
+            # Calculate estimate
+            estimated_sec = GameService._estimate_openai_seconds(prompt_tokens_est, expected_out)
+            
+            log.info(
+                f"[REQUEST_ID:{request_id}] ESTIMATE: prompt_tokens≈{prompt_tokens_est}, "
+                f"expected_out≈{expected_out}, estimated_time≈{estimated_sec:.2f}s "
+                f"(overhead={REQUEST_OVERHEAD_SEC}s, "
+                f"in={prompt_tokens_est/INPUT_TOKENS_PER_SEC:.2f}s, "
+                f"out={expected_out/OUTPUT_TOKENS_PER_SEC:.2f}s)"
+            )
+            
+            return estimated_sec
+            
+        except Exception as e:
+            log.error(f"[REQUEST_ID:{request_id}] Error estimating generation time: {e}")
+            return 10.0  # Default fallback estimate
 
     @staticmethod
     def _create_minimized_context(members: List[Dict[str, Any]]) -> str:
@@ -269,148 +628,9 @@ class GameService:
             "two_truths_lie": two_truths_assignments[:4]
         }
 
-        # =========================
-        # UPDATED V2 PROMPT (SYSTEM)
-        # =========================
-        system_prompt = """You are an expert trivia and social game designer for a team-building product called Welcomepage.
-
-Each person at the company creates a Welcomepage about themselves. Your job is to turn that content into fun, memorable game questions that help teammates recognize each other.
-
-Your primary goal is to create questions that trigger moments of:
-"Oh — that's totally them."
-
-You will be given multiple prompt/answer pairs per person. You must evaluate all of them and select the ONE that will create the most engaging game content for the required question type.
-
-==================================================
-CORE CREATIVE RULES (CRITICAL)
-==================================================
-
-❌ DISALLOWED:
-- Repeating or lightly rephrasing the original answer
-- Reusing the same key nouns or verbs unless unavoidable
-- Generic questions that could apply to multiple people
-- Survey-style or HR-style wording
-
-✅ REQUIRED:
-- Abstract, metaphorical, or indirect phrasing
-- Implication over description
-- Specificity that would make teammates recognize the person
-- A playful, clever, or vivid angle
-
-If a question sounds like it belongs in a form or survey, rewrite it.
-
-==================================================
-INTERNAL REASONING (NOT USER-FACING)
-==================================================
-
-Before writing each question, internally decide:
-1. What makes this fact distinctive?
-2. Why would teammates remember this about the person?
-3. What playful or clever angle could test recognition?
-
-If the fact is common (e.g., likes coffee, biking, books), you must elevate it or discard it.
-
-==================================================
-GUESS-WHO QUESTIONS
-==================================================
-
-Create engaging "Guess Who" questions that test how well teammates know each other.
-
-Rules:
-- Rotate question styles across people:
-  • Metaphor
-  • Scenario
-  • Superlative
-  • Contrast
-  • Insider signal
-- Synthesize the information — do not restate it
-- Do NOT include the person's name
-- Keep questions concise (50–80 characters)
-- Each question must feel specific to one person
-
-==================================================
-TWO TRUTHS AND A LIE
-==================================================
-
-Create a "2 Truths and a Lie" set for each selected person.
-
-Rules:
-- Rephrase ONE true statement from their content
-- Invent TWO believable lies that are ADJACENT to the truth (same domain/vibe)
-- Lies should feel like "that sounds right for them"
-- Avoid obvious exaggerations or opposites
-- Keep each statement 35–55 characters
-- For each statement, include ONE relevant emoji
-- Emojis must be thematic (no ✔️ or ❌)
-
-==================================================
-FINAL QUALITY CHECK (MANDATORY)
-==================================================
-
-Before finalizing each item:
-- Would at least one teammate instantly recognize this person?
-- Could this apply to more than one person?
-If yes, rewrite.
-
-==================================================
-OUTPUT FORMAT
-==================================================
-
-Return JSON only, using the exact structure requested.
-
-Notes:
-- Include the exact prompt and answer text you selected in fields named "prompt" and "answer"
-- You MAY include an optional "_meta" object for non-user-facing debug info
-- Never put _meta text into user-facing fields (question/truth/lie1/lie2)
-"""
-
-        # =======================
-        # UPDATED V2 PROMPT (USER)
-        # =======================
-        user_prompt = f"""Data:
-{full_context}
-
-Generate 10 questions by selecting the BEST prompt/answer pair for each member:
-- 6 guess-who questions (one per person from the first 6 members listed above)
-- 4 two-truths-lie questions (one per person from the last 4 members listed above)
-
-For each member, review ALL their available prompt/answer pairs and select the one that will create the most engaging question for that question type.
-
-Return JSON only with this exact structure (you MAY include optional _meta fields as shown):
-
-{{
-  "guess_who": [
-    {{
-      "member_name": "Member Name",
-      "prompt": "Exact original prompt text you selected",
-      "answer": "Exact original answer text you selected",
-      "question": "User-facing guess-who question (50–80 chars)",
-      "_meta": {{
-        "why_interesting": "Short non-user-facing explanation",
-        "question_style": "Metaphor|Scenario|Superlative|Contrast|Insider signal"
-      }}
-    }}
-  ],
-  "two_truths_lie": [
-    {{
-      "member_name": "Member Name",
-      "prompt": "Exact original prompt text you selected",
-      "answer": "Exact original answer text you selected",
-      "truth": "Rephrased true statement (35–55 chars)",
-      "lie1": "Believable adjacent lie (35–55 chars)",
-      "lie2": "Believable adjacent lie (35–55 chars)",
-      "emojis": {{
-        "truth": "emoji",
-        "lie1": "emoji",
-        "lie2": "emoji"
-      }},
-      "_meta": {{
-        "why_interesting": "Short non-user-facing explanation",
-        "lie_strategy": "How the lies were made plausible"
-      }}
-    }}
-  ]
-}}"""
+        # Use shared prompt methods (single source of truth)
+        system_prompt = GameService._get_system_prompt()
+        user_prompt = GameService._get_user_prompt_template(full_context)
 
         try:
             timeout = httpx.Timeout(90.0, connect=10.0)  # Longer timeout for single large call

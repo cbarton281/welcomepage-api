@@ -9,9 +9,9 @@ from typing import List
 from database import get_db
 from models.welcomepage_user import WelcomepageUser
 from models.team import Team
-from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember, EligibleCountResponse
+from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember, EligibleCountResponse, EstimateTimeResponse
 from schemas.welcomepage_user import WelcomepageUserDTO
-from services.game_service import GameService
+from services.game_service import GameService, DEFAULT_EXPECTED_OUTPUT_TOKENS
 from utils.logger_factory import new_logger
 from utils.jwt_auth import require_roles
 
@@ -121,6 +121,74 @@ async def generate_questions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate game questions: {str(e)}"
+        )
+
+
+@router.post("/team/game/estimate-time", response_model=EstimateTimeResponse)
+async def estimate_generation_time(
+    request: GenerateQuestionsRequest,
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Estimate the time it will take to generate game questions.
+    This is a lightweight endpoint that doesn't make OpenAI API calls.
+    Returns an estimated duration in seconds based on token counting.
+    """
+    import uuid
+    request_id = str(uuid.uuid4())[:8]
+    log.info(f"[REQUEST_ID:{request_id}] Estimating generation time for user {current_user.get('public_id')}")
+    
+    members = request.members
+    log.info(f"[REQUEST_ID:{request_id}] Received estimation request with {len(members)} members")
+    
+    # Validate input
+    if not members or len(members) < 3:
+        log.warning(f"[REQUEST_ID:{request_id}] Invalid request: {len(members) if members else 0} members provided (need at least 3)")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least 3 team members required"
+        )
+    
+    try:
+        # Convert Pydantic models to dictionaries for service layer
+        members_dict = [member.model_dump() for member in members]
+        
+        # Get estimate (lightweight, no OpenAI call)
+        estimated_seconds = GameService.estimate_generation_time(members_dict, request_id)
+        
+        # Get token estimates for additional info (optional)
+        try:
+            system_prompt, user_prompt = GameService._build_prompts_for_estimation(members_dict)
+            combined_prompt = system_prompt + "\n\n" + user_prompt if system_prompt and user_prompt else ""
+            prompt_tokens_est = GameService._count_tokens_for_model(combined_prompt, "gpt-4o") if combined_prompt else None
+            from services.game_service import DEFAULT_EXPECTED_OUTPUT_TOKENS
+            expected_output_tokens = min(DEFAULT_EXPECTED_OUTPUT_TOKENS, 1500)
+        except Exception as e:
+            log.warning(f"[REQUEST_ID:{request_id}] Failed to get detailed token estimates: {e}")
+            prompt_tokens_est = None
+            expected_output_tokens = None
+        
+        # Log the final estimate being returned
+        log.info(
+            f"[REQUEST_ID:{request_id}] Returning estimate: {estimated_seconds:.2f}s "
+            f"(prompt_tokens={prompt_tokens_est}, expected_output_tokens={expected_output_tokens})"
+        )
+        
+        return EstimateTimeResponse(
+            estimated_seconds=estimated_seconds,
+            prompt_tokens_estimate=prompt_tokens_est,
+            expected_output_tokens=expected_output_tokens
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        log.error(f"[REQUEST_ID:{request_id}] Error estimating generation time: {e}")
+        log.error(f"[REQUEST_ID:{request_id}] Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to estimate generation time: {str(e)}"
         )
 
 
