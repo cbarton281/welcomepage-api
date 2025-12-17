@@ -4,7 +4,7 @@ order by created_at desc;
 
 select is_draft, share_uuid, is_shareable, auth_email, auth_role, team_id, * 
 from welcomepage.welcomepage_users 
-where auth_email like 'charles.barton+300%gmail.com'  
+where auth_email like 'charles.barton+34%gmail.com'  
 order by auth_email;
 
 select is_draft, share_uuid, is_shareable, auth_email, auth_role, team_id, * 
@@ -131,8 +131,8 @@ order by id desc;
 ---------------------------
 
 select * 
-from welcomepage.teams 
-order by organization_name;
+from welcomepage.teams where id = 130
+order by organization_name 
 
 select * 
 from welcomepage.teams 
@@ -266,10 +266,17 @@ WHERE t.id = du.team_id
 
 COMMIT;
 
-select * from welcomepage.welcomepage_users where team_id = 43
+-- select auth_email, is_draft, * from welcomepage.welcomepage_users where team_id = 43
 
-select * from welcomepage.teams where public_id = '1pnmg02dju'
-select * from welcomepage.teams where organization_name like 'A2X%'
-select * from welcomepage.welcomepage_users where  auth_email = 'charles@a2xaccounting.com'
-select * from welcomepage.welcomepage_users where  public_id = 'x3p6kf1k6g'
-select auth_email,* from welcomepage.welcomepage_users where  auth_email like '%x%'
+-- SELECT
+--     COUNT(*) FILTER (WHERE is_draft = TRUE)  AS draft_count,
+--     COUNT(*) FILTER (WHERE is_draft = FALSE) AS published_count,
+--     COUNT(*)                                AS total_count
+-- FROM welcomepage.welcomepage_users
+-- WHERE team_id = 43;
+
+-- select * from welcomepage.teams where public_id = '1pnmg02dju'
+-- select * from welcomepage.teams where organization_name like 'A2X%'
+-- select * from welcomepage.welcomepage_users where  auth_email = 'charles@a2xaccounting.com'
+-- select * from welcomepage.welcomepage_users where  public_id = 'x3p6kf1k6g'
+-- select auth_email,* from welcomepage.welcomepage_users where  auth_email like '%x%'

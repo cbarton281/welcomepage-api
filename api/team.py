@@ -596,6 +596,7 @@ async def upsert_team(
     company_logo: Optional[UploadFile] = File(None),
     remove_logo: Optional[bool] = Form(False),
     public_id: Optional[str] = Form(None),
+    is_draft: Optional[str] = Form(None),  # Accept is_draft flag as string ("true"/"false")
     db: Session = Depends(get_db),
     current_user=Depends(require_roles("ADMIN", "PRE_SIGNUP"))
 ):
@@ -614,10 +615,19 @@ async def upsert_team(
             log.info(f"Logo uploaded successfully: {logo_blob_url}")
         
         user_role = current_user.get('role') if isinstance(current_user, dict) else None
-        log.info(f"Calling upsert_team_db_logic with user_role: {user_role}")
+        
+        # Parse is_draft flag (default to True for PRE_SIGNUP, False for authenticated users)
+        is_draft_value = True  # Default to draft
+        if is_draft is not None:
+            is_draft_value = is_draft.lower() == "true"
+        elif user_role and user_role != "PRE_SIGNUP":
+            # If user is authenticated (not PRE_SIGNUP), default to published unless explicitly set
+            is_draft_value = False
+        
+        log.info(f"Calling upsert_team_db_logic with user_role: {user_role}, is_draft: {is_draft_value}")
         team = await run_in_threadpool(
             upsert_team_db_logic,
-            organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role
+            organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role, is_draft_value
         )
         log.info(f"Team upserted successfully: {team.public_id if team else 'None'}")
         return TeamRead.model_validate(team)
@@ -639,7 +649,7 @@ from sqlalchemy.exc import OperationalError
     before_sleep=before_sleep_log(team_upsert_retry_logger, logging.WARNING)
 )
 def upsert_team_db_logic(
-    organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role
+    organization_name, color_scheme, color_scheme_data, slack_settings, logo_blob_url, remove_logo, public_id, db, log, user_role, is_draft=True
 ):
     log.info(f"endpoint invoked [{organization_name}] [{public_id}] ")    
     # Upsert team record (update if exists, else create)
@@ -713,6 +723,8 @@ def upsert_team_db_logic(
                 team.color_scheme_data = color_scheme_obj
             if slack_settings is not None:
                 team.slack_settings = slack_settings_obj
+            # Update is_draft flag
+            team.is_draft = is_draft
         else:
             log.info("Creating new team...")
             # Validate required fields for creation
@@ -726,6 +738,7 @@ def upsert_team_db_logic(
                 slack_settings=slack_settings_obj,
                 company_logo_url=logo_blob_url,
                 subscription_status="free",  # Initialize new teams with free subscription
+                is_draft=is_draft,  # Set is_draft flag on creation
             )
             db.add(team)
         db.commit()
