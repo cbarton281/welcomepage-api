@@ -1085,6 +1085,458 @@ Return JSON only with this exact structure (you MAY include optional _meta field
         return questions
 
     @staticmethod
+    async def generate_single_question(
+        members: List[Dict[str, Any]],
+        exclude_subjects: Optional[List[str]] = None,
+        question_type: Optional[str] = None,
+        alternate_pool: Optional[List[Dict[str, Any]]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate a single game question, excluding already-used subjects.
+        
+        Args:
+            members: List of team member dictionaries with welcomepage data
+            exclude_subjects: Optional list of public_ids to exclude from selection
+            question_type: Optional question type ('guess-who' or 'two-truths-lie'). If None, randomly selects.
+            alternate_pool: Optional list of alternate members (minimal data) for distractors
+            
+        Returns:
+            Single question dictionary or None if generation fails
+        """
+        import uuid
+        request_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+        log.info(f"[REQUEST_ID:{request_id}] Starting single question generation")
+        
+        # Check API key early
+        if not OPENAI_API_KEY or OPENAI_API_KEY == "INSERT_OPENAI_KEY":
+            log.error("OPENAI_API_KEY is not configured")
+            raise ValueError("OPENAI_API_KEY is not configured")
+        
+        # Filter members with enough content
+        eligible_members = [
+            m for m in members
+            if (m.get("selectedPrompts") and len(m.get("selectedPrompts", [])) > 0) or
+               (m.get("bentoWidgets") and len(m.get("bentoWidgets", [])) > 0)
+        ]
+        
+        if len(eligible_members) < 1:
+            log.warning("Not enough eligible members (need at least 1)")
+            return None
+        
+        # Exclude already-used subjects
+        exclude_set = set(exclude_subjects) if exclude_subjects else set()
+        available_members = [
+            m for m in eligible_members
+            if m.get("public_id") not in exclude_set
+        ]
+        
+        if len(available_members) < 1:
+            log.warning(f"No available members after excluding {len(exclude_set)} subjects")
+            return None
+        
+        log.info(
+            f"[REQUEST_ID:{request_id}] Filtered to {len(available_members)} available members "
+            f"(excluded {len(exclude_set)} subjects)"
+        )
+        
+        # Select 1 member randomly
+        selected_member = GameService._shuffle_array(available_members)[0]
+        member_id = selected_member.get("public_id")
+        member_name = selected_member.get("name")
+        log.info(f"[REQUEST_ID:{request_id}] Selected member: {member_name} (ID: {member_id})")
+        
+        # Determine question type (randomly if not specified)
+        if question_type not in ['guess-who', 'two-truths-lie']:
+            question_type = random.choice(['guess-who', 'two-truths-lie'])
+        log.info(f"[REQUEST_ID:{request_id}] Question type: {question_type}")
+        
+        # Build context for the selected member
+        selected_prompts = selected_member.get("selectedPrompts", [])
+        answers = selected_member.get("answers", {})
+        
+        member_context = f"{member_name}:"
+        if selected_prompts and isinstance(answers, dict):
+            for prompt in selected_prompts:
+                answer_data = answers.get(prompt, {})
+                if isinstance(answer_data, dict):
+                    answer_text = answer_data.get("text", "")
+                    if answer_text:
+                        if len(answer_text) > 200:
+                            answer_text = answer_text[:200] + "..."
+                        member_context += f"\n  Q: {prompt}\n  A: {answer_text}"
+        
+        if member_context == f"{member_name}:":
+            log.warning(f"[REQUEST_ID:{request_id}] Member {member_name} has no valid content")
+            return None
+        
+        # Build prompts for single question
+        system_prompt = GameService._get_system_prompt()
+        
+        # Create user prompt for single question
+        if question_type == 'guess-who':
+            user_prompt = f"""Data:
+{member_context}
+
+Generate 1 guess-who question by selecting the BEST prompt/answer pair for this member.
+
+Review ALL their available prompt/answer pairs and select the one that will create the most engaging question.
+
+Return JSON only with this exact structure:
+
+{{
+  "guess_who": [
+    {{
+      "member_name": "{member_name}",
+      "prompt": "Exact original prompt text you selected",
+      "answer": "Exact original answer text you selected",
+      "question": "User-facing guess-who question (50–80 chars)"
+    }}
+  ]
+}}"""
+        else:  # two-truths-lie
+            user_prompt = f"""Data:
+{member_context}
+
+Generate 1 two-truths-lie question by selecting the BEST prompt/answer pair for this member.
+
+Review ALL their available prompt/answer pairs and select the one that will create the most engaging question.
+
+Return JSON only with this exact structure:
+
+{{
+  "two_truths_lie": [
+    {{
+      "member_name": "{member_name}",
+      "prompt": "Exact original prompt text you selected",
+      "answer": "Exact original answer text you selected",
+      "truth": "Rephrased true statement (35–55 chars)",
+      "lie1": "Believable adjacent lie (35–55 chars)",
+      "lie2": "Believable adjacent lie (35–55 chars)",
+      "emojis": {{
+        "truth": "emoji",
+        "lie1": "emoji",
+        "lie2": "emoji"
+      }}
+    }}
+  ]
+}}"""
+        
+        try:
+            timeout = httpx.Timeout(30.0, connect=10.0)  # Shorter timeout for single question
+            
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                log.info(f"[REQUEST_ID:{request_id}] Making OpenAI API call to generate single {question_type} question")
+                request_start = time.time()
+                response = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {OPENAI_API_KEY}"
+                    },
+                    json={
+                        "model": "gpt-4o",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "max_tokens": 500,  # Much smaller for single question
+                        "temperature": 0.7,
+                        "response_format": {"type": "json_object"}
+                    }
+                )
+                request_time = (time.time() - request_start) * 1000
+                log.info(
+                    f"[REQUEST_ID:{request_id}] OpenAI API request completed in "
+                    f"{request_time:.2f}ms, status: {response.status_code}"
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Log token usage
+                    usage = data.get("usage", {})
+                    if usage:
+                        prompt_tokens = usage.get("prompt_tokens", 0)
+                        completion_tokens = usage.get("completion_tokens", 0)
+                        total_tokens = usage.get("total_tokens", 0)
+                        log.info(
+                            f"[REQUEST_ID:{request_id}] OpenAI API Usage - "
+                            f"prompt_tokens: {prompt_tokens}, completion_tokens: {completion_tokens}, "
+                            f"total_tokens: {total_tokens}"
+                        )
+                    
+                    content = data.get("choices", [{}])[0].get("message", {}).get("content")
+                    
+                    if content:
+                        # Log raw content for debugging (truncated to first 500 chars)
+                        log.info(f"[REQUEST_ID:{request_id}] Raw OpenAI content (first 500 chars): {content[:500]}")
+                        try:
+                            parsed = json.loads(content)
+                        except json.JSONDecodeError as e:
+                            log.error(f"[REQUEST_ID:{request_id}] Failed to parse JSON from OpenAI response: {e}")
+                            log.error(f"[REQUEST_ID:{request_id}] Content that failed to parse: {content[:1000]}")
+                            return None
+                        
+                        # Log the parsed response structure for debugging
+                        log.info(f"[REQUEST_ID:{request_id}] Parsed OpenAI response keys: {list(parsed.keys())}")
+                        if question_type == 'two-truths-lie':
+                            two_truths_data = parsed.get("two_truths_lie", [])
+                            log.info(f"[REQUEST_ID:{request_id}] two_truths_lie data count: {len(two_truths_data)}")
+                            if two_truths_data:
+                                log.info(f"[REQUEST_ID:{request_id}] First two_truths_lie item keys: {list(two_truths_data[0].keys())}")
+                                log.info(f"[REQUEST_ID:{request_id}] Member name in response: {two_truths_data[0].get('member_name')}")
+                                log.info(f"[REQUEST_ID:{request_id}] Selected member name: {selected_member.get('name')}")
+                        elif question_type == 'guess-who':
+                            guess_who_data = parsed.get("guess_who", [])
+                            log.info(f"[REQUEST_ID:{request_id}] guess_who data count: {len(guess_who_data)}")
+                            if guess_who_data:
+                                log.info(f"[REQUEST_ID:{request_id}] First guess_who item keys: {list(guess_who_data[0].keys())}")
+                                log.info(f"[REQUEST_ID:{request_id}] Member name in response: {guess_who_data[0].get('member_name')}")
+                                log.info(f"[REQUEST_ID:{request_id}] Selected member name: {selected_member.get('name')}")
+                        
+                        # Parse the single question
+                        question = GameService._parse_single_question_from_response(
+                            parsed, [selected_member], question_type, alternate_pool, exclude_set, request_id
+                        )
+                        
+                        if question:
+                            total_time = (time.time() - start_time) * 1000
+                            log.info(
+                                f"[REQUEST_ID:{request_id}] Single question generation completed in "
+                                f"{total_time:.2f}ms"
+                            )
+                            return question
+                        else:
+                            log.error(f"[REQUEST_ID:{request_id}] Failed to parse question from response")
+                            log.error(f"[REQUEST_ID:{request_id}] Parsed response structure: {parsed}")
+                            log.error(f"[REQUEST_ID:{request_id}] Question type: {question_type}")
+                            log.error(f"[REQUEST_ID:{request_id}] Selected member: {selected_member.get('name')} (ID: {selected_member.get('public_id')})")
+                    else:
+                        log.error(f"[REQUEST_ID:{request_id}] OpenAI response missing content")
+                else:
+                    error_text = response.text[:500] if hasattr(response, 'text') else str(response)
+                    log.error(f"[REQUEST_ID:{request_id}] OpenAI API error: {response.status_code} - {error_text}")
+        except Exception as e:
+            log.error(f"[REQUEST_ID:{request_id}] Error in generate_single_question: {e}")
+            import traceback
+            log.error(f"[REQUEST_ID:{request_id}] Traceback: {traceback.format_exc()}")
+        
+        return None
+
+    @staticmethod
+    def _parse_single_question_from_response(
+        parsed: Dict[str, Any],
+        members: List[Dict[str, Any]],
+        question_type: str,
+        alternate_pool: Optional[List[Dict[str, Any]]] = None,
+        exclude_subjects: Optional[set] = None,
+        request_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Parse OpenAI response for a single question and convert to question format"""
+        member_map = {m.get("name"): m for m in members}
+        
+        if question_type == 'guess-who':
+            guess_who_data = parsed.get("guess_who", [])
+            if not guess_who_data or len(guess_who_data) == 0:
+                log.warning("No guess-who question found in OpenAI response")
+                return None
+            
+            q_data = guess_who_data[0]
+            member_name = q_data.get("member_name")
+            member = member_map.get(member_name)
+            
+            if not member:
+                log.warning(f"Member not found for guess-who: {member_name}")
+                return None
+            
+            member_id = member.get("public_id")
+            original_prompt = q_data.get("prompt") or q_data.get("selected_prompt") or ""
+            original_answer = q_data.get("answer") or q_data.get("selected_answer") or ""
+            
+            # If OpenAI didn't include prompt/answer, try to find it from member data
+            if not original_prompt or not original_answer:
+                selected_prompts = member.get("selectedPrompts", [])
+                answers = member.get("answers", {})
+                if selected_prompts and isinstance(answers, dict):
+                    for prompt in selected_prompts:
+                        answer_data = answers.get(prompt, {})
+                        if isinstance(answer_data, dict) and answer_data.get("text"):
+                            original_prompt = prompt
+                            original_answer = answer_data.get("text", "")
+                            break
+            
+            # Get distractors (exclude the subject and any other excluded subjects)
+            excluded_ids = set()
+            if member_id:
+                excluded_ids.add(member_id)
+            if exclude_subjects:
+                excluded_ids.update(exclude_subjects)
+            
+            # Initialize alternate usage tracker
+            alternate_usage: Dict[str, int] = {}
+            if alternate_pool:
+                for alt in alternate_pool:
+                    alt_id = alt.get("public_id")
+                    if alt_id:
+                        alternate_usage[alt_id] = 0
+            
+            distractors = GameService._get_random_distractors(
+                members, member, 2, alternate_pool, alternate_usage, excluded_ids
+            )
+            
+            if len(distractors) < 2:
+                log.warning(f"Could not get 2 distractors for guess-who question about {member.get('name')}")
+                return None
+            
+            question_id = f"synthesized-{member.get('public_id')}-{int(time.time() * 1000)}-{random.random()}"
+            
+            # Build options array
+            options_array = [
+                {
+                    "id": member.get("public_id"),
+                    "name": member.get("name"),
+                    "avatar": member.get("wave_gif_url") or member.get("profile_image")
+                },
+                *[
+                    {
+                        "id": m.get("public_id"),
+                        "name": m.get("name"),
+                        "avatar": m.get("profile_image")
+                    } for m in distractors
+                ]
+            ]
+            
+            shuffled_options = GameService._shuffle_array(options_array)
+            
+            question = {
+                "id": question_id,
+                "type": "guess-who",
+                "question": str(q_data.get("question", "")).strip('"\''),
+                "correctAnswer": member.get("name"),
+                "correctAnswerId": member.get("public_id"),
+                "options": shuffled_options,
+                "promptText": original_prompt,
+                "answerText": original_answer,
+                "additionalInfo": f'{member.get("name")} said: "{original_prompt}: {original_answer}"'
+            }
+            
+            return question
+            
+        else:  # two-truths-lie
+            two_truths_data = parsed.get("two_truths_lie", [])
+            if not two_truths_data or len(two_truths_data) == 0:
+                log.warning("No two-truths-lie question found in OpenAI response")
+                log.warning(f"Parsed response keys: {list(parsed.keys())}")
+                log.warning(f"Full parsed response: {parsed}")
+                return None
+            
+            q_data = two_truths_data[0]
+            member_name = q_data.get("member_name")
+            log.info(f"Looking up member by name: '{member_name}'")
+            log.info(f"Available member names in map: {list(member_map.keys())}")
+            member = member_map.get(member_name)
+            
+            if not member:
+                log.warning(f"Member not found for two-truths-lie: {member_name}")
+                log.warning(f"Available members: {[m.get('name') for m in members]}")
+                # Try case-insensitive lookup as fallback
+                for m in members:
+                    if m.get("name", "").lower() == member_name.lower():
+                        log.info(f"Found member via case-insensitive match: {m.get('name')}")
+                        member = m
+                        break
+                
+                if not member:
+                    return None
+            
+            member_id = member.get("public_id")
+            original_prompt = q_data.get("prompt") or q_data.get("selected_prompt") or ""
+            original_answer = q_data.get("answer") or q_data.get("selected_answer") or ""
+            
+            # If OpenAI didn't include prompt/answer, try to find it from member data
+            if not original_prompt or not original_answer:
+                selected_prompts = member.get("selectedPrompts", [])
+                answers = member.get("answers", {})
+                if selected_prompts and isinstance(answers, dict):
+                    for prompt in selected_prompts:
+                        answer_data = answers.get(prompt, {})
+                        if isinstance(answer_data, dict) and answer_data.get("text"):
+                            original_prompt = prompt
+                            original_answer = answer_data.get("text", "")
+                            break
+            
+            # Get emojis (handle both object and array formats)
+            emojis_data = q_data.get("emojis", {})
+            if isinstance(emojis_data, dict):
+                truth_emoji = emojis_data.get("truth", "✨")
+                lie1_emoji = emojis_data.get("lie1", "✨")
+                lie2_emoji = emojis_data.get("lie2", "✨")
+            elif isinstance(emojis_data, list) and len(emojis_data) >= 3:
+                truth_emoji = emojis_data[0]
+                lie1_emoji = emojis_data[1]
+                lie2_emoji = emojis_data[2]
+            else:
+                truth_emoji = "✨"
+                lie1_emoji = "✨"
+                lie2_emoji = "✨"
+            
+            question_id = f"synthesized-{member.get('public_id')}-{int(time.time() * 1000)}-{random.random()}"
+            
+            # Build options array for two-truths-lie (3 options: truth, lie1, lie2)
+            # Note: Don't include emoji in name - frontend handles emojis separately via emojis object
+            options_array = [
+                {
+                    "id": "truth",
+                    "name": q_data.get("truth", ""),
+                    "avatar": member.get("wave_gif_url") or member.get("profile_image")
+                },
+                {
+                    "id": "lie1",
+                    "name": q_data.get("lie1", ""),
+                    "avatar": member.get("wave_gif_url") or member.get("profile_image")
+                },
+                {
+                    "id": "lie2",
+                    "name": q_data.get("lie2", ""),
+                    "avatar": member.get("wave_gif_url") or member.get("profile_image")
+                }
+            ]
+            
+            shuffled_options = GameService._shuffle_array(options_array)
+            
+            # Use same display name logic as full generation (nickname or first name)
+            display_name = member.get("nickname") or member.get("name", "").split()[0]
+            
+            question = {
+                "id": question_id,
+                "type": "two-truths-lie",
+                "question": f"Two truths and a lie about {display_name}",
+                "correctAnswer": "truth",
+                "correctAnswerId": "truth",
+                "options": shuffled_options,
+                "promptText": original_prompt,
+                "answerText": original_answer,
+                "additionalInfo": f'{member.get("name")}: {original_answer}',
+                "emojis": {
+                    "truth": truth_emoji,
+                    "lie1": lie1_emoji,
+                    "lie2": lie2_emoji
+                },
+                "memberPublicId": member_id,
+                "memberNickname": display_name
+            }
+            
+            log.info(
+                f"[REQUEST_ID:{request_id}] Generated two-truths-lie question: "
+                f"id={question_id}, member_id={member_id}, member_nickname={display_name}, "
+                f"options_count={len(shuffled_options)}, "
+                f"options={[(opt.get('id'), opt.get('name', '')[:30]) for opt in shuffled_options]}"
+            )
+            
+            return question
+
+    @staticmethod
     def _get_random_distractors(
         members: List[Dict[str, Any]],
         exclude: Dict[str, Any],
