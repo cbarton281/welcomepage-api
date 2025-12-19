@@ -9,7 +9,7 @@ from typing import List
 from database import get_db
 from models.welcomepage_user import WelcomepageUser
 from models.team import Team
-from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember, EligibleCountResponse, EstimateTimeResponse
+from schemas.game import GenerateQuestionsRequest, GenerateQuestionsResponse, Question, WaveGifUrlsResponse, AlternatePoolResponse, AlternateMember, EligibleCountResponse, EstimateTimeResponse, GenerateSingleQuestionRequest, GenerateSingleQuestionResponse
 from schemas.welcomepage_user import WelcomepageUserDTO
 from services.game_service import GameService, DEFAULT_EXPECTED_OUTPUT_TOKENS
 from utils.logger_factory import new_logger
@@ -465,6 +465,110 @@ async def get_alternate_pool(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch alternate pool"
+        )
+
+
+@router.post("/team/game/generate-single-question", response_model=GenerateSingleQuestionResponse)
+async def generate_single_question(
+    request: GenerateSingleQuestionRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_roles("USER", "ADMIN"))
+):
+    """
+    Generate a single game question, excluding already-used subjects.
+    
+    This endpoint is optimized for adding or regenerating individual questions.
+    It generates only 1 question instead of 10, making it faster and more efficient.
+    
+    Requires at least 1 team member with welcomepage content (after exclusions).
+    """
+    import time
+    start_time = time.time()
+    log.info(f"Generating single question for user {current_user.get('public_id')}, team {current_user.get('team_id')}")
+    
+    members = request.members
+    exclude_subjects = request.excludeSubjects or []
+    question_type = request.questionType
+    
+    log.info(f"Received request with {len(members)} members, excluding {len(exclude_subjects)} subjects")
+    if exclude_subjects:
+        log.info(f"Excluded subject IDs: {exclude_subjects[:5]}... (showing first 5)")
+    
+    # Validate input
+    if not members or len(members) < 1:
+        log.warning(f"Invalid request: {len(members) if members else 0} members provided (need at least 1)")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least 1 team member required"
+        )
+    
+    try:
+        # Convert Pydantic models to dictionaries for service layer
+        members_dict = [member.model_dump() for member in members]
+        
+        # Convert alternate pool if provided
+        alternate_pool_dict = None
+        if request.alternatePool and len(request.alternatePool) > 0:
+            alternate_pool_dict = [alt.model_dump() for alt in request.alternatePool]
+            log.info(f"Using alternate pool with {len(alternate_pool_dict)} members for distractors")
+        
+        # Generate single question using the service
+        service_start = time.time()
+        question_dict = await GameService.generate_single_question(
+            members_dict,
+            exclude_subjects=exclude_subjects,
+            question_type=question_type,
+            alternate_pool=alternate_pool_dict
+        )
+        service_time = (time.time() - service_start) * 1000
+        log.info(f"GameService.generate_single_question took {service_time:.2f}ms")
+        
+        # Convert dictionary to Pydantic model
+        question = None
+        if question_dict:
+            question = Question(**question_dict)
+        
+        # Calculate eligible count for the team
+        eligible_count = None
+        try:
+            team_public_id = current_user.get('team_id')
+            if team_public_id:
+                team = db.query(Team).filter_by(public_id=team_public_id).first()
+                if team:
+                    eligible_count = db.query(WelcomepageUser)\
+                        .filter(WelcomepageUser.team_id == team.id)\
+                        .filter(WelcomepageUser.is_draft == False)\
+                        .filter(
+                            or_(
+                                WelcomepageUser.selected_prompts.isnot(None),
+                                WelcomepageUser.bento_widgets.isnot(None)
+                            )
+                        )\
+                        .count()
+                    log.info(f"Eligible count query found {eligible_count} eligible members")
+        except Exception as e:
+            log.warning(f"Failed to calculate eligible count: {e}")
+            # Continue without eligible_count - it's optional
+        
+        total_time = (time.time() - start_time) * 1000
+        log.info(f"Generated single question in {total_time:.2f}ms total")
+        
+        return GenerateSingleQuestionResponse(question=question, eligible_count=eligible_count)
+        
+    except ValueError as e:
+        # Handle missing API key or other configuration errors
+        log.error(f"Configuration error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Game question generation is not configured: {str(e)}"
+        )
+    except Exception as e:
+        import traceback
+        log.error(f"Error generating single question: {e}")
+        log.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate question: {str(e)}"
         )
 
 

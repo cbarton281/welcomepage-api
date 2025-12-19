@@ -98,3 +98,17 @@ class EstimateTimeResponse(BaseModel):
     prompt_tokens_estimate: Optional[int] = None
     expected_output_tokens: Optional[int] = None
 
+
+class GenerateSingleQuestionRequest(BaseModel):
+    """Request model for generating a single game question"""
+    members: List[TeamMember]
+    alternatePool: Optional[List[AlternateMember]] = None
+    excludeSubjects: Optional[List[str]] = None  # List of public_ids to exclude
+    questionType: Optional[str] = None  # 'guess-who' | 'two-truths-lie' | None (random)
+
+
+class GenerateSingleQuestionResponse(BaseModel):
+    """Response model for a single generated question"""
+    question: Optional[Question] = None
+    eligible_count: Optional[int] = None  # Total count of eligible members for the team
+
