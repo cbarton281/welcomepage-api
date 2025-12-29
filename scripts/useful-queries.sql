@@ -268,12 +268,12 @@ COMMIT;
 
 -- select auth_email, is_draft, * from welcomepage.welcomepage_users where team_id = 43
 
--- SELECT
---     COUNT(*) FILTER (WHERE is_draft = TRUE)  AS draft_count,
---     COUNT(*) FILTER (WHERE is_draft = FALSE) AS published_count,
---     COUNT(*)                                AS total_count
--- FROM welcomepage.welcomepage_users
--- WHERE team_id = 43;
+SELECT
+    COUNT(*) FILTER (WHERE is_draft = TRUE)  AS draft_count,
+    COUNT(*) FILTER (WHERE is_draft = FALSE) AS published_count,
+    COUNT(*)                                AS total_count
+FROM welcomepage.welcomepage_users
+WHERE team_id = 43;
 
 -- select * from welcomepage.teams where public_id = '1pnmg02dju'
 -- select * from welcomepage.teams where organization_name like 'A2X%'
