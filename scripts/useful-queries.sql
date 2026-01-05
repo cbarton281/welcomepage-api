@@ -266,28 +266,17 @@ WHERE t.id = du.team_id
 
 COMMIT;
 
+-- select auth_email, is_draft, * from welcomepage.welcomepage_users where team_id = 43
 
-select auth_email, team_id, is_draft, * from welcomepage.welcomepage_users where auth_email like '%@a2xaccounting.com'
--- select auth_email, is_draft, slack_id, * from welcomepage.welcomepage_users where team_id = 43
--- select auth_email, team_id, is_draft, * from welcomepage.welcomepage_users where auth_email = 'mark@a2xaccounting.com'
--- select * from welcomepage.teams where id = 134
--- SELECT
---     COUNT(*) FILTER (WHERE is_draft = TRUE)  AS draft_count,
---     COUNT(*) FILTER (WHERE is_draft = FALSE) AS published_count,
---     COUNT(*)                                AS total_count
--- FROM welcomepage.welcomepage_users
--- WHERE team_id = 43;
+SELECT
+    COUNT(*) FILTER (WHERE is_draft = TRUE)  AS draft_count,
+    COUNT(*) FILTER (WHERE is_draft = FALSE) AS published_count,
+    COUNT(*)                                AS total_count
+FROM welcomepage.welcomepage_users
+WHERE team_id = 43;
 
--- select * from welcomepage.teams where public_id = ''
+-- select * from welcomepage.teams where public_id = '1pnmg02dju'
 -- select * from welcomepage.teams where organization_name like 'A2X%'
 -- select * from welcomepage.welcomepage_users where  auth_email = 'charles@a2xaccounting.com'
--- select auth_email, team_id, * from welcomepage.welcomepage_users where  public_id = '58fwswna2r'
+-- select * from welcomepage.welcomepage_users where  public_id = 'x3p6kf1k6g'
 -- select auth_email,* from welcomepage.welcomepage_users where  auth_email like '%x%'
-
-SELECT auth_email, name, *
-FROM welcomepage.welcomepage_users 
-WHERE team_id = 43
-  AND is_draft = FALSE
-  AND (selected_prompts IS NOT NULL OR bento_widgets IS NOT NULL)
-ORDER BY RANDOM()
-LIMIT 10;

@@ -533,6 +533,7 @@ async def upsert_user(
     team_public_id: str = Form(None),  # Support team assignment by public ID
     slack_user_id: str = Form(None),  # Preserve Slack user ID
     pronunciation_text: str = Form(None),  # Written pronunciation
+    is_draft: str = Form(None),  # Accept is_draft flag as string ("true"/"false")
     profile_photo: UploadFile = File(None),
     wave_gif: UploadFile = File(None),
     pronunciation_recording: UploadFile = File(None),
@@ -740,9 +741,17 @@ async def upsert_user(
             log.error(f"Team not found for public_id: {team_public_id}")
             raise HTTPException(status_code=404, detail="Team not found")
     
+    # Parse is_draft flag (default to True for PRE_SIGNUP, False for authenticated users)
+    is_draft_value = True  # Default to draft
+    if is_draft is not None:
+        is_draft_value = is_draft.lower() == "true"
+    elif auth_role and auth_role != "PRE_SIGNUP":
+        # If user is authenticated (not PRE_SIGNUP), default to published unless explicitly set
+        is_draft_value = False
+    
     # Step 4: Save complete user record with all URLs in one database operation
     db_user, user_identifier, temp_uuid = await run_in_threadpool(
-        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), json.dumps(bento_widgets_list), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id, current_user
+        upsert_user_db_logic, id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, parsed_handwave_emoji, handwave_emoji_url, selected_prompts, json.dumps(answers_dict), json.dumps(bento_widgets_list), effective_team_id, db, log, profile_photo_url, wave_gif_url, pronunciation_text, pronunciation_recording_url, slack_user_id, current_user, is_draft_value
     )
 
     return WelcomepageUserDTO.model_validate(db_user)
@@ -754,7 +763,7 @@ async def upsert_user(
     before_sleep=before_sleep_log(upsert_retry_logger, logging.WARNING)
 )
 def upsert_user_db_logic(
-    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, bento_widgets, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None, current_user=None
+    id, public_id, name, role, auth_role, auth_email, location, greeting, nickname, hi_yall_text, handwave_emoji, handwave_emoji_url, selected_prompts, answers, bento_widgets, team_id, db, log, profile_photo_url=None, wave_gif_url=None, pronunciation_text=None, pronunciation_recording_url=None, slack_user_id=None, current_user=None, is_draft=True
 ):
     # All arguments are plain values, no FastAPI Form/File/Depends here
     # All business logic remains unchanged
@@ -884,6 +893,7 @@ def upsert_user_db_logic(
             db_user.answers = answers_dict
             db_user.bento_widgets = bento_widgets_list
             db_user.team_id = team_id
+            db_user.is_draft = is_draft  # Update is_draft flag
             # Preserve existing slack_user_id if none provided in request
             if slack_user_id is not None:
                 db_user.slack_user_id = slack_user_id   
@@ -948,7 +958,7 @@ def upsert_user_db_logic(
                 bento_widgets=bento_widgets_list,
                 team_id=team_id,
                 slack_user_id=slack_user_id,
-                is_draft=True,
+                is_draft=is_draft,  # Set is_draft flag on creation
                 profile_photo_url=profile_photo_url,
                 wave_gif_url=wave_gif_url,
                 pronunciation_text=pronunciation_text,
