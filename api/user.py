@@ -555,6 +555,24 @@ async def upsert_user(
     # Step 1: Process all file uploads first and get URLs
     form_data = await request.form()
     
+    # Convert placeholder values back to empty strings for fields that were sent as empty
+    # Node.js FormData drops empty strings when serializing, so we use '__EMPTY__' placeholder
+    empty_string_placeholder = '__EMPTY__'
+    if 'role' in form_data and form_data.get('role') == empty_string_placeholder:
+        role = ''
+    if 'nickname' in form_data and form_data.get('nickname') == empty_string_placeholder:
+        nickname = ''
+    if 'pronunciation_text' in form_data and form_data.get('pronunciation_text') == empty_string_placeholder:
+        pronunciation_text = ''
+    if 'location' in form_data and form_data.get('location') == empty_string_placeholder:
+        location = ''
+    if 'greeting' in form_data and form_data.get('greeting') == empty_string_placeholder:
+        greeting = ''
+    if 'hi_yall_text' in form_data and form_data.get('hi_yall_text') == empty_string_placeholder:
+        hi_yall_text = ''
+    if 'handwave_emoji_url' in form_data and form_data.get('handwave_emoji_url') == empty_string_placeholder:
+        handwave_emoji_url = ''
+    
     # Handle profile photo upload
     profile_photo_url = None
     if profile_photo:
@@ -847,13 +865,14 @@ def upsert_user_db_logic(
             user_identifier = str(db_user.id)
             # Update user fields
             db_user.name = name
-            db_user.role = role
+            db_user.role = role  # Always update role (can be empty string)
             db_user.auth_role = auth_role if auth_role is not None else db_user.auth_role
             db_user.auth_email = auth_email if auth_email is not None else db_user.auth_email
-            db_user.location = location
-            db_user.greeting = greeting
-            db_user.nickname = nickname
-            db_user.hi_yall_text = hi_yall_text
+            # Always update these fields (they can be empty strings, which is different from None/not sent)
+            db_user.location = location if location is not None else db_user.location
+            db_user.greeting = greeting if greeting is not None else db_user.greeting
+            db_user.nickname = nickname if nickname is not None else db_user.nickname
+            db_user.hi_yall_text = hi_yall_text if hi_yall_text is not None else db_user.hi_yall_text
             db_user.handwave_emoji = handwave_emoji
             db_user.handwave_emoji_url = handwave_emoji_url
             db_user.selected_prompts = selected_prompts_list
@@ -903,6 +922,8 @@ def upsert_user_db_logic(
                 db_user.profile_photo_url = profile_photo_url
             if wave_gif_url:
                 db_user.wave_gif_url = wave_gif_url
+            # Always update pronunciation_text if it was sent (including empty string)
+            # Empty string means user blanked it out, None means field wasn't sent
             if pronunciation_text is not None:
                 db_user.pronunciation_text = pronunciation_text
             if pronunciation_recording_url:
